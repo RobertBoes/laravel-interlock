@@ -9,10 +9,12 @@ final readonly class ModelGraph
 {
     /**
      * @param  class-string<Model>  $modelClass
+     * @param  array<string, CompiledMachine>  $machines  keyed by state attribute
      * @param  array<string, CompiledTransition>  $transitions  keyed by transition name
      */
     public function __construct(
         private string $modelClass,
+        public array $machines,
         private array $transitions,
     ) {}
 

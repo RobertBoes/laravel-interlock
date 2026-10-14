@@ -4,6 +4,8 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\ServiceProvider;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Interlock;
+use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\ImportedPost;
+use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\ImportedPostStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Discovery\Comment;
@@ -12,8 +14,9 @@ use RobertBoes\Interlock\Tests\Fixtures\Discovery\PackagedPost;
 it('discovers the interlocked models in the configured paths', function () {
     config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/BlogPosts']]);
 
-    expect(Interlock::models())->toBe([
+    expect(Interlock::models())->toEqual([
         Post::class => ['status' => PostStatusMachine::class],
+        ImportedPost::class => ['status' => ImportedPostStatusMachine::class],
     ]);
 });
 
@@ -39,8 +42,9 @@ it('includes the models registered in config', function () {
         'interlock.models' => [PackagedPost::class],
     ]);
 
-    expect(Interlock::models())->toBe([
+    expect(Interlock::models())->toEqual([
         Post::class => ['status' => PostStatusMachine::class],
+        ImportedPost::class => ['status' => ImportedPostStatusMachine::class],
         PackagedPost::class => ['status' => PostStatusMachine::class],
     ]);
 });
@@ -55,8 +59,9 @@ it('includes the models registered from a service provider', function () {
         }
     });
 
-    expect(Interlock::models())->toBe([
+    expect(Interlock::models())->toEqual([
         Post::class => ['status' => PostStatusMachine::class],
+        ImportedPost::class => ['status' => ImportedPostStatusMachine::class],
         PackagedPost::class => ['status' => PostStatusMachine::class],
     ]);
 });
@@ -80,8 +85,9 @@ describe('the registry cache', function () {
 
         config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/Discovery']]);
 
-        expect(Interlock::models())->toBe([
+        expect(Interlock::models())->toEqual([
             Post::class => ['status' => PostStatusMachine::class],
+            ImportedPost::class => ['status' => ImportedPostStatusMachine::class],
         ]);
     });
 
@@ -101,8 +107,9 @@ describe('the registry cache', function () {
 
         config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/Discovery']]);
 
-        expect(Interlock::models())->toBe([
+        expect(Interlock::models())->toEqual([
             Post::class => ['status' => PostStatusMachine::class],
+            ImportedPost::class => ['status' => ImportedPostStatusMachine::class],
         ]);
     });
 
@@ -122,8 +129,9 @@ describe('the registry cache', function () {
 
         Interlock::registerModels(PackagedPost::class);
 
-        expect(Interlock::models())->toBe([
+        expect(Interlock::models())->toEqual([
             Post::class => ['status' => PostStatusMachine::class],
+            ImportedPost::class => ['status' => ImportedPostStatusMachine::class],
             PackagedPost::class => ['status' => PostStatusMachine::class],
         ]);
     });

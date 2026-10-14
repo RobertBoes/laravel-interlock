@@ -4,11 +4,30 @@ use RobertBoes\Interlock\Exceptions\InterlockException;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineForUncastAttribute;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineWithInitialStateOfAnotherEnum;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineWithoutFromStates;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineWithoutInitialStates;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineWithoutTargetState;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\OtherStatus;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithInitialStateOfAnotherEnum;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithoutFromStates;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithoutInitialStates;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithoutTargetState;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithUncastStateAttribute;
+
+it('rejects a machine without initial states', function () {
+    expect(fn() => PostWithoutInitialStates::create(['status' => PostStatus::Draft]))->toThrow(
+        InvalidDefinitionException::class,
+        MachineWithoutInitialStates::class . ' declares no initial states. Add #[InitialStates(...)] to it with the states a model may be created in.',
+    );
+});
+
+it('rejects an initial state of an enum the state attribute is not cast to', function () {
+    expect(fn() => PostWithInitialStateOfAnotherEnum::create(['status' => PostStatus::Draft]))->toThrow(
+        InvalidDefinitionException::class,
+        MachineWithInitialStateOfAnotherEnum::class . ' declares initial state [open] of ' . OtherStatus::class . ', but ' . PostWithInitialStateOfAnotherEnum::class . ' casts [status] to ' . PostStatus::class . '.',
+    );
+});
 
 it('rejects a transition without a target state', function () {
     expect(fn() => (new PostWithoutTargetState())->transition('submit'))->toThrow(

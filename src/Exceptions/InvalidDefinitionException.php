@@ -36,6 +36,33 @@ final class InvalidDefinitionException extends LogicException implements Interlo
     /**
      * @param  class-string<StateMachine>  $machine
      */
+    public static function missingInitialStates(string $machine): self
+    {
+        return new self(sprintf(
+            '%s declares no initial states. Add #[InitialStates(...)] to it with the states a model may be created in.',
+            $machine,
+        ));
+    }
+
+    /**
+     * @param  class-string<StateMachine>  $machine
+     */
+    public static function initialStateNotOfCastEnum(string $machine, Model $model, string $stateAttribute, BackedEnum $state, string $castEnum): self
+    {
+        return new self(sprintf(
+            '%s declares initial state [%s] of %s, but %s casts [%s] to %s.',
+            $machine,
+            $state->value,
+            $state::class,
+            $model::class,
+            $stateAttribute,
+            $castEnum,
+        ));
+    }
+
+    /**
+     * @param  class-string<StateMachine>  $machine
+     */
     public static function stateAttributeNotCast(string $machine, Model $model, string $stateAttribute, BackedEnum $state): self
     {
         return new self(sprintf(
