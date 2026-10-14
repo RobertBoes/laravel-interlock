@@ -1,7 +1,10 @@
 <?php
 
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use RobertBoes\Interlock\Events\Transitioned;
+use RobertBoes\Interlock\Events\Transitioning;
 use RobertBoes\Interlock\Exceptions\InterlockException;
 use RobertBoes\Interlock\Exceptions\StaleStateException;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
@@ -119,3 +122,57 @@ it('throws stale state for a self-transition when the stored state changed', fun
 
     expect($post->fresh()->status)->toBe(PostStatus::Published);
 });
+
+it('throws stale state when the update matched no row, even when the row reads as loaded afterwards', function () {
+    $post = Post::create()->transition('submit');
+    $restoreAfterTheWrite = false;
+    // Another worker publishes the post just before the write. Afterwards a snapshot read, as under MySQL's REPEATABLE
+    // READ, would still find it ready; here the stored state is put back right after the write instead.
+    Event::listen(Transitioning::class, function () use ($post, &$restoreAfterTheWrite) {
+        DB::table('posts')->where('id', $post->getKey())->update(['status' => PostStatus::Published->value]);
+        $restoreAfterTheWrite = true;
+    });
+    DB::listen(function (QueryExecuted $query) use ($post, &$restoreAfterTheWrite) {
+        if ($restoreAfterTheWrite && str_starts_with($query->sql, 'update')) {
+            $restoreAfterTheWrite = false;
+            DB::table('posts')->where('id', $post->getKey())->update(['status' => PostStatus::Ready->value]);
+        }
+    });
+    Event::fake([Transitioned::class]);
+
+    expect(fn() => $post->transition('publish'))->toThrow(StaleStateException::class);
+
+    expect($post->history()->pluck('transition_name')->all())->toBe(['submit']);
+    Event::assertNotDispatched(Transitioned::class);
+});
+
+it('throws stale state on MySQL when the transition\'s transaction read the row before another worker changed it', function (PostStatus $loadedState, string $transition, PostStatus $otherWorkersState) {
+    // Two connections of their own, outside the test's transaction, so each sees what the other commits.
+    $config = config('database.connections.' . DB::getDefaultConnection());
+    config(['database.connections.worker' => $config, 'database.connections.other_worker' => $config]);
+    DB::table('posts')->count(); // migrates the database, which the test's lazily refreshed connection does on its first query
+    $otherWorker = DB::connection('other_worker');
+    $id = $otherWorker->table('posts')->insertGetId(['status' => $loadedState->value, 'created_at' => now(), 'updated_at' => now()]);
+    $history = fn() => $otherWorker->table('interlock_history')->where('model_type', (new Post())->getMorphClass())->where('model_id', $id);
+
+    try {
+        expect(fn() => DB::connection('worker')->transaction(function () use ($id, $transition, $otherWorker, $otherWorkersState) {
+            // The transaction's first read takes its REPEATABLE READ snapshot, with the post in its loaded state.
+            $post = Post::on('worker')->findOrFail($id);
+            $otherWorker->table('posts')->where('id', $id)->update(['status' => $otherWorkersState->value]);
+
+            $post->transition($transition);
+        }))->toThrow(StaleStateException::class);
+
+        expect($otherWorker->table('posts')->where('id', $id)->value('status'))->toBe($otherWorkersState->value)
+            ->and($history()->exists())->toBeFalse();
+    } finally {
+        $history()->delete();
+        $otherWorker->table('posts')->where('id', $id)->delete();
+        DB::purge('worker');
+        DB::purge('other_worker');
+    }
+})->with([
+    'a transition' => [PostStatus::Ready, 'publish', PostStatus::Draft],
+    'a self-transition' => [PostStatus::Scheduled, 'reschedule', PostStatus::Published],
+])->skip(fn() => DB::connection()->getDriverName() !== 'mysql', 'Needs MySQL\'s REPEATABLE READ snapshots.');

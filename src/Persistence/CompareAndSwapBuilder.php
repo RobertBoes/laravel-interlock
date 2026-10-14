@@ -55,7 +55,7 @@ final class CompareAndSwapBuilder extends Builder
         $affectedRows = parent::update($values);
 
         if ($affectedRows === 0) {
-            $this->ensureStoredStatesAreUnchanged($storedStateQuery);
+            $this->ensureTheUpdateMatchedTheRow($storedStateQuery);
         }
 
         ($this->written)();
@@ -64,14 +64,18 @@ final class CompareAndSwapBuilder extends Builder
     }
 
     /**
-     * Zero affected rows is not proof of stale state: MySQL reports changed rows rather than
-     * matched rows, so an update that writes the values already stored also affects none.
+     * Zero affected rows means the update matched no row, unless every transition is a self-transition: MySQL reports
+     * changed rather than matched rows, so an update that writes the values already stored also affects none. Only then
+     * does the stored row decide whether the state is stale; otherwise it only tells why.
+     *
+     * The read locks the row: inside a transaction under MySQL's REPEATABLE READ, a plain read returns the snapshot the
+     * transaction took at its first read, while the update matched against the latest committed row.
      *
      * @param  Builder<TModel>  $storedStateQuery
      */
-    private function ensureStoredStatesAreUnchanged(Builder $storedStateQuery): void
+    private function ensureTheUpdateMatchedTheRow(Builder $storedStateQuery): void
     {
-        $stored = $storedStateQuery->toBase()->useWritePdo()->first(array_keys($this->transitions));
+        $stored = $storedStateQuery->toBase()->useWritePdo()->lockForUpdate()->first(array_keys($this->transitions));
 
         if ($stored === null) {
             throw StaleStateException::rowDeleted($this->model, array_values($this->transitions)[0]->transition);
@@ -82,6 +86,12 @@ final class CompareAndSwapBuilder extends Builder
 
             if ((string) $storedState !== (string) $transition->fromState->value) {
                 throw StaleStateException::storedStateChanged($this->model, $transition->transition, $transition->fromState, $storedState);
+            }
+        }
+
+        foreach ($this->transitions as $stateAttribute => $transition) {
+            if ($transition->fromState !== $transition->transition->targetState) {
+                throw StaleStateException::storedStateChanged($this->model, $transition->transition, $transition->fromState, $stored->{$stateAttribute});
             }
         }
     }
