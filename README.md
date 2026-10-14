@@ -597,7 +597,7 @@ php artisan interlock:signalbox --format=xstate-ts --output=resources/js/machine
 | `xstate` | XState v5 machine config JSON |
 | `xstate-ts` | The same config as TypeScript, plus state and event types |
 
-In the XState export, transitions are events, parent states are nested states and final states are `type: 'final'`. Guards appear by name only, so no server logic leaks, and triggered transitions carry `meta: { trigger: true }`. The Mermaid export of the locked post machine above looks like this:
+In the XState export, transitions are events, parent states are nested states and final states are `type: 'final'`. Guards appear by name only, so no server logic leaks, and triggered transitions carry `meta: { trigger: true }`. A machine's XState ID is its class name without the namespace, so exporting every machine as XState fails when two machines share a class name; rename one, or export them one at a time. The Mermaid export of the locked post machine above looks like this:
 
 ```mermaid
 stateDiagram-v2

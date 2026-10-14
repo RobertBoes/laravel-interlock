@@ -54,6 +54,17 @@ final class SignalboxCommand extends Command
             return self::FAILURE;
         }
 
+        $sharedIds = $machine === null && $format !== 'mermaid' ? $this->machinesSharingAnId($machines) : [];
+
+        if ($sharedIds !== []) {
+            $this->components->error(sprintf(
+                'Interlock cannot export every machine as XState: machine IDs are class names without their namespace, and %s share one. Rename one of the machines, or export them one at a time.',
+                implode('; ', array_map(fn(array $classes) => implode(' and ', $classes), $sharedIds)),
+            ));
+
+            return self::FAILURE;
+        }
+
         $export = $machine === null ? $this->exportAll($format, $machines) : $this->export($format, ...reset($machines));
 
         if ($path === null) {
@@ -120,6 +131,23 @@ final class SignalboxCommand extends Command
             'xstate-ts' => implode(PHP_EOL, array_map(fn(array $machine) => XStateTypeScript::of(...$machine), $machines)),
             default => $this->markdown($machines),
         };
+    }
+
+    /**
+     * The machines whose XState IDs are the same, so that one would overwrite the other in an export of every machine.
+     *
+     * @param  array<class-string<StateMachine>, array{CompiledMachine, list<CompiledTransition>}>  $machines
+     * @return list<list<class-string<StateMachine>>>
+     */
+    private function machinesSharingAnId(array $machines): array
+    {
+        $byId = [];
+
+        foreach ($machines as $machine => [$compiled]) {
+            $byId[XStateConfig::id($compiled)][] = $machine;
+        }
+
+        return array_values(array_filter($byId, fn(array $classes) => count($classes) > 1));
     }
 
     /**

@@ -7,6 +7,7 @@ use RobertBoes\Interlock\Tests\Fixtures\Contracts\FinanceApprovalMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Contracts\LegalApprovalMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\ExpenseStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Exports\ClaimStatusMachine;
+use RobertBoes\Interlock\Tests\Fixtures\LegacyOrders\OrderStatusMachine as LegacyOrderStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\PaymentStatusMachine;
 
@@ -177,6 +178,20 @@ it('exports every registered machine once, as one TypeScript module, when no mac
         ->toContain('export const postStatusMachine = {')
         ->toContain('export const orderStatusMachine = {')
         ->toContain('export const paymentStatusMachine = {');
+});
+
+it('refuses to export every machine as XState when two machines share a class name', function (string $format) {
+    config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/Orders', __DIR__ . '/Fixtures/LegacyOrders']]);
+
+    $this->artisan('interlock:signalbox', ['--format' => $format])
+        ->expectsOutputToContain('machine IDs are class names without their namespace, and ' . LegacyOrderStatusMachine::class . ' and ' . OrderStatusMachine::class . ' share one.')
+        ->assertFailed();
+})->with(['xstate', 'xstate-ts']);
+
+it('exports one of two machines that share a class name', function () {
+    config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/Orders', __DIR__ . '/Fixtures/LegacyOrders']]);
+
+    expect(json_decode(xstate(['machine' => LegacyOrderStatusMachine::class]), true))->toHaveKey('id', 'OrderStatusMachine');
 });
 
 it('writes the export to a file instead of stdout when given an output path', function () {
