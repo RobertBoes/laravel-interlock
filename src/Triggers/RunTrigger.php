@@ -121,17 +121,21 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
         $keys = $candidates->orderBy($key)->pluck($key);
         $chunks = $keys->chunk($chunkSize);
 
-        // Counted before the first is dispatched, as a chunk job may run, and finish, before the next is dispatched.
-        if ($chunks->isNotEmpty()) {
-            $pendingChunks->expect($chunks->count(), $this->uniqueFor);
+        if ($chunks->isEmpty()) {
+            return true;
         }
 
-        foreach ($chunks as $chunk) {
+        // Long enough for every chunk job to run out its timeout in turn on one worker.
+        $seconds = $this->timeout * $chunks->count();
+        $run = $pendingChunks->start($chunks->count(), $seconds);
+
+        foreach ($chunks as $index => $chunk) {
             if ($deadline->passed()) {
                 return false;
             }
 
-            $bus->dispatch(new RunTriggerChunk($this->model, $this->trigger, $chunk->values()->all()));
+            $job = new RunTriggerChunk($this->model, $this->trigger, $chunk->values()->all(), $run, $index);
+            $pendingChunks->dispatch($run, $index, $seconds, fn() => $bus->dispatch($job));
             $this->moveCursor($cache, $chunk->last());
         }
 

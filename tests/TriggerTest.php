@@ -541,21 +541,121 @@ describe('a trigger that fans out', function () {
         $this->artisan('interlock:triggers');
         [$first, $second] = Queue::pushed(RunTriggerChunk::class)->all();
 
-        $this->travel(1)->minute();
+        $this->travel(30)->seconds();
         $this->artisan('interlock:triggers');
         app()->call([$first, 'handle']);
-        $this->travel(1)->minute();
+        $this->travel(30)->seconds();
         $this->artisan('interlock:triggers');
 
         Queue::assertPushed(RunTriggerChunk::class, 2);
 
         app()->call([$second, 'handle']);
         $late = scheduledFeedPost('2026-10-14 09:00:00');
-        $this->travel(1)->minute();
+        $this->travel(30)->seconds();
         $this->artisan('interlock:triggers');
 
         Queue::assertPushed(RunTriggerChunk::class, 3);
         Queue::assertPushed(fn(RunTriggerChunk $job) => $job->keys === [$late->id]);
+    });
+
+    it('dispatches the chunk jobs again once a chunk job that never finished has failed', function () {
+        Queue::fake([RunTriggerChunk::class]);
+        $posts = collect(range(1, 3))->map(fn() => scheduledFeedPost('2026-10-14 09:00:00'));
+
+        $this->travelTo('2026-10-14 09:00:00');
+        $this->artisan('interlock:triggers');
+        [$first, $killed] = Queue::pushed(RunTriggerChunk::class)->all();
+        app()->call([$first, 'handle']);
+        $killed->failed(new RuntimeException('The worker was killed.'));
+
+        $this->travel(1)->minute();
+        $this->artisan('interlock:triggers');
+
+        Queue::assertPushed(RunTriggerChunk::class, 3);
+        expect(Queue::pushed(RunTriggerChunk::class)->last()->keys)->toBe([$posts[2]->id]);
+    });
+
+    it('counts a chunk job that threw and then failed as finished once', function () {
+        Queue::fake([RunTriggerChunk::class]);
+        collect(range(1, 3))->each(fn() => scheduledFeedPost('2026-10-14 09:00:00'));
+
+        $this->travelTo('2026-10-14 09:00:00');
+        $this->artisan('interlock:triggers');
+        [$throwing] = Queue::pushed(RunTriggerChunk::class)->all();
+        FeedPost::retrieved(fn() => throw new RuntimeException('The database went away.'));
+        rescue(fn() => app()->call([$throwing, 'handle']), report: false);
+        $throwing->failed(new RuntimeException('The database went away.'));
+
+        $this->travel(1)->minute();
+        $this->artisan('interlock:triggers');
+
+        Queue::assertPushed(RunTriggerChunk::class, 2);
+    });
+
+    it('carries on with the chunks it did not dispatch when dispatching a chunk job fails', function () {
+        Exceptions::fake();
+        $posts = collect(range(1, 5))->map(fn() => scheduledFeedPost('2026-10-14 09:00:00'));
+        $queueDown = true;
+        Queue::createPayloadUsing(function (string $connection, ?string $queue, array $payload) use ($posts, &$queueDown) {
+            if ($queueDown && $payload['data']['command'] instanceof RunTriggerChunk && in_array($posts[2]->id, $payload['data']['command']->keys)) {
+                throw new RuntimeException('The queue is down.');
+            }
+
+            return [];
+        });
+
+        try {
+            $this->travelTo('2026-10-14 09:00:00');
+            $this->artisan('interlock:triggers');
+
+            expect(FeedPost::query()->where('status', PostStatus::Published)->count())->toBe(2);
+
+            $queueDown = false;
+            $this->travel(1)->minute();
+            $this->artisan('interlock:triggers');
+
+            expect(FeedPost::query()->where('status', PostStatus::Published)->count())->toBe(5);
+        } finally {
+            Queue::createPayloadUsing(null);
+        }
+    });
+
+    it('does not count a chunk job of an earlier run that finishes late towards the current run', function () {
+        config(['interlock.triggers.chunk_size' => 1]);
+        Queue::fake([RunTriggerChunk::class]);
+        collect(range(1, 2))->each(fn() => scheduledFeedPost('2026-10-14 09:00:00'));
+
+        $this->travelTo('2026-10-14 09:00:00');
+        $this->artisan('interlock:triggers');
+        [$late] = Queue::pushed(RunTriggerChunk::class)->all();
+
+        $this->travel(1)->day();
+        $this->artisan('interlock:triggers');
+        [, , $current] = Queue::pushed(RunTriggerChunk::class)->all();
+        app()->call([$late, 'handle']);
+        app()->call([$current, 'handle']);
+        $this->travel(1)->minute();
+        $this->artisan('interlock:triggers');
+
+        Queue::assertPushed(RunTriggerChunk::class, 4);
+    });
+
+    it('stops waiting for chunk jobs that never finish once each could have run out its timeout in turn', function () {
+        config(['interlock.triggers.timeout' => 60]);
+        Queue::fake([RunTriggerChunk::class]);
+        collect(range(1, 3))->each(fn() => scheduledFeedPost('2026-10-14 09:00:00'));
+
+        $this->travelTo('2026-10-14 09:00:00');
+        $this->artisan('interlock:triggers');
+        $this->travelTo('2026-10-14 09:01:59');
+        $this->artisan('interlock:triggers');
+
+        Queue::assertPushed(RunTriggerChunk::class, 2);
+
+        $this->travelTo('2026-10-14 09:02:00');
+        $this->artisan('interlock:triggers');
+
+        Queue::assertPushed(RunTriggerChunk::class, 4);
     });
 
     it('gives the chunk jobs the configured timeout, failing them once it passes rather than running them again', function () {
@@ -575,7 +675,7 @@ describe('a trigger that fans out', function () {
         $this->travelTo('2026-10-14 09:00:00');
         Event::listen(Transitioned::class, fn() => $this->travel(30)->seconds());
 
-        app()->call([new RunTriggerChunk(FeedPost::class, 'publish', $posts->map->id->all()), 'handle']);
+        app()->call([new RunTriggerChunk(FeedPost::class, 'publish', $posts->map->id->all(), 'run', 0), 'handle']);
 
         expect($posts->map(fn(FeedPost $post) => $post->fresh()->status)->all())->toBe([
             PostStatus::Published,
@@ -588,7 +688,7 @@ describe('a trigger that fans out', function () {
         $post = scheduledFeedPost('2026-10-14 09:00:00');
         $this->travelTo('2026-10-14 09:00:00');
 
-        app()->call([new RunTriggerChunk(FeedPost::class, 'publish_early', [$post->id]), 'handle']);
+        app()->call([new RunTriggerChunk(FeedPost::class, 'publish_early', [$post->id], 'run', 0), 'handle']);
 
         expect($post->fresh()->status)->toBe(PostStatus::Ready);
     });

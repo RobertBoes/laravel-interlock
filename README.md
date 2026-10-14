@@ -508,6 +508,8 @@ A busy trigger can fan out into one job per chunk, so it can use several queue w
 ->trigger(fn(Builder $query) => $query->where('publish_at', '<=', now()), fanOut: true),
 ```
 
+The next run of a fanned-out trigger does nothing until every chunk job of the last one has finished or failed. Should one never report back, the trigger runs again once each chunk job could have used up its timeout in turn.
+
 Each chunk job carries its chunk's keys in its payload. With UUID or ULID keys, an `interlock.triggers.chunk_size` of around 5,000 exceeds the 256 KB message limit of SQS, so keep chunks of fanned-out triggers in the hundreds there.
 
 Queue workers keep running the code they booted with, so run `php artisan queue:restart` after a deploy that adds, renames or removes a trigger. A trigger job still queued for a transition that was removed, or lost its trigger, does nothing.
