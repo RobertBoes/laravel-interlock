@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use RobertBoes\Interlock\Events\Transitioned;
 use RobertBoes\Interlock\Events\Transitioning;
-use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
+use RobertBoes\Interlock\Exceptions\NotAFromStateException;
 use RobertBoes\Interlock\Exceptions\InterlockException;
 use RobertBoes\Interlock\Exceptions\MissingTransitionInputException;
 use RobertBoes\Interlock\Exceptions\StaleStateException;
@@ -66,10 +66,13 @@ it('checks a class-based transition\'s from-states, read from its attributes', f
     $order = Order::create();
     $order->tracking_code = 'TRACK-1';
 
-    expect(fn() => $order->transition(new Ship('TRACK-1')))->toThrow(
-        IllegalTransitionException::class,
-        'Cannot apply transition [ship] to ' . Order::class . ' [' . $order->getKey() . ']: its [status] is [pending], and [ship] only starts from [label_created].',
-    );
+    expect(thrownBy(fn() => $order->transition(new Ship('TRACK-1'))))
+        ->toBeInstanceOf(NotAFromStateException::class)
+        ->model->toBe($order)
+        ->transition->toBe('ship')
+        ->stateAttribute->toBe('status')
+        ->currentState->toBe(OrderStatus::Pending)
+        ->fromStates->toBe([OrderStatus::LabelCreated]);
 
     expect($order->fresh())
         ->status->toBe(OrderStatus::Pending)

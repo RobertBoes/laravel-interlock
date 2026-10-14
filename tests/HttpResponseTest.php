@@ -12,6 +12,7 @@ use RobertBoes\Interlock\Exceptions\DirectWriteException;
 use RobertBoes\Interlock\Exceptions\FailedGuardException;
 use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
+use RobertBoes\Interlock\Exceptions\NotAFromStateException;
 use RobertBoes\Interlock\Exceptions\StaleStateException;
 use RobertBoes\Interlock\Exceptions\UnauthorisedTransitionException;
 use RobertBoes\Interlock\Exceptions\UnknownTransitionException;
@@ -99,6 +100,37 @@ it('reports stale state with the model, the transition and the states as its con
         && Arr::only($context, array_keys($expected)) === $expected);
 });
 
+it('responds 409 when the transition does not start from the current state, as when a form is submitted twice', function () {
+    $expense = expenseAwaitingReview();
+    $this->actingAs(Employee::manager());
+
+    $this->postJson("/expenses/{$expense->getKey()}/reject", ['rejection_reason' => 'No receipt'])->assertOk();
+
+    $this->postJson("/expenses/{$expense->getKey()}/reject", ['rejection_reason' => 'No receipt'])
+        ->assertConflict()
+        ->assertExactJson(['message' => 'This transition can\'t be applied to the record in its current state.']);
+});
+
+it('reports a transition from the wrong state with the model, the transition and the states as its context', function () {
+    $expense = Expense::create(['amount' => 4200]);
+    Log::spy();
+
+    $this->actingAs(Employee::manager())
+        ->postJson("/expenses/{$expense->getKey()}/reject", ['rejection_reason' => 'No receipt'])
+        ->assertConflict();
+
+    $expected = [
+        'model' => Expense::class,
+        'key' => $expense->getKey(),
+        'transition' => 'reject',
+        'state_attribute' => 'status',
+        'current_state' => 'draft',
+        'from_states' => ['submitted'],
+    ];
+    Log::shouldHaveReceived('error')->withArgs(fn(string $message, array $context) => $context['exception'] instanceof NotAFromStateException
+        && Arr::only($context, array_keys($expected)) === $expected);
+});
+
 it('responds 200 when the transition applies', function () {
     $expense = expenseAwaitingReview();
 
@@ -117,7 +149,7 @@ it('responds 500 to programming errors', function (string $exception, Closure $m
     Exceptions::assertReported($exception);
 })->with([
     'a direct write' => [DirectWriteException::class, fn() => Post::create()->update(['status' => PostStatus::Published])],
-    'an illegal transition' => [IllegalTransitionException::class, fn() => Post::create()->transition('publish')],
+    'a second transition staged on one machine' => [IllegalTransitionException::class, fn() => Post::create()->stageTransition('submit')->stageTransition('submit')],
     'an unknown transition' => [UnknownTransitionException::class, fn() => Post::create()->transition('shpi')],
     'an invalid definition' => [InvalidDefinitionException::class, fn() => (new PostWithoutTargetState())->transition('submit')],
 ]);

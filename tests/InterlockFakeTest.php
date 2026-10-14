@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Event;
 use PHPUnit\Framework\AssertionFailedError;
 use RobertBoes\Interlock\Events\Transitioned;
-use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
+use RobertBoes\Interlock\Exceptions\NotAFromStateException;
 use RobertBoes\Interlock\Exceptions\InvalidFakeException;
 use RobertBoes\Interlock\Exceptions\MissingTransitionInputException;
 use RobertBoes\Interlock\Interlock;
@@ -62,7 +62,7 @@ it('still rejects a transition the calling code may not apply while faked, and d
     Interlock::assertNotTransitioned($order, $transition);
     expect($order->fresh()->status)->toBe(OrderStatus::LabelCreated);
 })->with([
-    'not from a from-state' => ['deliver', fn(Order $order) => $order->transition('deliver'), IllegalTransitionException::class],
+    'not from a from-state' => ['deliver', fn(Order $order) => $order->transition('deliver'), NotAFromStateException::class],
     'applied by name without its input' => ['ship', fn(Order $order) => $order->transition('ship'), MissingTransitionInputException::class],
 ]);
 

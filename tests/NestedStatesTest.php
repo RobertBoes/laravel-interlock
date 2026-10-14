@@ -2,7 +2,7 @@
 
 use Illuminate\Support\Facades\DB;
 use RobertBoes\Interlock\Exceptions\DirectWriteException;
-use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
+use RobertBoes\Interlock\Exceptions\NotAFromStateException;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Interlock;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
@@ -49,10 +49,13 @@ it('stores the leaf state in the one state attribute', function () {
 it('still rejects a transition from a parent state when the model is not within it', function () {
     $order = orderIn(OrderStatus::Shipped);
 
-    expect(fn() => $order->transition('cancel'))->toThrow(
-        IllegalTransitionException::class,
-        'Cannot apply transition [cancel] to ' . Order::class . ' [' . $order->getKey() . ']: its [status] is [shipped], and [cancel] only starts from [pending, preparing].',
-    );
+    expect(thrownBy(fn() => $order->transition('cancel')))
+        ->toBeInstanceOf(NotAFromStateException::class)
+        ->model->toBe($order)
+        ->transition->toBe('cancel')
+        ->stateAttribute->toBe('status')
+        ->currentState->toBe(OrderStatus::Shipped)
+        ->fromStates->toBe([OrderStatus::Pending, OrderStatus::Preparing]);
 
     expect($order->fresh()->status)->toBe(OrderStatus::Shipped);
 });

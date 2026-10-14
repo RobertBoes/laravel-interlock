@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Event;
 use RobertBoes\Interlock\Events\Transitioned;
 use RobertBoes\Interlock\Exceptions\DirectWriteException;
-use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
+use RobertBoes\Interlock\Exceptions\NotAFromStateException;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Exceptions\StaleStateException;
 use RobertBoes\Interlock\Exceptions\UnknownTransitionException;
@@ -64,10 +64,13 @@ it('applies a transition to the machine that declares it, by name alone', functi
 it('checks a transition\'s from-states against its own machine\'s state attribute', function () {
     $order = Order::create()->transition('prepare');
 
-    expect(fn() => $order->transition('capture_payment'))->toThrow(
-        IllegalTransitionException::class,
-        'Cannot apply transition [capture_payment] to ' . Order::class . ' [' . $order->getKey() . ']: its [payment_status] is [unpaid], and [capture_payment] only starts from [authorised].',
-    );
+    expect(thrownBy(fn() => $order->transition('capture_payment')))
+        ->toBeInstanceOf(NotAFromStateException::class)
+        ->model->toBe($order)
+        ->transition->toBe('capture_payment')
+        ->stateAttribute->toBe('payment_status')
+        ->currentState->toBe(PaymentStatus::Unpaid)
+        ->fromStates->toBe([PaymentStatus::Authorised]);
 });
 
 it('lists the transitions of every machine when a transition is unknown', function () {
@@ -163,10 +166,13 @@ it('backs two machines with one enum, each following its own graph', function ()
 it('does not apply one machine\'s transition to another machine backed by the same enum', function () {
     $contract = Contract::create()->transition('reject_legally');
 
-    expect(fn() => $contract->transition('reopen_budget'))->toThrow(
-        IllegalTransitionException::class,
-        'Cannot apply transition [reopen_budget] to ' . Contract::class . ' [' . $contract->getKey() . ']: its [finance_status] is [pending], and [reopen_budget] only starts from [rejected].',
-    );
+    expect(thrownBy(fn() => $contract->transition('reopen_budget')))
+        ->toBeInstanceOf(NotAFromStateException::class)
+        ->model->toBe($contract)
+        ->transition->toBe('reopen_budget')
+        ->stateAttribute->toBe('finance_status')
+        ->currentState->toBe(Approval::Pending)
+        ->fromStates->toBe([Approval::Rejected]);
 
     expect($contract->fresh())
         ->legal_status->toBe(Approval::Rejected)

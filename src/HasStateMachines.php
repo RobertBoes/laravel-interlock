@@ -23,6 +23,7 @@ use RobertBoes\Interlock\Exceptions\CancelledTransitionException;
 use RobertBoes\Interlock\Exceptions\DirectWriteException;
 use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
 use RobertBoes\Interlock\Exceptions\MissingBuilderTraitException;
+use RobertBoes\Interlock\Exceptions\NotAFromStateException;
 use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\Graph\CompiledTransition;
 use RobertBoes\Interlock\Graph\GraphRepository;
@@ -131,7 +132,7 @@ trait HasStateMachines
         $fromState = $this->getOriginal($compiled->stateAttribute);
 
         if (! $compiled->startsFrom($fromState)) {
-            throw IllegalTransitionException::currentStateNotAFromState($this, $compiled, $fromState);
+            throw NotAFromStateException::currentState($this, $compiled, $fromState);
         }
 
         $alreadyStaged = $this->interlockStagedTransitions[$compiled->stateAttribute] ?? null;

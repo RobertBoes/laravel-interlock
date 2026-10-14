@@ -241,7 +241,8 @@ History and events still record only what the transition itself wrote. Eloquent'
 When a transition can't be applied, you get an exception that says why:
 
 - `UnknownTransitionException`: the model has no transition with that name.
-- `IllegalTransitionException`: the current state isn't one of its from-states.
+- `NotAFromStateException`: the current state isn't one of its from-states, as when a form is submitted twice. It renders as 409; its message only says the transition can't be applied in the record's current state, and the details are on its properties (`model`, `transition`, `stateAttribute`, `currentState`, `fromStates`) and in the context Laravel logs.
+- `IllegalTransitionException`: you staged a second transition on a machine that already holds one.
 - `MissingTransitionInputException`: you applied a class-based transition that takes input by name, instead of passing an instance.
 - `CancelledTransitionException`: a `saving` or `updating` listener cancelled the save, so nothing was written. A `save()` that writes [staged transitions](#staged-transitions) returns `false` instead, like Eloquent's.
 
@@ -662,6 +663,7 @@ Every Interlock exception implements `RobertBoes\Interlock\Exceptions\InterlockE
 | `UnauthorisedTransitionException` | 403 | The actor may not apply the transition (or the status a denying Gate response gave) |
 | `FailedGuardException` | 422 | A guard failed; the body's `message` is the guard's message |
 | `StaleStateException` | 409 | The stored state changed since the model was loaded; reload and retry |
+| `NotAFromStateException` | 409 | The current state isn't one of the transition's from-states, as when a form is submitted twice |
 | `DirectWriteException`, `IllegalTransitionException`, `UnknownTransitionException`, `InvalidDefinitionException`, `MissingBuilderTraitException`, and the rest | 500 | A programming error to fix, not something to show users |
 
 Override any of them the usual Laravel way, in `bootstrap/app.php`:

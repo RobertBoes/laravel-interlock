@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Event;
 use RobertBoes\Interlock\Events\Transitioned;
 use RobertBoes\Interlock\Events\Transitioning;
 use RobertBoes\Interlock\Exceptions\CancelledTransitionException;
-use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
+use RobertBoes\Interlock\Exceptions\NotAFromStateException;
 use RobertBoes\Interlock\Exceptions\InterlockException;
 use RobertBoes\Interlock\Exceptions\UnknownTransitionException;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
@@ -40,10 +40,15 @@ it('throws when the current state is not one of the transition\'s from-states, a
     $post = Post::create(['status' => PostStatus::Draft]);
     $post->title = 'Not yet';
 
-    expect(fn() => $post->transition('publish'))->toThrow(
-        IllegalTransitionException::class,
-        'Cannot apply transition [publish] to ' . Post::class . ' [' . $post->getKey() . ']: its [status] is [draft], and [publish] only starts from [ready, scheduled].',
-    );
+    expect(thrownBy(fn() => $post->transition('publish')))
+        ->toBeInstanceOf(NotAFromStateException::class)
+        ->getMessage()->toBe('This transition can\'t be applied to the record in its current state.')
+        ->getStatusCode()->toBe(409)
+        ->model->toBe($post)
+        ->transition->toBe('publish')
+        ->stateAttribute->toBe('status')
+        ->currentState->toBe(PostStatus::Draft)
+        ->fromStates->toBe([PostStatus::Ready, PostStatus::Scheduled]);
 
     expect($post->fresh())
         ->status->toBe(PostStatus::Draft)
@@ -111,7 +116,7 @@ it('checks the from-states against the stored state, not an unsaved assignment',
     $post = Post::create(['status' => PostStatus::Draft]);
     $post->status = PostStatus::Ready;
 
-    expect(fn() => $post->transition('publish'))->toThrow(IllegalTransitionException::class);
+    expect(fn() => $post->transition('publish'))->toThrow(NotAFromStateException::class);
 
     expect($post->fresh()->status)->toBe(PostStatus::Draft);
 });

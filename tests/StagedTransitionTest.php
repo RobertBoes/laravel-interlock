@@ -8,6 +8,7 @@ use RobertBoes\Interlock\Events\Transitioning;
 use RobertBoes\Interlock\Exceptions\DirectWriteException;
 use RobertBoes\Interlock\Exceptions\FailedGuardException;
 use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
+use RobertBoes\Interlock\Exceptions\NotAFromStateException;
 use RobertBoes\Interlock\Exceptions\StaleStateException;
 use RobertBoes\Interlock\Exceptions\UnauthorisedTransitionException;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
@@ -36,10 +37,13 @@ function updatesDuring(Closure $callback): Collection
 it('throws straight away when staging a transition whose from-states do not include the current state', function () {
     $order = Order::create();
 
-    expect(fn() => $order->stageTransition('ship'))->toThrow(
-        IllegalTransitionException::class,
-        'Cannot apply transition [ship] to ' . Order::class . ' [' . $order->getKey() . ']: its [status] is [pending], and [ship] only starts from [label_created].',
-    );
+    expect(thrownBy(fn() => $order->stageTransition('ship')))
+        ->toBeInstanceOf(NotAFromStateException::class)
+        ->model->toBe($order)
+        ->transition->toBe('ship')
+        ->stateAttribute->toBe('status')
+        ->currentState->toBe(OrderStatus::Pending)
+        ->fromStates->toBe([OrderStatus::LabelCreated]);
 
     expect($order->status)->toBe(OrderStatus::Pending);
 });
