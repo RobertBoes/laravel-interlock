@@ -343,10 +343,14 @@ $order->availableTransitions($manager);  // for a given actor
 $order->availableTransitions(null);      // on behalf of no one
 ```
 
-Each one serialises as its name and target state, ready for an API resource or Inertia props:
+Each one serialises as its name, the state attribute of the machine it belongs to and its target state, ready for an API resource or Inertia props:
 
 ```json
-[{"name": "ship", "target_state": "shipped"}, {"name": "cancel", "target_state": "cancelled"}]
+[
+    {"name": "ship", "state_attribute": "status", "target_state": "shipped"},
+    {"name": "cancel", "state_attribute": "status", "target_state": "cancelled"},
+    {"name": "authorise_payment", "state_attribute": "payment_status", "target_state": "authorised"}
+]
 ```
 
 A transition that takes input is offered on its from-states and authorisation alone, because its guards may read input that only exists once it is applied. Its `authorise()` method must not read that input.

@@ -246,7 +246,7 @@ trait HasStateMachines
 
         return new Collection($this->interlockGraph()->transitions())
             ->filter(fn(CompiledTransition $transition) => $transition->isAvailable($this, $actor))
-            ->map(fn(CompiledTransition $transition) => new AvailableTransition($transition->name, $transition->targetState))
+            ->map(fn(CompiledTransition $transition) => new AvailableTransition($transition->name, $transition->stateAttribute, $transition->targetState))
             ->values();
     }
 

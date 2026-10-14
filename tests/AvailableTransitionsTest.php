@@ -59,15 +59,15 @@ it('evaluates authorisation for the authenticated user unless an actor is given,
         ->and(availableNames($expense->availableTransitions(null)))->toBe([]);
 });
 
-it('serialises as a list of name and target state, for an API resource or Inertia props', function () {
+it('serialises as a list of name, state attribute and target state, for an API resource or Inertia props', function () {
     $available = orderReadyToShip()->availableTransitions(null);
 
     expect($available->toArray())->toBe([
-        ['name' => 'ship', 'target_state' => 'shipped'],
-        ['name' => 'cancel', 'target_state' => 'cancelled'],
-        ['name' => 'authorise_payment', 'target_state' => 'authorised'],
+        ['name' => 'ship', 'state_attribute' => 'status', 'target_state' => 'shipped'],
+        ['name' => 'cancel', 'state_attribute' => 'status', 'target_state' => 'cancelled'],
+        ['name' => 'authorise_payment', 'state_attribute' => 'payment_status', 'target_state' => 'authorised'],
     ])->and(JsonResource::make(['transitions' => $available])->toJson())->toBe(
-        '{"transitions":[{"name":"ship","target_state":"shipped"},{"name":"cancel","target_state":"cancelled"},{"name":"authorise_payment","target_state":"authorised"}]}',
+        '{"transitions":[{"name":"ship","state_attribute":"status","target_state":"shipped"},{"name":"cancel","state_attribute":"status","target_state":"cancelled"},{"name":"authorise_payment","state_attribute":"payment_status","target_state":"authorised"}]}',
     );
 });
 
