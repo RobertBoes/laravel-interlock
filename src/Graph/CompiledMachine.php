@@ -27,6 +27,14 @@ final readonly class CompiledMachine
     }
 
     /**
+     * The machine's initial state, or null when it has several.
+     */
+    public function soleInitialState(): ?BackedEnum
+    {
+        return count($this->initialStates) === 1 ? $this->initialStates[0] : null;
+    }
+
+    /**
      * Whether the state is a final state, or nested within one.
      */
     public function isFinalState(BackedEnum $state): bool

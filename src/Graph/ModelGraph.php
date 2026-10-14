@@ -20,8 +20,16 @@ final readonly class ModelGraph
         public array $machines,
         private array $transitions,
         public array $guardedAttributes,
-        public array $guardedAttributeMachines = [],
+        private array $guardedAttributeMachines = [],
     ) {}
+
+    /**
+     * @return list<CompiledTransition>
+     */
+    public function transitions(): array
+    {
+        return array_values($this->transitions);
+    }
 
     public function transition(string $name): CompiledTransition
     {
@@ -38,6 +46,26 @@ final readonly class ModelGraph
             $this->transitions,
             fn(CompiledTransition $transition) => $transition->stateAttribute === $machine->stateAttribute,
         ));
+    }
+
+    /**
+     * The state attributes of the machines that declare the guarded attribute.
+     *
+     * @return list<string>
+     */
+    public function machinesGuarding(string $attribute): array
+    {
+        return $this->guardedAttributeMachines[$attribute] ?? [];
+    }
+
+    public function recordsHistory(string $stateAttribute): bool
+    {
+        return $this->machines[$stateAttribute]->recordsHistory;
+    }
+
+    public function recordsAnyHistory(): bool
+    {
+        return array_any($this->machines, fn(CompiledMachine $machine) => $machine->recordsHistory);
     }
 
     public function transitionOfClass(Transition $transition): CompiledTransition

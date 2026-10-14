@@ -231,18 +231,11 @@ trait HasStateMachines
     public function availableTransitions(?Authenticatable $actor = null): Collection
     {
         $actor = func_num_args() > 0 ? $actor : $this->authenticatedActor();
-        $graph = $this->interlockGraph();
-        $available = [];
 
-        foreach ($graph->machines as $machine) {
-            foreach ($graph->transitionsOf($machine) as $transition) {
-                if ($transition->isAvailable($this, $actor)) {
-                    $available[] = new AvailableTransition($transition->name, $transition->targetState);
-                }
-            }
-        }
-
-        return new Collection($available);
+        return new Collection($this->interlockGraph()->transitions())
+            ->filter(fn(CompiledTransition $transition) => $transition->isAvailable($this, $actor))
+            ->map(fn(CompiledTransition $transition) => new AvailableTransition($transition->name, $transition->targetState))
+            ->values();
     }
 
     /**
@@ -259,7 +252,7 @@ trait HasStateMachines
 
         foreach ($graph->machines as $machine) {
             if (($copy->getAttributes()[$machine->stateAttribute] ?? null) === null) {
-                $copy->setAttribute($machine->stateAttribute, count($machine->initialStates) === 1 ? $machine->initialStates[0] : null);
+                $copy->setAttribute($machine->stateAttribute, $machine->soleInitialState());
             }
         }
 
@@ -500,7 +493,7 @@ trait HasStateMachines
         foreach ($this->interlockBypassedWrites as $bypassedWrite) {
             [$attribute, $stateAttributes] = $bypassedWrite instanceof BypassedWrite
                 ? [$bypassedWrite->stateAttribute, [$bypassedWrite->stateAttribute]]
-                : [$bypassedWrite->attribute, $graph->guardedAttributeMachines[$bypassedWrite->attribute] ?? []];
+                : [$bypassedWrite->attribute, $graph->machinesGuarding($bypassedWrite->attribute)];
 
             foreach ($stateAttributes as $stateAttribute) {
                 $grouped[$stateAttribute] = [$bypassedWrite->reason, [...$grouped[$stateAttribute][1] ?? [], $attribute => $attribute]];
@@ -517,18 +510,16 @@ trait HasStateMachines
      */
     private function mayMakeABypassedWriteThatRecordsHistory(): bool
     {
-        foreach ($this->interlockGraph()->machines as $machine) {
-            if ($machine->recordsHistory) {
-                return Container::getInstance()->make(BypassScope::class)->reason() !== null;
-            }
+        if (! $this->interlockGraph()->recordsAnyHistory()) {
+            return false;
         }
 
-        return false;
+        return Container::getInstance()->make(BypassScope::class)->reason() !== null;
     }
 
     private function recordHistory(HistoryRecord $record): void
     {
-        if ($this->interlockGraph()->machines[$record->stateAttribute]->recordsHistory) {
+        if ($this->interlockGraph()->recordsHistory($record->stateAttribute)) {
             Container::getInstance()->make(HistoryRecorder::class)->record($record);
         }
     }
@@ -622,11 +613,7 @@ trait HasStateMachines
 
     private function onlyInitialState(CompiledMachine $machine): BackedEnum
     {
-        if (count($machine->initialStates) > 1) {
-            throw AmbiguousInitialStateException::noStateGiven($this, $machine);
-        }
-
-        return $machine->initialStates[0];
+        return $machine->soleInitialState() ?? throw AmbiguousInitialStateException::noStateGiven($this, $machine);
     }
 
     private function rejectDirectWritesToStateAttributes(): void

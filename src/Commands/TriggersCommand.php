@@ -26,13 +26,9 @@ final class TriggersCommand extends Command
         $allDispatched = true;
 
         foreach (array_keys($registry->models()) as $model) {
-            $graph = $graphs->for(new $model());
-
-            foreach ($graph->machines as $machine) {
-                foreach ($graph->transitionsOf($machine) as $transition) {
-                    if ($transition->trigger !== null) {
-                        $allDispatched = $this->dispatch(new RunTrigger($model, $transition->name), $bus, new UniqueLock($cache), $exceptions) && $allDispatched;
-                    }
+            foreach ($graphs->for(new $model())->transitions() as $transition) {
+                if ($transition->trigger !== null) {
+                    $allDispatched = $this->dispatch(new RunTrigger($model, $transition->name), $bus, new UniqueLock($cache), $exceptions) && $allDispatched;
                 }
             }
         }

@@ -26,7 +26,7 @@ final class XStateConfig
             'states' => self::states($machine, $transitions, null),
         ];
 
-        if (count($machine->initialStates) > 1) {
+        if ($machine->soleInitialState() === null) {
             $config['meta'] = ['initialStates' => array_map(self::key(...), $machine->initialStates)];
         }
 
