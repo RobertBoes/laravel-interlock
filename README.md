@@ -489,6 +489,11 @@ Scheduling means setting the data the condition reads, never storing a pending r
 
 **Triggers only run while the Laravel scheduler runs.** Interlock registers `interlock:triggers` to run every minute, so make sure your server runs `php artisan schedule:run` every minute (or `php artisan schedule:work` locally). Without it, no trigger ever fires.
 
+Two config keys change that:
+
+- `interlock.triggers.schedule.cron` (default `* * * * *`): how often the command runs.
+- `interlock.triggers.schedule.enabled` (default true): set it to false to schedule `interlock:triggers` yourself, for example on one server only or with your own overlap and output options.
+
 The command does no querying itself. It dispatches one queued job per trigger, so a large backlog never slows the scheduler down, and a queue worker must be running to process them. Each job is unique per trigger, so a slow run and the next one never work on the same trigger at once; this needs a cache store that supports locks, as Laravel's unique jobs do.
 
 The job applies the transition on behalf of no one (a null actor) to each matching model, a chunk at a time in key order, and records the trigger's name in history. Two config keys size it:

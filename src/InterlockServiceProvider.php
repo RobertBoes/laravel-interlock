@@ -45,10 +45,21 @@ class InterlockServiceProvider extends PackageServiceProvider
     public function packageBooted(): void
     {
         $this->optimizes(optimize: 'interlock:cache', clear: 'interlock:clear', key: 'interlock');
-        $this->callAfterResolving(Schedule::class, fn(Schedule $schedule) => $schedule->command('interlock:triggers')->everyMinute());
+        $this->callAfterResolving(Schedule::class, $this->scheduleTriggers(...));
 
         if ($this->app->runningUnitTests() && class_exists(Expectation::class)) {
             PestExpectations::register();
         }
+    }
+
+    private function scheduleTriggers(Schedule $schedule): void
+    {
+        $config = $this->app->make('config');
+
+        if (! $config->boolean('interlock.triggers.schedule.enabled', true)) {
+            return;
+        }
+
+        $schedule->command('interlock:triggers')->cron($config->string('interlock.triggers.schedule.cron', '* * * * *'));
     }
 }

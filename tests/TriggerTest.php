@@ -26,13 +26,28 @@ use RobertBoes\Interlock\Triggers\RunTrigger;
 use RobertBoes\Interlock\Triggers\RunTriggerChunk;
 
 it('runs the triggers every minute once the scheduler runs', function () {
-    $events = array_filter(
-        app(Schedule::class)->events(),
-        fn(ScheduledEvent $event) => str_contains((string) $event->command, 'interlock:triggers'),
-    );
+    expect(scheduledTriggerEvents())->toHaveCount(1)
+        ->and(scheduledTriggerEvents()[0]->expression)->toBe('* * * * *');
+});
 
-    expect($events)->toHaveCount(1)
-        ->and(array_values($events)[0]->expression)->toBe('* * * * *');
+it('runs the triggers on the configured schedule', function () {
+    config(['interlock.triggers.schedule.cron' => '*/5 * * * *']);
+
+    expect(scheduledTriggerEvents())->toHaveCount(1)
+        ->and(scheduledTriggerEvents()[0]->expression)->toBe('*/5 * * * *');
+});
+
+it('runs the triggers every minute when a published config predates the schedule keys', function () {
+    config(['interlock.triggers' => ['chunk_size' => 100, 'max_per_run' => 1000]]);
+
+    expect(scheduledTriggerEvents())->toHaveCount(1)
+        ->and(scheduledTriggerEvents()[0]->expression)->toBe('* * * * *');
+});
+
+it('leaves the triggers off the schedule when the app turns that off', function () {
+    config(['interlock.triggers.schedule.enabled' => false]);
+
+    expect(scheduledTriggerEvents())->toBe([]);
 });
 
 it('rejects a transition class whose trigger is not static', function () {
@@ -419,4 +434,15 @@ function scheduledPost(string $publishAt): Post
 function scheduledFeedPost(string $publishAt): FeedPost
 {
     return FeedPost::create(['publish_at' => $publishAt])->transition('submit');
+}
+
+/**
+ * @return list<ScheduledEvent>
+ */
+function scheduledTriggerEvents(): array
+{
+    return array_values(array_filter(
+        app(Schedule::class)->events(),
+        fn(ScheduledEvent $event) => str_contains((string) $event->command, 'interlock:triggers'),
+    ));
 }
