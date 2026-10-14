@@ -93,6 +93,22 @@ trait HasStateMachines
      */
     public function stageTransition(string|Transition $transition, ?Authenticatable $actor = null): static
     {
+        $this->interlockStageTransition($transition, func_num_args() > 1 ? $actor : $this->authenticatedActor(), null);
+
+        return $this;
+    }
+
+    /**
+     * @internal Applies the transition as its trigger does: on behalf of no one, recorded under the trigger's name.
+     */
+    public function interlockApplyTrigger(string $transition): void
+    {
+        $this->interlockStageTransition($transition, null, $transition);
+        $this->save();
+    }
+
+    private function interlockStageTransition(string|Transition $transition, ?Authenticatable $actor, ?string $trigger): void
+    {
         $graph = $this->interlockGraph();
         $compiled = is_string($transition) ? $graph->transition($transition) : $graph->transitionOfClass($transition);
         $fromState = $this->getOriginal($compiled->stateAttribute);
@@ -110,12 +126,9 @@ trait HasStateMachines
         // Built while faked too, so a transition that cannot be built from its name still throws.
         $steps = $compiled->steps($transition instanceof Transition ? $transition : null);
         $steps = Container::getInstance()->make(TransitionLog::class)->faking() ? TransitionSteps::none() : $steps;
-        $actor = func_num_args() > 1 ? $actor : $this->authenticatedActor();
 
-        $this->interlockStagedTransitions[$compiled->stateAttribute] = new StagedTransition($compiled, $steps, $fromState, $actor);
+        $this->interlockStagedTransitions[$compiled->stateAttribute] = new StagedTransition($compiled, $steps, $fromState, $actor, $trigger);
         $this->setAttribute($compiled->stateAttribute, $compiled->targetState);
-
-        return $this;
     }
 
     /**
@@ -315,6 +328,7 @@ trait HasStateMachines
                         $transition->actor,
                         $oldAttributes[$stateAttribute],
                         array_map(fn(string $attribute) => $this->getAttributes()[$attribute] ?? null, $written[$stateAttribute]),
+                        trigger: $transition->trigger,
                     ));
                 }
             }

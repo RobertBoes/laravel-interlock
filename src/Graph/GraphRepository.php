@@ -3,6 +3,8 @@
 namespace RobertBoes\Interlock\Graph;
 
 use BackedEnum;
+use Closure;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use ReflectionClass;
 use RobertBoes\Interlock\Attributes\Authorise;
@@ -178,6 +180,7 @@ final class GraphRepository
             $definition->targetState,
             null,
             TransitionSteps::fluent($definition),
+            $definition->trigger,
         );
     }
 
@@ -215,12 +218,36 @@ final class GraphRepository
             $targetState,
             $class,
             TransitionSteps::none(),
+            $this->triggerOf($reflection),
         );
+    }
+
+    /**
+     * A transition class declares its trigger as a static trigger() method, so the condition is known without building
+     * the class, which may take input.
+     *
+     * @param  ReflectionClass<Transition>  $class
+     * @return (Closure(Builder<Model>): mixed)|null
+     */
+    private function triggerOf(ReflectionClass $class): ?Closure
+    {
+        if (! $class->hasMethod('trigger')) {
+            return null;
+        }
+
+        $method = $class->getMethod('trigger');
+
+        if (! $method->isStatic()) {
+            throw InvalidDefinitionException::triggerNotStatic($class->getName());
+        }
+
+        return $method->getClosure();
     }
 
     /**
      * @param  non-empty-list<BackedEnum>  $fromStates
      * @param  class-string<Transition>|null  $class
+     * @param  (Closure(Builder<Model>): mixed)|null  $trigger
      */
     private function compileEdge(
         Model $model,
@@ -230,6 +257,7 @@ final class GraphRepository
         BackedEnum $targetState,
         ?string $class,
         TransitionSteps $fluentSteps,
+        ?Closure $trigger,
     ): CompiledTransition {
         $castEnum = $model->getCasts()[$machine->stateAttribute] ?? null;
 
@@ -259,6 +287,7 @@ final class GraphRepository
             )),
             $class,
             $fluentSteps,
+            $trigger,
         );
     }
 }

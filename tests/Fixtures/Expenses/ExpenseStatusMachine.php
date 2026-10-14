@@ -2,6 +2,7 @@
 
 namespace RobertBoes\Interlock\Tests\Fixtures\Expenses;
 
+use Illuminate\Database\Eloquent\Builder;
 use RobertBoes\Interlock\Attributes\FinalStates;
 use RobertBoes\Interlock\Attributes\InitialStates;
 use RobertBoes\Interlock\StateMachine;
@@ -16,7 +17,8 @@ class ExpenseStatusMachine extends StateMachine
             $this->transition('submit')
                 ->from(ExpenseStatus::Draft)
                 ->to(ExpenseStatus::Submitted)
-                ->guard('has_amount', fn(Expense $expense) => $expense->amount !== null, 'An expense needs an amount before it is submitted.'),
+                ->guard('has_amount', fn(Expense $expense) => $expense->amount !== null, 'An expense needs an amount before it is submitted.')
+                ->trigger(fn(Builder $query) => $query->where('created_at', '<=', now()->subDays(30))),
             Approve::class,
             Pay::class,
             $this->transition('reject')

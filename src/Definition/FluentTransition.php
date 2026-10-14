@@ -22,6 +22,8 @@ final class FluentTransition
 
     public private(set) ?Closure $afterCommitStep = null;
 
+    public private(set) ?Closure $trigger = null;
+
     public function __construct(public readonly string $name) {}
 
     public function from(BackedEnum ...$states): self
@@ -70,6 +72,20 @@ final class FluentTransition
     public function apply(Closure $step): self
     {
         $this->applyStep = $step;
+
+        return $this;
+    }
+
+    /**
+     * Apply the transition by itself once a condition holds, such as "`publish_at` has passed". The closure receives
+     * the model's query builder and constrains it: `fn(Builder $query) => $query->where('publish_at', '<=', now())`.
+     * The transition's from-states are added to it, so it only says what is specific to the trigger. Every minute, the
+     * scheduled interlock:triggers command applies the transition, on behalf of no one, to each model that matches.
+     * Rescheduling means changing the data the condition reads; nothing needs cancelling.
+     */
+    public function trigger(Closure $condition): self
+    {
+        $this->trigger = $condition;
 
         return $this;
     }

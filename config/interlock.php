@@ -15,4 +15,11 @@ return [
     // A service provider can add to these with Interlock::registerModels().
     'models' => [],
 
+    'triggers' => [
+
+        // How many matching models a trigger loads at a time, in key order, to apply its transition to.
+        'chunk_size' => 100,
+
+    ],
+
 ];

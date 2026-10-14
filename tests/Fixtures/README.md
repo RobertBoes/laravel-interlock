@@ -12,4 +12,6 @@ The fixture domains from the spec (`.scratch/interlock-v1/spec.md`, "Testing Dec
 - `Discovery/`: models for discovery and explicit registration, kept outside the paths the discovery tests scan. They share the `posts` and `orders` tables.
 - `database/migrations/`: the fixture tables, loaded by `TestCase`, plus the package's own history migration.
 
+Triggers: the post's `publish` once `publish_at` has passed, the expense's guarded `submit` 30 days after the expense was created, and the order's class-based `cancel` for orders still unpaid after 3 days.
+
 History is on for the post's `status` machine, the order's `status` machine and both contract machines. The order's `payment_status` machine has it off.

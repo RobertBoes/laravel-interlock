@@ -17,6 +17,11 @@ use Illuminate\Support\Str;
  * For available transitions, a transition that takes input is built without calling its constructor, and only its
  * authorisation is checked, so `authorise()` must not read the input; guards may, as they run once it is applied.
  *
+ * It may declare a trigger, a static `trigger(Builder $query)` method that constrains the model's query, such as
+ * `$query->where('publish_at', '<=', now())`. Its from-states are added to it, and every minute the scheduled
+ * interlock:triggers command applies it by name, on behalf of no one, to each model that matches. A transition that
+ * takes input cannot be built by name, so it cannot be triggered.
+ *
  * It may define either of these steps, each receiving the model:
  * - `apply($model)` runs inside the transition's transaction, after the model's state attribute is set to the target
  *   state and before the compare-and-swap write. Attributes it sets are saved in the same update, and rows it writes

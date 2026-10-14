@@ -3,9 +3,11 @@
 namespace RobertBoes\Interlock\Graph;
 
 use BackedEnum;
+use Closure;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Container\BindingResolutionException;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use ReflectionClass;
 use RobertBoes\Interlock\Exceptions\MissingTransitionInputException;
@@ -18,6 +20,7 @@ final readonly class CompiledTransition
      * @param  list<BackedEnum>  $leafFromStates  the from-states with each parent state expanded to the leaf states within it
      * @param  class-string<Transition>|null  $class  the transition class, or null for a fluent transition
      * @param  TransitionSteps  $fluentSteps  a fluent transition's steps; a class-based transition's come from its object
+     * @param  (Closure(Builder<Model>): mixed)|null  $trigger  the condition the trigger adds to the model's query, or null when the transition has none
      */
     public function __construct(
         public string $name,
@@ -27,6 +30,7 @@ final readonly class CompiledTransition
         public array $leafFromStates,
         public ?string $class,
         private TransitionSteps $fluentSteps,
+        public ?Closure $trigger,
     ) {}
 
     public function startsFrom(?BackedEnum $state): bool

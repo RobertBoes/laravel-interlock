@@ -2,12 +2,14 @@
 
 namespace RobertBoes\Interlock;
 
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Foundation\Application;
 use Pest\Expectation;
 use RobertBoes\Interlock\Bypass\BypassScope;
 use RobertBoes\Interlock\Commands\CacheCommand;
 use RobertBoes\Interlock\Commands\ClearCommand;
 use RobertBoes\Interlock\Commands\SignalboxCommand;
+use RobertBoes\Interlock\Commands\TriggersCommand;
 use RobertBoes\Interlock\Discovery\ModelRegistry;
 use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\History\DatabaseHistoryRecorder;
@@ -25,7 +27,7 @@ class InterlockServiceProvider extends PackageServiceProvider
             ->name('laravel-interlock')
             ->hasConfigFile('interlock')
             ->hasMigration('create_interlock_history_table')
-            ->hasCommands(CacheCommand::class, ClearCommand::class, SignalboxCommand::class);
+            ->hasCommands(CacheCommand::class, ClearCommand::class, SignalboxCommand::class, TriggersCommand::class);
     }
 
     public function packageRegistered(): void
@@ -43,6 +45,7 @@ class InterlockServiceProvider extends PackageServiceProvider
     public function packageBooted(): void
     {
         $this->optimizes(optimize: 'interlock:cache', clear: 'interlock:clear', key: 'interlock');
+        $this->callAfterResolving(Schedule::class, fn(Schedule $schedule) => $schedule->command('interlock:triggers')->everyMinute());
 
         if ($this->app->runningUnitTests() && class_exists(Expectation::class)) {
             PestExpectations::register();
