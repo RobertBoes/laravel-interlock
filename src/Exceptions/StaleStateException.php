@@ -6,8 +6,13 @@ use BackedEnum;
 use Illuminate\Database\Eloquent\Model;
 use RuntimeException;
 use RobertBoes\Interlock\Graph\CompiledTransition;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
-final class StaleStateException extends RuntimeException implements InterlockException
+/**
+ * The stored state changed after the model was loaded, so the transition did not apply. It renders as 409 Conflict:
+ * reload and try again.
+ */
+final class StaleStateException extends RuntimeException implements InterlockException, HttpExceptionInterface
 {
     public static function storedStateChanged(Model $model, CompiledTransition $transition, BackedEnum $loadedState, int|string|null $storedState): self
     {
@@ -31,5 +36,18 @@ final class StaleStateException extends RuntimeException implements InterlockExc
             $model::class,
             $model->getKey(),
         ));
+    }
+
+    public function getStatusCode(): int
+    {
+        return 409;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function getHeaders(): array
+    {
+        return [];
     }
 }

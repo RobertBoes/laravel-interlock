@@ -9,6 +9,11 @@ use Illuminate\Support\Str;
  * with #[FromStates(...)] and its target state with #[TargetState(...)], list the class in the machine's
  * transitions(), and apply it with `$model->transition(new Ship($trackingCode))`.
  *
+ * It may declare who may apply it, with either an `authorise(?Authenticatable $actor, $model)` method returning a bool
+ * or a Gate response, or #[Authorise('ability')] on the class for a Gate ability. Without either, every actor may apply
+ * it. Its guards are methods marked #[Guard('message')] that receive the model and return whether the condition holds.
+ * Authorisation is checked before the transaction begins, guards inside it, before `apply`.
+ *
  * It may define either of these steps, each receiving the model:
  * - `apply($model)` runs inside the transition's transaction, after the model's state attribute is set to the target
  *   state and before the compare-and-swap write. Attributes it sets are saved in the same update, and rows it writes

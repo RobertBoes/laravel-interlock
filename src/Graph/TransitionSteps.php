@@ -3,7 +3,18 @@
 namespace RobertBoes\Interlock\Graph;
 
 use Closure;
+use Illuminate\Auth\Access\Response;
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Auth\Access\Gate;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
+use ReflectionClass;
+use RobertBoes\Interlock\Attributes\Authorise;
+use RobertBoes\Interlock\Attributes\Guard;
+use RobertBoes\Interlock\Definition\FluentTransition;
+use RobertBoes\Interlock\Exceptions\FailedGuardException;
+use RobertBoes\Interlock\Exceptions\UnauthorisedTransitionException;
 use RobertBoes\Interlock\Transition;
 
 /**
@@ -11,27 +22,104 @@ use RobertBoes\Interlock\Transition;
  */
 final readonly class TransitionSteps
 {
+    /**
+     * @param  (Closure(?Authenticatable, Model): (bool|Response))|null  $authorisation
+     * @param  list<CompiledGuard>  $guards
+     */
     private function __construct(
+        private ?Closure $authorisation,
+        private array $guards,
         private ?Closure $apply,
         private ?Closure $afterCommit,
     ) {}
 
-    public static function closures(?Closure $apply, ?Closure $afterCommit): self
-    {
-        return new self($apply, $afterCommit);
-    }
-
     public static function none(): self
     {
-        return new self(null, null);
+        return new self(null, [], null, null);
+    }
+
+    public static function fluent(FluentTransition $definition): self
+    {
+        $authorisation = is_string($definition->authorisation)
+            ? self::gateAbility($definition->authorisation)
+            : $definition->authorisation;
+
+        return new self($authorisation, $definition->guards, $definition->applyStep, $definition->afterCommitStep);
     }
 
     public static function of(Transition $transition): self
     {
+        $class = new ReflectionClass($transition);
+        $ability = ($class->getAttributes(Authorise::class)[0] ?? null)?->newInstance()->ability;
+
         return new self(
+            match (true) {
+                method_exists($transition, 'authorise') => $transition->authorise(...),
+                $ability !== null => self::gateAbility($ability),
+                default => null,
+            },
+            self::guardMethodsOf($class, $transition),
             method_exists($transition, 'apply') ? $transition->apply(...) : null,
             method_exists($transition, 'afterCommit') ? $transition->afterCommit(...) : null,
         );
+    }
+
+    /**
+     * @return Closure(?Authenticatable, Model): Response
+     */
+    private static function gateAbility(string $ability): Closure
+    {
+        return fn(?Authenticatable $actor, Model $model) => Container::getInstance()->make(Gate::class)->forUser($actor)->inspect($ability, $model);
+    }
+
+    /**
+     * @param  ReflectionClass<Transition>  $class
+     * @return list<CompiledGuard>
+     */
+    private static function guardMethodsOf(ReflectionClass $class, Transition $transition): array
+    {
+        $guards = [];
+
+        foreach ($class->getMethods() as $method) {
+            foreach ($method->getAttributes(Guard::class) as $attribute) {
+                $guards[] = new CompiledGuard(
+                    Str::snake($method->getName()),
+                    $method->getClosure($transition),
+                    $attribute->newInstance()->message,
+                );
+            }
+        }
+
+        return $guards;
+    }
+
+    /**
+     * @throws UnauthorisedTransitionException when the declared authorisation denies the actor
+     */
+    public function authorise(Model $model, ?Authenticatable $actor, CompiledTransition $transition): void
+    {
+        if ($this->authorisation === null) {
+            return;
+        }
+
+        $result = ($this->authorisation)($actor, $model);
+        $response = $result instanceof Response ? $result : ($result ? Response::allow() : Response::deny());
+
+        if ($response->denied()) {
+            throw UnauthorisedTransitionException::denied($model, $transition, $response);
+        }
+    }
+
+    /**
+     * @throws FailedGuardException for the first guard that does not hold
+     */
+    public function checkGuards(Model $model, CompiledTransition $transition): void
+    {
+        foreach ($this->guards as $guard) {
+            if (! ($guard->check)($model)) {
+                throw FailedGuardException::failed($model, $transition, $guard);
+            }
+        }
     }
 
     public function apply(Model $model): void

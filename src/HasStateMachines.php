@@ -4,6 +4,8 @@ namespace RobertBoes\Interlock;
 
 use BackedEnum;
 use Illuminate\Container\Container;
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Contracts\Auth\Factory as AuthFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Event;
@@ -37,8 +39,11 @@ trait HasStateMachines
 
     /**
      * Apply a transition by name, `transition('publish')`, or as an instance of its class, `transition(new Ship($trackingCode))`.
+     *
+     * The actor is the authenticated user, unless one is given: `transition('approve', $manager)`. Pass null to apply
+     * it on behalf of no one, as a trigger does.
      */
-    public function transition(string|Transition $transition): static
+    public function transition(string|Transition $transition, ?Authenticatable $actor = null): static
     {
         $graph = $this->interlockGraph();
         $compiled = is_string($transition) ? $graph->transition($transition) : $graph->transitionOfClass($transition);
@@ -52,6 +57,8 @@ trait HasStateMachines
         // Built while faked too, so a transition that cannot be built from its name still throws.
         $steps = $compiled->steps($transition instanceof Transition ? $transition : null);
         $steps = $log->faking() ? TransitionSteps::none() : $steps;
+        $steps->authorise($this, func_num_args() > 1 ? $actor : $this->authenticatedActor(), $compiled);
+
         $unsavedAttributes = $this->getAttributes();
 
         try {
@@ -106,7 +113,8 @@ trait HasStateMachines
     }
 
     /**
-     * Runs the apply step and the compare-and-swap save in one transaction, which rolls back when the save fails or is cancelled.
+     * Checks the guards, then runs the apply step and the compare-and-swap save, in one transaction that rolls back when
+     * a guard fails or the save fails or is cancelled.
      */
     private function writeTransition(CompiledTransition $transition, TransitionSteps $steps, BackedEnum $fromState): bool
     {
@@ -117,6 +125,7 @@ trait HasStateMachines
         $this->interlockLoadedState = $fromState;
 
         try {
+            $steps->checkGuards($this, $transition);
             $this->setAttribute($transition->stateAttribute, $transition->targetState);
             $steps->apply($this);
 
@@ -304,6 +313,11 @@ trait HasStateMachines
     {
         return $this->interlockRunningTransition?->stateAttribute === $stateAttribute
             && $this->getAttribute($stateAttribute) === $this->interlockRunningTransition->targetState;
+    }
+
+    private function authenticatedActor(): ?Authenticatable
+    {
+        return Container::getInstance()->make(AuthFactory::class)->guard()->user();
     }
 
     private function interlockGraph(): ModelGraph

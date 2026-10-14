@@ -12,11 +12,6 @@ use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\PaymentStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Ship;
 
-function orderReadyToShip(): Order
-{
-    return Order::create()->transition('prepare')->transition('create_label');
-}
-
 it('saves a guarded attribute set in the apply step of a transition allowed to write it', function () {
     $order = orderReadyToShip();
 

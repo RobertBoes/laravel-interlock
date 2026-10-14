@@ -4,6 +4,7 @@ namespace RobertBoes\Interlock\Definition;
 
 use BackedEnum;
 use Closure;
+use RobertBoes\Interlock\Graph\CompiledGuard;
 
 final class FluentTransition
 {
@@ -11,6 +12,11 @@ final class FluentTransition
     public private(set) array $fromStates = [];
 
     public private(set) ?BackedEnum $targetState = null;
+
+    /** @var list<CompiledGuard> */
+    public private(set) array $guards = [];
+
+    public private(set) Closure|string|null $authorisation = null;
 
     public private(set) ?Closure $applyStep = null;
 
@@ -28,6 +34,31 @@ final class FluentTransition
     public function to(BackedEnum $state): self
     {
         $this->targetState = $state;
+
+        return $this;
+    }
+
+    /**
+     * Declare who may apply the transition: a closure that receives the actor (null when there is none) and the model
+     * and returns a bool or a Gate response, or the name of a Gate ability, checked for the actor with the model. A
+     * denied actor makes the transition throw UnauthorisedTransitionException, which renders as 403. Without it,
+     * every actor may apply the transition, null included.
+     */
+    public function authorise(Closure|string $authorisation): self
+    {
+        $this->authorisation = $authorisation;
+
+        return $this;
+    }
+
+    /**
+     * Add a guard: a condition on the model that must hold for the transition to apply, such as "stock is available".
+     * The check receives the model, unsaved changes included, and returns whether the condition holds. When it does
+     * not, the transition throws FailedGuardException with the message, which renders as 422.
+     */
+    public function guard(string $name, Closure $check, string $message): self
+    {
+        $this->guards[] = new CompiledGuard($name, $check, $message);
 
         return $this;
     }

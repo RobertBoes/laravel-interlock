@@ -5,6 +5,7 @@ namespace RobertBoes\Interlock\Graph;
 use BackedEnum;
 use Illuminate\Database\Eloquent\Model;
 use ReflectionClass;
+use RobertBoes\Interlock\Attributes\Authorise;
 use RobertBoes\Interlock\Attributes\FinalStates;
 use RobertBoes\Interlock\Attributes\FromStates;
 use RobertBoes\Interlock\Attributes\GuardedAttribute;
@@ -173,7 +174,7 @@ final class GraphRepository
             $definition->fromStates,
             $definition->targetState,
             null,
-            TransitionSteps::closures($definition->applyStep, $definition->afterCommitStep),
+            TransitionSteps::fluent($definition),
         );
     }
 
@@ -197,6 +198,12 @@ final class GraphRepository
             throw InvalidDefinitionException::missingFromStatesAttribute($class);
         }
 
+        $ability = ($reflection->getAttributes(Authorise::class)[0] ?? null)?->newInstance()->ability;
+
+        if ($ability !== null && $reflection->hasMethod('authorise')) {
+            throw InvalidDefinitionException::authorisedTwice($class, $ability);
+        }
+
         return $this->compileEdge(
             $model,
             $machine,
@@ -204,7 +211,7 @@ final class GraphRepository
             $fromStates,
             $targetState,
             $class,
-            TransitionSteps::closures(null, null),
+            TransitionSteps::none(),
         );
     }
 

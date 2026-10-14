@@ -14,11 +14,6 @@ use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Ship;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Shipment;
 
-function orderReadyToShip(): Order
-{
-    return Order::create()->transition('prepare')->transition('create_label');
-}
-
 it('records a class-based transition and writes its target state without running its apply and after-commit steps', function () {
     $order = orderReadyToShip();
     Event::fake([OrderShipped::class]);
