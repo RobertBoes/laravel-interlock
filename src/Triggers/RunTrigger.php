@@ -48,9 +48,9 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
 
     public function handle(GraphRepository $graphs, Repository $config, Cache $cache, Dispatcher $bus, ExceptionHandler $exceptions): void
     {
-        $transition = $graphs->for(new $this->model())->transition($this->trigger);
+        $transition = $this->transition($graphs);
 
-        if ($transition->trigger === null) {
+        if ($transition?->trigger === null) {
             return;
         }
 

@@ -362,6 +362,16 @@ describe('a trigger', function () {
             ->and($reported[0]->getPrevious())->toBeInstanceOf(UnauthorisedTransitionException::class);
     });
 
+    it('does nothing when its job was queued for a transition that no longer exists', function () {
+        Exceptions::fake();
+        DB::enableQueryLog();
+
+        app()->call([new RunTrigger(Post::class, 'publish_early'), 'handle']);
+
+        Exceptions::assertNothingReported();
+        expect(DB::getQueryLog())->toBe([]);
+    });
+
     it('skips a model whose guard fails, without reporting it', function () {
         config(['interlock.models' => [Expense::class]]);
         Exceptions::fake();
@@ -482,6 +492,15 @@ describe('a trigger that fans out', function () {
 
         Queue::assertPushed(RunTriggerChunk::class, 3);
         Queue::assertPushed(fn(RunTriggerChunk $job) => $job->keys === [$late->id]);
+    });
+
+    it('does nothing when a chunk job was queued for a transition that no longer exists', function () {
+        $post = scheduledFeedPost('2026-10-14 09:00:00');
+        $this->travelTo('2026-10-14 09:00:00');
+
+        app()->call([new RunTriggerChunk(FeedPost::class, 'publish_early', [$post->id]), 'handle']);
+
+        expect($post->fresh()->status)->toBe(PostStatus::Ready);
     });
 
     it('queues the chunk jobs on the configured connection and queue', function () {

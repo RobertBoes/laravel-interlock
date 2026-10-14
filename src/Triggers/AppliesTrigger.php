@@ -12,6 +12,9 @@ use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Exceptions\StaleStateException;
 use RobertBoes\Interlock\Exceptions\UnauthorisedTransitionException;
 use RobertBoes\Interlock\Exceptions\UnauthorisedTriggerException;
+use RobertBoes\Interlock\Exceptions\UnknownTransitionException;
+use RobertBoes\Interlock\Graph\CompiledTransition;
+use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Scopes\CanTransition;
 use Throwable;
 
@@ -32,6 +35,19 @@ trait AppliesTrigger
 
         $this->onConnection($config->get('interlock.triggers.connection'));
         $this->onQueue($config->get('interlock.triggers.queue'));
+    }
+
+    /**
+     * The transition the job applies, or null when it no longer exists: a job queued before a deploy may name a
+     * transition that was renamed or removed since, which, like a trigger that was removed, leaves nothing to do.
+     */
+    private function transition(GraphRepository $graphs): ?CompiledTransition
+    {
+        try {
+            return $graphs->for(new $this->model())->transition($this->trigger);
+        } catch (UnknownTransitionException) {
+            return null;
+        }
     }
 
     /**

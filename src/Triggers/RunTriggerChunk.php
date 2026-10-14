@@ -36,7 +36,7 @@ final class RunTriggerChunk implements ShouldQueue
     public function handle(GraphRepository $graphs, Cache $cache, ExceptionHandler $exceptions): void
     {
         try {
-            $condition = $graphs->for(new $this->model())->transition($this->trigger)->trigger;
+            $condition = $this->transition($graphs)?->trigger;
 
             if ($condition === null) {
                 return;
