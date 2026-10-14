@@ -5,6 +5,7 @@ namespace RobertBoes\Interlock\Triggers;
 use Closure;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Database\DetectsLostConnections;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -28,6 +29,8 @@ use Throwable;
  */
 trait AppliesTrigger
 {
+    use DetectsLostConnections;
+
     /**
      * Puts the job on the connection and queue `interlock.triggers` names, or the app's defaults when it names none,
      * with the timeout it sets.
@@ -92,6 +95,9 @@ trait AppliesTrigger
      * other failure is reported. Either way the run carries on, and the model is picked up again on a later run while
      * it still matches, so there are no retries (ADR 0005). A denial is reported wrapped, as the exception handler
      * drops authorisation exceptions.
+     *
+     * A lost database connection is rethrown instead, failing the job: every other candidate would fail the same way,
+     * and the outage would be reported once per model while the run counted as a success.
      */
     private function apply(Model $candidate, ExceptionHandler $exceptions): void
     {
@@ -108,6 +114,10 @@ trait AppliesTrigger
         } catch (UnauthorisedTransitionException $denial) {
             $exceptions->report(UnauthorisedTriggerException::denied($candidate, $this->trigger, $denial));
         } catch (Throwable $exception) {
+            if ($this->causedByLostConnection($exception)) {
+                throw $exception;
+            }
+
             $exceptions->report($exception);
         }
     }

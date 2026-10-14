@@ -4,6 +4,7 @@ use Illuminate\Console\Scheduling\Event as ScheduledEvent;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
@@ -371,6 +372,26 @@ describe('a trigger', function () {
         expect($broken->fresh()->status)->toBe(PostStatus::Published);
     });
 
+    it('fails the run, rather than reporting each model, when the database connection is lost', function () {
+        Exceptions::fake();
+        $first = scheduledPost('2026-10-14 09:00:00');
+        $second = scheduledPost('2026-10-14 09:00:00');
+        $applied = 0;
+        Event::listen(Transitioning::class, function () use (&$applied) {
+            $applied++;
+
+            throw lostConnection();
+        });
+
+        $this->travelTo('2026-10-14 09:00:00');
+
+        expect(fn() => app()->call([new RunTrigger(Post::class, 'publish'), 'handle']))->toThrow(QueryException::class, 'server has gone away')
+            ->and($applied)->toBe(1)
+            ->and($first->fresh()->status)->toBe(PostStatus::Ready)
+            ->and($second->fresh()->status)->toBe(PostStatus::Ready);
+        Exceptions::assertNothingReported();
+    });
+
     it('skips a model whose state changed after it was loaded, without reporting it', function () {
         Exceptions::fake();
         $changed = scheduledPost('2026-10-14 09:00:00');
@@ -502,6 +523,18 @@ describe('a trigger that fans out', function () {
         expect($broken->fresh()->status)->toBe(PostStatus::Ready)
             ->and($changed->fresh()->status)->toBe(PostStatus::Draft)
             ->and($healthy->fresh()->status)->toBe(PostStatus::Published);
+    });
+
+    it('fails a chunk job, rather than reporting each model, when the database connection is lost', function () {
+        Exceptions::fake();
+        $posts = collect(range(1, 2))->map(fn() => scheduledFeedPost('2026-10-14 09:00:00'));
+        Event::listen(Transitioning::class, fn() => throw lostConnection());
+        $this->travelTo('2026-10-14 09:00:00');
+
+        $job = new RunTriggerChunk(FeedPost::class, 'publish', $posts->map->id->all(), 'run', 0);
+
+        expect(fn() => app()->call([$job, 'handle']))->toThrow(QueryException::class, 'server has gone away');
+        Exceptions::assertNothingReported();
     });
 
     it('leaves a model that stopped matching while its chunk job waited', function () {
@@ -728,6 +761,11 @@ function scheduledPost(string $publishAt): Post
 function scheduledFeedPost(string $publishAt): FeedPost
 {
     return FeedPost::create(['publish_at' => $publishAt])->transition('submit');
+}
+
+function lostConnection(): QueryException
+{
+    return new QueryException('testing', 'update "posts" set "status" = ?', ['published'], new PDOException('SQLSTATE[HY000]: General error: 2006 MySQL server has gone away'));
 }
 
 /**
