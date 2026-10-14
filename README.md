@@ -356,24 +356,24 @@ A transition that takes input is offered on its from-states and authorisation al
 Interlock ships tappable scope classes. They add no methods to your models and no global macros:
 
 ```php
-use RobertBoes\Interlock\Scopes\CanTransition;
+use RobertBoes\Interlock\Scopes\InFromStateOf;
 use RobertBoes\Interlock\Scopes\InState;
 use RobertBoes\Interlock\Scopes\NotInState;
 
 Order::query()->tap(new InState(OrderStatus::Preparing))->get();
 Order::query()->tap(new NotInState([OrderStatus::Delivered, OrderStatus::Cancelled]))->get();
-Order::query()->tap(new CanTransition('ship'))->get();
+Order::query()->tap(new InFromStateOf('ship'))->get();
 ```
 
 `InState` and `NotInState` expand a parent state to its children, so "all preparing orders" includes the packing ones. They find the state attribute from the enum; pass it as `stateAttribute` when one enum backs several machines on the model: `new InState(Approval::Approved, stateAttribute: 'legal_status')`.
 
-`CanTransition` checks from-states only. It does not evaluate guards or authorisation, so applying the transition to a model it finds can still fail. Ask the model for its [available transitions](#available-transitions) when that matters.
+`InFromStateOf` finds the models in a from-state of the transition. It does not evaluate guards or authorisation; ask the model for its [available transitions](#available-transitions) when those matter.
 
 The scopes also work as eager-load constraints, with `with()` and `load()`:
 
 ```php
 Customer::with(['orders' => new InState(OrderStatus::Preparing)])->get();
-$customer->load(['orders' => new CanTransition('ship')]);
+$customer->load(['orders' => new InFromStateOf('ship')]);
 ```
 
 If you prefer Eloquent scope methods, add the opt-in `HasStateScopes` trait to the model:
@@ -383,7 +383,7 @@ use RobertBoes\Interlock\HasStateScopes;
 
 Order::whereInState(OrderStatus::Preparing)->get();
 Order::whereNotInState(OrderStatus::Cancelled)->get();
-Order::whereCanTransition('ship')->get();
+Order::whereInFromStateOf('ship')->get();
 ```
 
 ## Enforcement

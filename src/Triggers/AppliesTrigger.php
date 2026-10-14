@@ -16,7 +16,7 @@ use RobertBoes\Interlock\Exceptions\UnauthorisedTriggerException;
 use RobertBoes\Interlock\Exceptions\UnknownTransitionException;
 use RobertBoes\Interlock\Graph\CompiledTransition;
 use RobertBoes\Interlock\Graph\GraphRepository;
-use RobertBoes\Interlock\Scopes\CanTransition;
+use RobertBoes\Interlock\Scopes\InFromStateOf;
 use Throwable;
 
 /**
@@ -61,7 +61,7 @@ trait AppliesTrigger
     private function candidates(Closure $condition): Builder
     {
         return (new $this->model())->newQuery()
-            ->tap(new CanTransition($this->trigger))
+            ->tap(new InFromStateOf($this->trigger))
             ->where(fn(Builder $query) => $condition($query));
     }
 

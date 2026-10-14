@@ -5,7 +5,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use RobertBoes\Interlock\Exceptions\InvalidStateQueryException;
 use RobertBoes\Interlock\Exceptions\UnknownTransitionException;
 use RobertBoes\Interlock\Interlock;
-use RobertBoes\Interlock\Scopes\CanTransition;
+use RobertBoes\Interlock\Scopes\InFromStateOf;
 use RobertBoes\Interlock\Scopes\InState;
 use RobertBoes\Interlock\Scopes\NotInState;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
@@ -124,7 +124,7 @@ it('finds the models in a from-state of a transition', function () {
     Post::create(['status' => PostStatus::Draft]);
     Post::create(['status' => PostStatus::Published]);
 
-    expect(Post::query()->tap(new CanTransition('publish'))->pluck('id')->all())
+    expect(Post::query()->tap(new InFromStateOf('publish'))->pluck('id')->all())
         ->toEqualCanonicalizing([$ready->getKey(), $scheduled->getKey()]);
 });
 
@@ -135,7 +135,7 @@ it('finds the models in any child of a parent from-state of a transition', funct
     Order::create(['status' => OrderStatus::Shipped]);
     Order::create(['status' => OrderStatus::Cancelled]);
 
-    expect(Order::query()->tap(new CanTransition('cancel'))->pluck('id')->all())
+    expect(Order::query()->tap(new InFromStateOf('cancel'))->pluck('id')->all())
         ->toEqualCanonicalizing([$pending->getKey(), $packing->getKey(), $labelCreated->getKey()]);
 });
 
@@ -149,7 +149,7 @@ it('queries the model\'s own state attribute when another table in the query has
 
     expect($joined()->tap(new InState(OrderStatus::Preparing))->pluck('orders.id')->all())->toBe([$packing->getKey()])
         ->and($joined()->tap(new NotInState(OrderStatus::Preparing))->pluck('orders.id')->all())->toBe([$shipped->getKey()])
-        ->and($joined()->tap(new CanTransition('cancel'))->pluck('orders.id')->all())->toBe([$packing->getKey()]);
+        ->and($joined()->tap(new InFromStateOf('cancel'))->pluck('orders.id')->all())->toBe([$packing->getKey()]);
 });
 
 it('constrains an eager load', function (callable $scope, OrderStatus $kept) {
@@ -174,7 +174,7 @@ it('constrains an eager load', function (callable $scope, OrderStatus $kept) {
 })->with([
     'in state' => [fn() => new InState(OrderStatus::Preparing), OrderStatus::Packing],
     'not in state' => [fn() => new NotInState(OrderStatus::Preparing), OrderStatus::Shipped],
-    'can transition' => [fn() => new CanTransition('cancel'), OrderStatus::Packing],
+    'in from-state of' => [fn() => new InFromStateOf('cancel'), OrderStatus::Packing],
 ]);
 
 describe('scope methods', function () {
@@ -205,7 +205,7 @@ describe('scope methods', function () {
         $labelCreated = ScopedOrder::create(['status' => OrderStatus::LabelCreated]);
         ScopedOrder::create(['status' => OrderStatus::Shipped]);
 
-        expect(ScopedOrder::whereCanTransition('cancel')->pluck('id')->all())
+        expect(ScopedOrder::whereInFromStateOf('cancel')->pluck('id')->all())
             ->toEqualCanonicalizing([$pending->getKey(), $labelCreated->getKey()]);
     });
 
@@ -216,11 +216,11 @@ describe('scope methods', function () {
     })->with([
         'an interlocked model' => Order::class,
         'a model without Interlock' => Comment::class,
-    ])->with(['whereInState', 'whereNotInState', 'whereCanTransition']);
+    ])->with(['whereInState', 'whereNotInState', 'whereInFromStateOf']);
 });
 
 it('throws for a transition the model does not have', function () {
-    expect(fn() => Post::query()->tap(new CanTransition('archive'))->get())->toThrow(
+    expect(fn() => Post::query()->tap(new InFromStateOf('archive'))->get())->toThrow(
         UnknownTransitionException::class,
         Post::class . ' has no transition named [archive].',
     );

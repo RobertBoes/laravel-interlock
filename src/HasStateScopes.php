@@ -4,7 +4,7 @@ namespace RobertBoes\Interlock;
 
 use BackedEnum;
 use Illuminate\Database\Eloquent\Builder;
-use RobertBoes\Interlock\Scopes\CanTransition;
+use RobertBoes\Interlock\Scopes\InFromStateOf;
 use RobertBoes\Interlock\Scopes\InState;
 use RobertBoes\Interlock\Scopes\NotInState;
 
@@ -34,12 +34,10 @@ trait HasStateScopes
     }
 
     /**
-     * Checks from-states only: guards and authorisation are not evaluated. See {@see CanTransition}.
-     *
      * @param  Builder<static>  $query
      */
-    public function scopeWhereCanTransition(Builder $query, string $transition): void
+    public function scopeWhereInFromStateOf(Builder $query, string $transition): void
     {
-        $query->tap(new CanTransition($transition));
+        $query->tap(new InFromStateOf($transition));
     }
 }
