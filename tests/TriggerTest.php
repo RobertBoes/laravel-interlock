@@ -92,6 +92,23 @@ describe('the triggers command', function () {
         Queue::assertPushed(fn(RunTrigger $job) => $job->model === Order::class && $job->trigger === 'cancel');
     });
 
+    it('queues the jobs on the app\'s default connection and queue unless configured', function () {
+        Queue::fake();
+
+        $this->artisan('interlock:triggers');
+
+        Queue::assertPushed(fn(RunTrigger $job) => $job->connection === null && $job->queue === null);
+    });
+
+    it('queues the jobs on the configured connection and queue', function () {
+        config(['interlock.triggers.connection' => 'redis', 'interlock.triggers.queue' => 'triggers']);
+        Queue::fake();
+
+        $this->artisan('interlock:triggers');
+
+        Queue::assertPushed(fn(RunTrigger $job) => $job->connection === 'redis' && $job->queue === 'triggers');
+    });
+
     it('does not dispatch a trigger again while its job has not finished', function () {
         Queue::fake();
 
@@ -409,6 +426,18 @@ describe('a trigger that fans out', function () {
 
         Queue::assertPushed(RunTriggerChunk::class, 3);
         Queue::assertPushed(fn(RunTriggerChunk $job) => $job->keys === [$late->id]);
+    });
+
+    it('queues the chunk jobs on the configured connection and queue', function () {
+        config(['interlock.triggers.connection' => 'redis', 'interlock.triggers.queue' => 'triggers']);
+        Queue::fake([RunTriggerChunk::class]);
+        scheduledFeedPost('2026-10-14 09:00:00');
+
+        $this->travelTo('2026-10-14 09:00:00');
+        app()->call([new RunTrigger(FeedPost::class, 'publish'), 'handle']);
+
+        Queue::assertPushed(RunTriggerChunk::class, 1);
+        Queue::assertPushed(fn(RunTriggerChunk $job) => $job->connection === 'redis' && $job->queue === 'triggers');
     });
 
     it('fans out a class-based transition\'s trigger marked #[FanOut]', function () {

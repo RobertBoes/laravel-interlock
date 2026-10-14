@@ -37,7 +37,9 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
     public function __construct(
         public readonly string $model,
         public readonly string $trigger,
-    ) {}
+    ) {
+        $this->queueAsConfigured();
+    }
 
     public function uniqueId(): string
     {

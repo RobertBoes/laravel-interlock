@@ -29,7 +29,9 @@ final class RunTriggerChunk implements ShouldQueue
         public readonly string $model,
         public readonly string $trigger,
         public readonly array $keys,
-    ) {}
+    ) {
+        $this->queueAsConfigured();
+    }
 
     public function handle(GraphRepository $graphs, Cache $cache, ExceptionHandler $exceptions): void
     {

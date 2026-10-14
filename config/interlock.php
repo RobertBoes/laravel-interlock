@@ -24,6 +24,10 @@ return [
         // next runs, each carrying on where the last one stopped.
         'max_per_run' => 1000,
 
+        // The queue connection and queue the trigger jobs are pushed to. Null uses the app's default.
+        'connection' => null,
+        'queue' => null,
+
         // Interlock adds `interlock:triggers` to the scheduler. Turn that off to schedule the command yourself, or
         // change how often it runs. No trigger fires while the command doesn't run.
         'schedule' => [

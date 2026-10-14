@@ -3,6 +3,7 @@
 namespace RobertBoes\Interlock\Triggers;
 
 use Closure;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -20,6 +21,17 @@ use Throwable;
  */
 trait AppliesTrigger
 {
+    /**
+     * Puts the job on the connection and queue `interlock.triggers` names, or the app's defaults when it names none.
+     */
+    private function queueAsConfigured(): void
+    {
+        $config = Container::getInstance()->make('config');
+
+        $this->onConnection($config->get('interlock.triggers.connection'));
+        $this->onQueue($config->get('interlock.triggers.queue'));
+    }
+
     /**
      * @param  Closure(Builder<Model>): mixed  $condition
      * @return Builder<Model>
