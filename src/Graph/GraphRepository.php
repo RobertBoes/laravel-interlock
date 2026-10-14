@@ -5,6 +5,7 @@ namespace RobertBoes\Interlock\Graph;
 use BackedEnum;
 use Illuminate\Database\Eloquent\Model;
 use ReflectionClass;
+use RobertBoes\Interlock\Attributes\FinalStates;
 use RobertBoes\Interlock\Attributes\InitialStates;
 use RobertBoes\Interlock\Attributes\UseStateMachine;
 use RobertBoes\Interlock\Definition\FluentTransition;
@@ -41,13 +42,20 @@ final class GraphRepository
 
         foreach ((new ReflectionClass($model))->getAttributes(UseStateMachine::class) as $attribute) {
             $declaration = $attribute->newInstance();
-            $machine = $this->compileMachine($model, $declaration);
+            $machine = $machines[$declaration->attribute] = $this->compileMachine($model, $declaration);
 
             foreach ((new $declaration->machine())->transitions() as $definition) {
+                if (isset($transitions[$definition->name])) {
+                    throw InvalidDefinitionException::duplicateTransitionName(
+                        $model,
+                        $definition->name,
+                        $machines[$transitions[$definition->name]->stateAttribute]->machine,
+                        $machine->machine,
+                    );
+                }
+
                 $transitions[$definition->name] = $this->compileTransition($model, $machine, $definition);
             }
-
-            $machines[$declaration->attribute] = $machine;
         }
 
         return new ModelGraph($model::class, $machines, $transitions);
@@ -82,7 +90,16 @@ final class GraphRepository
             }
         }
 
-        return new CompiledMachine($declaration->machine, $declaration->attribute, $initialStates, $states);
+        $attribute = (new ReflectionClass($declaration->machine))->getAttributes(FinalStates::class)[0] ?? null;
+        $finalStates = $attribute?->newInstance()->states ?? [];
+
+        foreach ($finalStates as $state) {
+            if ($state::class !== $castEnum) {
+                throw InvalidDefinitionException::finalStateNotOfCastEnum($declaration->machine, $model, $declaration->attribute, $state, $castEnum);
+            }
+        }
+
+        return new CompiledMachine($declaration->machine, $declaration->attribute, $initialStates, $states, $finalStates);
     }
 
     private function compileTransition(Model $model, CompiledMachine $machine, FluentTransition $definition): CompiledTransition

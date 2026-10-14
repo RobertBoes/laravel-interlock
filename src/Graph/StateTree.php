@@ -90,6 +90,16 @@ final readonly class StateTree
     }
 
     /**
+     * Every state a model can be in: each state that is not a parent state.
+     *
+     * @return list<BackedEnum>
+     */
+    public function leaves(): array
+    {
+        return array_values(array_filter($this->enum::cases(), fn(BackedEnum $case) => ! $this->isParent($case)));
+    }
+
+    /**
      * The leaf states the given state stands for: itself when it is a leaf, otherwise every leaf nested within it.
      *
      * @return list<BackedEnum>

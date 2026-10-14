@@ -2,10 +2,12 @@
 
 namespace RobertBoes\Interlock\Tests\Fixtures\BlogPosts;
 
+use RobertBoes\Interlock\Attributes\FinalStates;
 use RobertBoes\Interlock\Attributes\InitialStates;
 use RobertBoes\Interlock\StateMachine;
 
 #[InitialStates(PostStatus::Draft)]
+#[FinalStates(PostStatus::Published)]
 class PostStatusMachine extends StateMachine
 {
     public function transitions(): array

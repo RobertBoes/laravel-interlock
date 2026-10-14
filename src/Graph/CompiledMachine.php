@@ -10,16 +10,32 @@ final readonly class CompiledMachine
     /**
      * @param  class-string<StateMachine>  $machine
      * @param  non-empty-list<BackedEnum>  $initialStates
+     * @param  list<BackedEnum>  $finalStates  as declared, parent states included
      */
     public function __construct(
         public string $machine,
         public string $stateAttribute,
         public array $initialStates,
         public StateTree $states,
+        public array $finalStates,
     ) {}
 
     public function isInitialState(BackedEnum $state): bool
     {
         return in_array($state, $this->initialStates, true);
+    }
+
+    /**
+     * Whether the state is a final state, or nested within one.
+     */
+    public function isFinalState(BackedEnum $state): bool
+    {
+        foreach ($this->finalStates as $finalState) {
+            if ($this->states->isWithin($state, $finalState)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

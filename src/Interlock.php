@@ -7,10 +7,13 @@ use Closure;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
+use PHPUnit\Framework\Assert;
 use RobertBoes\Interlock\Bypass\BypassScope;
 use RobertBoes\Interlock\Discovery\ModelRegistry;
 use RobertBoes\Interlock\Exceptions\InvalidBypassException;
 use RobertBoes\Interlock\Graph\GraphRepository;
+use RobertBoes\Interlock\Graph\SoundnessCheck;
 
 final class Interlock
 {
@@ -59,6 +62,23 @@ final class Interlock
     {
         return $state::class === $other::class
             && Container::getInstance()->make(GraphRepository::class)->stateTree($state::class)->isWithin($state, $other);
+    }
+
+    /**
+     * Assert that every registered state machine is sound: no unreachable states, no states without a way out that are not final, no final states with outgoing transitions, and no definition the graph rejects, such as duplicate transition names.
+     *
+     * @param  class-string<Model>  ...$models  the models to check; every registered model when none are given
+     */
+    public static function assertMachinesAreSound(string ...$models): void
+    {
+        $problems = Container::getInstance()->make(SoundnessCheck::class)->problems(
+            $models === [] ? array_keys(self::models()) : array_values($models),
+        );
+
+        $message = sprintf('Interlock found %d %s in the state machines:', count($problems), Str::plural('problem', count($problems)))
+            . implode('', array_map(fn(string $problem) => PHP_EOL . '- ' . $problem, $problems));
+
+        Assert::assertThat($problems, Assert::isEmpty(), $message);
     }
 
     /**

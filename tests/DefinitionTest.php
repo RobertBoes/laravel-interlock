@@ -4,16 +4,20 @@ use RobertBoes\Interlock\Exceptions\InterlockException;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineForUncastAttribute;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineWithFinalStateOfAnotherEnum;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineWithInitialStateOfAnotherEnum;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineWithoutFromStates;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineWithoutInitialStates;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineWithoutTargetState;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\OtherStatus;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithFinalStateOfAnotherEnum;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithInitialStateOfAnotherEnum;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithoutFromStates;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithoutInitialStates;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithoutTargetState;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithUncastStateAttribute;
+use RobertBoes\Interlock\Tests\Fixtures\UnsoundMachines\MachineWithDuplicateTransitionNames;
+use RobertBoes\Interlock\Tests\Fixtures\UnsoundMachines\TaskWithDuplicateTransitionNames;
 
 it('rejects a machine without initial states', function () {
     expect(fn() => PostWithoutInitialStates::create(['status' => PostStatus::Draft]))->toThrow(
@@ -26,6 +30,20 @@ it('rejects an initial state of an enum the state attribute is not cast to', fun
     expect(fn() => PostWithInitialStateOfAnotherEnum::create(['status' => PostStatus::Draft]))->toThrow(
         InvalidDefinitionException::class,
         MachineWithInitialStateOfAnotherEnum::class . ' declares initial state [open] of ' . OtherStatus::class . ', but ' . PostWithInitialStateOfAnotherEnum::class . ' casts [status] to ' . PostStatus::class . '.',
+    );
+});
+
+it('rejects a final state of an enum the state attribute is not cast to', function () {
+    expect(fn() => (new PostWithFinalStateOfAnotherEnum())->transition('submit'))->toThrow(
+        InvalidDefinitionException::class,
+        MachineWithFinalStateOfAnotherEnum::class . ' declares final state [open] of ' . OtherStatus::class . ', but ' . PostWithFinalStateOfAnotherEnum::class . ' casts [status] to ' . PostStatus::class . '.',
+    );
+});
+
+it('rejects two transitions with the same name', function () {
+    expect(fn() => (new TaskWithDuplicateTransitionNames())->transition('finish'))->toThrow(
+        InvalidDefinitionException::class,
+        TaskWithDuplicateTransitionNames::class . ' has two transitions named [start], in ' . MachineWithDuplicateTransitionNames::class . '. Transition names are unique per model, so rename one of them.',
     );
 });
 

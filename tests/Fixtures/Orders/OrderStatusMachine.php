@@ -2,10 +2,12 @@
 
 namespace RobertBoes\Interlock\Tests\Fixtures\Orders;
 
+use RobertBoes\Interlock\Attributes\FinalStates;
 use RobertBoes\Interlock\Attributes\InitialStates;
 use RobertBoes\Interlock\StateMachine;
 
 #[InitialStates(OrderStatus::Pending)]
+#[FinalStates(OrderStatus::Delivered, OrderStatus::Cancelled)]
 class OrderStatusMachine extends StateMachine
 {
     public function transitions(): array

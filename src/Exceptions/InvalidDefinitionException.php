@@ -49,6 +49,20 @@ final class InvalidDefinitionException extends LogicException implements Interlo
     }
 
     /**
+     * @param  class-string<StateMachine>  $firstMachine
+     * @param  class-string<StateMachine>  $secondMachine
+     */
+    public static function duplicateTransitionName(Model $model, string $transition, string $firstMachine, string $secondMachine): self
+    {
+        return new self(sprintf(
+            '%s has two transitions named [%s], in %s. Transition names are unique per model, so rename one of them.',
+            $model::class,
+            $transition,
+            implode(' and ', array_unique([$firstMachine, $secondMachine])),
+        ));
+    }
+
+    /**
      * @param  class-string<StateMachine>  $machine
      */
     public static function missingInitialStates(string $machine): self
@@ -66,6 +80,22 @@ final class InvalidDefinitionException extends LogicException implements Interlo
     {
         return new self(sprintf(
             '%s declares initial state [%s] of %s, but %s casts [%s] to %s.',
+            $machine,
+            $state->value,
+            $state::class,
+            $model::class,
+            $stateAttribute,
+            $castEnum,
+        ));
+    }
+
+    /**
+     * @param  class-string<StateMachine>  $machine
+     */
+    public static function finalStateNotOfCastEnum(string $machine, Model $model, string $stateAttribute, BackedEnum $state, string $castEnum): self
+    {
+        return new self(sprintf(
+            '%s declares final state [%s] of %s, but %s casts [%s] to %s.',
             $machine,
             $state->value,
             $state::class,

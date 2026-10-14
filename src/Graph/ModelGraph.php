@@ -23,4 +23,15 @@ final readonly class ModelGraph
         return $this->transitions[$name]
             ?? throw UnknownTransitionException::named($this->modelClass, $name, array_keys($this->transitions));
     }
+
+    /**
+     * @return list<CompiledTransition>
+     */
+    public function transitionsOf(CompiledMachine $machine): array
+    {
+        return array_values(array_filter(
+            $this->transitions,
+            fn(CompiledTransition $transition) => $transition->stateAttribute === $machine->stateAttribute,
+        ));
+    }
 }
