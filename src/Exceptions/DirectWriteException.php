@@ -23,19 +23,35 @@ final class DirectWriteException extends LogicException implements InterlockExce
         ));
     }
 
+    public static function toStagedStateAttribute(Model $model, CompiledTransition $staged, ?BackedEnum $newState): self
+    {
+        return new self(sprintf(
+            'Cannot save %s [%s]: its [%s] was changed to [%s] after transition [%s] was staged to move it to [%s]. Discard the staged transition instead.',
+            $model::class,
+            $model->getKey(),
+            $staged->stateAttribute,
+            $newState->value ?? 'null',
+            $staged->name,
+            $staged->targetState->value,
+        ));
+    }
+
     /**
      * @param  list<string>  $writers  the transitions that may write the guarded attribute
+     * @param  list<string>  $runningTransitions  the transitions being written by the save
      */
-    public static function toGuardedAttribute(Model $model, string $guardedAttribute, array $writers, ?CompiledTransition $runningTransition): self
+    public static function toGuardedAttribute(Model $model, string $guardedAttribute, array $writers, array $runningTransitions): self
     {
         return new self(sprintf(
             'Cannot save %s [%s]: its guarded attribute [%s] was changed %s. %s',
             $model::class,
             $model->getKey(),
             $guardedAttribute,
-            $runningTransition === null
-                ? 'outside a transition'
-                : sprintf('during transition [%s], which may not write it', $runningTransition->name),
+            match (count($runningTransitions)) {
+                0 => 'outside a transition',
+                1 => sprintf('during transition [%s], which may not write it', $runningTransitions[0]),
+                default => sprintf('during transitions [%s], none of which may write it', implode(', ', $runningTransitions)),
+            },
             self::writersOf($writers),
         ));
     }

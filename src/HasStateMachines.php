@@ -20,11 +20,11 @@ use RobertBoes\Interlock\Exceptions\DirectWriteException;
 use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
 use RobertBoes\Interlock\Exceptions\MissingBuilderTraitException;
 use RobertBoes\Interlock\Graph\CompiledMachine;
-use RobertBoes\Interlock\Graph\CompiledTransition;
 use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Graph\ModelGraph;
 use RobertBoes\Interlock\Graph\TransitionSteps;
 use RobertBoes\Interlock\Persistence\CompareAndSwapBuilder;
+use RobertBoes\Interlock\Persistence\StagedTransition;
 use RobertBoes\Interlock\Testing\TransitionLog;
 use Throwable;
 
@@ -33,9 +33,11 @@ use Throwable;
  */
 trait HasStateMachines
 {
-    private ?CompiledTransition $interlockRunningTransition = null;
+    /** @var array<string, StagedTransition> keyed by state attribute, written by the next save */
+    private array $interlockStagedTransitions = [];
 
-    private ?BackedEnum $interlockLoadedState = null;
+    /** @var array<string, StagedTransition> keyed by state attribute, being written by the current save */
+    private array $interlockRunningTransitions = [];
 
     /** @var list<BypassedWrite> dispatched once the save that writes them finishes */
     private array $interlockBypassedWrites = [];
@@ -65,9 +67,26 @@ trait HasStateMachines
      * Apply a transition by name, `transition('publish')`, or as an instance of its class, `transition(new Ship($trackingCode))`.
      *
      * The actor is the authenticated user, unless one is given: `transition('approve', $manager)`. Pass null to apply
-     * it on behalf of no one, as a trigger does.
+     * it on behalf of no one, as a trigger does. Transitions staged on the model's other machines are written with it.
      */
     public function transition(string|Transition $transition, ?Authenticatable $actor = null): static
+    {
+        $this->stageTransition($transition, func_num_args() > 1 ? $actor : $this->authenticatedActor());
+        $this->save();
+
+        return $this;
+    }
+
+    /**
+     * Stage a transition for the next save() to write, so transitions on several machines and the model's other
+     * changes go out in one update: `$order->stageTransition('ship')->stageTransition('capture_payment')->save()`.
+     *
+     * Only the graph is checked now, and the state attribute reads the target state straight away. Authorisation,
+     * guards, the apply step and the compare-and-swap write all happen on save(), against the data as it will be
+     * stored. A machine holds one staged transition at a time. A failing save writes nothing and drops every staged
+     * transition, as do discardStagedTransitions() and refresh(). The actor defaults to the authenticated user.
+     */
+    public function stageTransition(string|Transition $transition, ?Authenticatable $actor = null): static
     {
         $graph = $this->interlockGraph();
         $compiled = is_string($transition) ? $graph->transition($transition) : $graph->transitionOfClass($transition);
@@ -77,34 +96,90 @@ trait HasStateMachines
             throw IllegalTransitionException::currentStateNotAFromState($this, $compiled, $fromState);
         }
 
-        $log = Container::getInstance()->make(TransitionLog::class);
+        $alreadyStaged = $this->interlockStagedTransitions[$compiled->stateAttribute] ?? null;
+
+        if ($alreadyStaged !== null) {
+            throw IllegalTransitionException::anotherTransitionStaged($this, $compiled, $alreadyStaged->transition);
+        }
+
         // Built while faked too, so a transition that cannot be built from its name still throws.
         $steps = $compiled->steps($transition instanceof Transition ? $transition : null);
-        $steps = $log->faking() ? TransitionSteps::none() : $steps;
-        $steps->authorise($this, func_num_args() > 1 ? $actor : $this->authenticatedActor(), $compiled);
+        $steps = Container::getInstance()->make(TransitionLog::class)->faking() ? TransitionSteps::none() : $steps;
+        $actor = func_num_args() > 1 ? $actor : $this->authenticatedActor();
 
+        $this->interlockStagedTransitions[$compiled->stateAttribute] = new StagedTransition($compiled, $steps, $fromState, $actor);
+        $this->setAttribute($compiled->stateAttribute, $compiled->targetState);
+
+        return $this;
+    }
+
+    /**
+     * Drop the staged transitions without saving, putting each state attribute back to the state it was staged from.
+     */
+    public function discardStagedTransitions(): static
+    {
+        foreach ($this->interlockStagedTransitions as $stateAttribute => $staged) {
+            $this->setAttribute($stateAttribute, $staged->fromState);
+        }
+
+        $this->interlockStagedTransitions = [];
+
+        return $this;
+    }
+
+    /**
+     * Writes the staged transitions, if any, together with the model's other changes.
+     *
+     * @param  array<string, mixed>  $options
+     */
+    public function save(array $options = []): bool
+    {
+        if ($this->interlockStagedTransitions === []) {
+            return parent::save($options);
+        }
+
+        $staged = $this->interlockStagedTransitions;
+        $this->interlockStagedTransitions = [];
         $unsavedAttributes = $this->getAttributes();
 
         try {
-            $committed = $this->writeTransition($compiled, $steps, $fromState);
+            $committed = $this->writeTransitions($staged, $options);
         } catch (Throwable $exception) {
-            $this->setRawAttributes($unsavedAttributes);
+            $this->restoreUnsavedAttributes($unsavedAttributes, $staged);
 
             throw $exception;
         }
 
         if (! $committed) {
-            $this->setRawAttributes($unsavedAttributes);
+            $this->restoreUnsavedAttributes($unsavedAttributes, $staged);
 
-            return $this;
+            return false;
         }
 
-        $this->getConnection()->afterCommit(function () use ($compiled, $steps, $fromState, $log) {
-            $log->record($this, $compiled->name);
-            $steps->afterCommit($this);
+        $this->getConnection()->afterCommit(function () use ($staged) {
+            $log = Container::getInstance()->make(TransitionLog::class);
 
-            Event::dispatch(new Transitioned($this, $compiled->name, $fromState, $compiled->targetState));
+            foreach ($staged as $transition) {
+                $log->record($this, $transition->transition->name);
+                $transition->steps->afterCommit($this);
+
+                Event::dispatch(new Transitioned($this, $transition->transition->name, $transition->fromState, $transition->transition->targetState));
+            }
         });
+
+        return true;
+    }
+
+    /**
+     * Reloads the model's attributes from the database and drops its staged transitions.
+     *
+     * @return $this
+     */
+    public function refresh(): static
+    {
+        parent::refresh();
+
+        $this->interlockStagedTransitions = [];
 
         return $this;
     }
@@ -165,36 +240,70 @@ trait HasStateMachines
     }
 
     /**
-     * Checks the guards, then runs the apply step and the compare-and-swap save, in one transaction that rolls back when
-     * a guard fails or the save fails or is cancelled.
+     * Authorises every actor, then checks each transition's guards and runs its apply step, and saves them all through
+     * one compare-and-swap update, in one transaction that rolls back when a guard fails or the save fails or is
+     * cancelled. Guards and authorisation see the state each transition starts from, plus the changes of the
+     * transitions staged before it.
+     *
+     * @param  array<string, StagedTransition>  $staged
+     * @param  array<string, mixed>  $options
      */
-    private function writeTransition(CompiledTransition $transition, TransitionSteps $steps, BackedEnum $fromState): bool
+    private function writeTransitions(array $staged, array $options): bool
     {
+        foreach ($staged as $stateAttribute => $transition) {
+            if ($this->getAttribute($stateAttribute) !== $transition->transition->targetState) {
+                throw DirectWriteException::toStagedStateAttribute($this, $transition->transition, $this->getAttribute($stateAttribute));
+            }
+
+            $this->setAttribute($stateAttribute, $transition->fromState);
+        }
+
+        foreach ($staged as $transition) {
+            $transition->steps->authorise($this, $transition->actor, $transition->transition);
+        }
+
         $connection = $this->getConnection();
         $connection->beginTransaction();
 
-        $this->interlockRunningTransition = $transition;
-        $this->interlockLoadedState = $fromState;
+        $this->interlockRunningTransitions = $staged;
 
         try {
-            $steps->checkGuards($this, $transition);
-            $this->setAttribute($transition->stateAttribute, $transition->targetState);
-            $steps->apply($this);
+            foreach ($staged as $transition) {
+                $compiled = $transition->transition;
 
-            Event::dispatch(new Transitioning($this, $transition->name, $fromState, $transition->targetState));
+                $transition->steps->checkGuards($this, $compiled);
+                $this->setAttribute($compiled->stateAttribute, $compiled->targetState);
+                $transition->steps->apply($this);
 
-            $saved = $this->save();
+                Event::dispatch(new Transitioning($this, $compiled->name, $transition->fromState, $compiled->targetState));
+            }
+
+            $saved = parent::save($options);
             $saved ? $connection->commit() : $connection->rollBack();
         } catch (Throwable $exception) {
             $connection->rollBack();
 
             throw $exception;
         } finally {
-            $this->interlockRunningTransition = null;
-            $this->interlockLoadedState = null;
+            $this->interlockRunningTransitions = [];
         }
 
         return $saved;
+    }
+
+    /**
+     * Puts the model back as it was before a failed save, without the transitions it tried to write.
+     *
+     * @param  array<string, mixed>  $unsavedAttributes
+     * @param  array<string, StagedTransition>  $staged
+     */
+    private function restoreUnsavedAttributes(array $unsavedAttributes, array $staged): void
+    {
+        $this->setRawAttributes($unsavedAttributes);
+
+        foreach ($staged as $stateAttribute => $transition) {
+            $this->setAttribute($stateAttribute, $transition->fromState);
+        }
     }
 
     /**
@@ -207,8 +316,7 @@ trait HasStateMachines
     {
         $dirty = parent::getDirty();
 
-        if ($this->interlockRunningTransition !== null) {
-            $stateAttribute = $this->interlockRunningTransition->stateAttribute;
+        foreach (array_keys($this->interlockRunningTransitions) as $stateAttribute) {
             $dirty[$stateAttribute] ??= $this->getAttributes()[$stateAttribute];
         }
 
@@ -216,19 +324,17 @@ trait HasStateMachines
     }
 
     /**
-     * A running transition is saved through a compare-and-swap query (ADR 0004, ADR 0010).
+     * Running transitions are saved through a compare-and-swap query (ADR 0004, ADR 0010).
      *
      * @param  Builder<static>  $query
      */
     protected function performUpdate(Builder $query): bool
     {
-        if ($this->interlockRunningTransition === null || $this->interlockLoadedState === null) {
+        if ($this->interlockRunningTransitions === []) {
             return parent::performUpdate($this->interlockModelSaveQuery($query));
         }
 
-        return parent::performUpdate(
-            CompareAndSwapBuilder::replacing($query, $this->interlockRunningTransition, $this->interlockLoadedState),
-        );
+        return parent::performUpdate(CompareAndSwapBuilder::replacing($query, $this->interlockRunningTransitions));
     }
 
     /**
@@ -362,12 +468,14 @@ trait HasStateMachines
      */
     private function rejectDirectWritesToGuardedAttributes(): void
     {
+        $running = array_values(array_map(fn(StagedTransition $transition) => $transition->transition->name, $this->interlockRunningTransitions));
+
         foreach ($this->interlockGraph()->guardedAttributes as $guardedAttribute => $writers) {
-            if (! $this->isDirty($guardedAttribute) || in_array($this->interlockRunningTransition?->name, $writers, true)) {
+            if (! $this->isDirty($guardedAttribute) || array_intersect($running, $writers) !== []) {
                 continue;
             }
 
-            $this->bypassReason(DirectWriteException::toGuardedAttribute($this, $guardedAttribute, $writers, $this->interlockRunningTransition));
+            $this->bypassReason(DirectWriteException::toGuardedAttribute($this, $guardedAttribute, $writers, $running));
         }
     }
 
@@ -395,8 +503,9 @@ trait HasStateMachines
 
     private function runningTransitionWrote(string $stateAttribute): bool
     {
-        return $this->interlockRunningTransition?->stateAttribute === $stateAttribute
-            && $this->getAttribute($stateAttribute) === $this->interlockRunningTransition->targetState;
+        $running = $this->interlockRunningTransitions[$stateAttribute] ?? null;
+
+        return $running !== null && $this->getAttribute($stateAttribute) === $running->transition->targetState;
     }
 
     private function authenticatedActor(): ?Authenticatable

@@ -2,17 +2,15 @@
 
 namespace RobertBoes\Interlock\Persistence;
 
-use BackedEnum;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use RobertBoes\Interlock\Exceptions\StaleStateException;
-use RobertBoes\Interlock\Graph\CompiledTransition;
 
 /**
- * The query a running transition is saved through. Its update only matches the row while the
- * stored state is still the state the model was loaded with (ADR 0004), and throws stale state
- * otherwise, before Eloquent marks the model as saved.
+ * The query running transitions are saved through. Its update only matches the row while the
+ * stored state of every transitioned state attribute is still the state the transition started
+ * from (ADR 0004), and throws stale state otherwise, before Eloquent marks the model as saved.
  *
  * @template TModel of Model
  *
@@ -20,11 +18,11 @@ use RobertBoes\Interlock\Graph\CompiledTransition;
  */
 final class CompareAndSwapBuilder extends Builder
 {
-    private function __construct(
-        QueryBuilder $query,
-        private readonly CompiledTransition $transition,
-        private readonly BackedEnum $loadedState,
-    ) {
+    /**
+     * @param  non-empty-array<string, StagedTransition>  $transitions  keyed by state attribute
+     */
+    private function __construct(QueryBuilder $query, private readonly array $transitions)
+    {
         parent::__construct($query);
     }
 
@@ -32,11 +30,12 @@ final class CompareAndSwapBuilder extends Builder
      * @template TSavedModel of Model
      *
      * @param  Builder<TSavedModel>  $saveQuery
+     * @param  non-empty-array<string, StagedTransition>  $transitions  keyed by state attribute
      * @return self<TSavedModel>
      */
-    public static function replacing(Builder $saveQuery, CompiledTransition $transition, BackedEnum $loadedState): self
+    public static function replacing(Builder $saveQuery, array $transitions): self
     {
-        return (new self($saveQuery->getQuery(), $transition, $loadedState))->setModel($saveQuery->getModel());
+        return (new self($saveQuery->getQuery(), $transitions))->setModel($saveQuery->getModel());
     }
 
     /**
@@ -46,11 +45,14 @@ final class CompareAndSwapBuilder extends Builder
     {
         $storedStateQuery = clone $this;
 
-        $this->where($this->transition->stateAttribute, $this->loadedState->value);
+        foreach ($this->transitions as $stateAttribute => $transition) {
+            $this->where($stateAttribute, $transition->fromState->value);
+        }
+
         $affectedRows = parent::update($values);
 
         if ($affectedRows === 0) {
-            $this->ensureStoredStateIsUnchanged($storedStateQuery);
+            $this->ensureStoredStatesAreUnchanged($storedStateQuery);
         }
 
         return $affectedRows;
@@ -62,18 +64,20 @@ final class CompareAndSwapBuilder extends Builder
      *
      * @param  Builder<TModel>  $storedStateQuery
      */
-    private function ensureStoredStateIsUnchanged(Builder $storedStateQuery): void
+    private function ensureStoredStatesAreUnchanged(Builder $storedStateQuery): void
     {
-        $stored = $storedStateQuery->toBase()->useWritePdo()->first([$this->transition->stateAttribute]);
+        $stored = $storedStateQuery->toBase()->useWritePdo()->first(array_keys($this->transitions));
 
         if ($stored === null) {
-            throw StaleStateException::rowDeleted($this->model, $this->transition);
+            throw StaleStateException::rowDeleted($this->model, array_values($this->transitions)[0]->transition);
         }
 
-        $storedState = $stored->{$this->transition->stateAttribute};
+        foreach ($this->transitions as $stateAttribute => $transition) {
+            $storedState = $stored->{$stateAttribute};
 
-        if ((string) $storedState !== (string) $this->loadedState->value) {
-            throw StaleStateException::storedStateChanged($this->model, $this->transition, $this->loadedState, $storedState);
+            if ((string) $storedState !== (string) $transition->fromState->value) {
+                throw StaleStateException::storedStateChanged($this->model, $transition->transition, $transition->fromState, $storedState);
+            }
         }
     }
 }
