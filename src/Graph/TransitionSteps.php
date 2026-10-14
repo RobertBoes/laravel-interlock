@@ -15,6 +15,7 @@ use RobertBoes\Interlock\Attributes\Guard;
 use RobertBoes\Interlock\Definition\FluentTransition;
 use RobertBoes\Interlock\Exceptions\FailedGuardException;
 use RobertBoes\Interlock\Exceptions\UnauthorisedTransitionException;
+use RobertBoes\Interlock\Support\PhpAttribute;
 use RobertBoes\Interlock\Transition;
 
 /**
@@ -50,7 +51,7 @@ final readonly class TransitionSteps
     public static function of(Transition $transition): self
     {
         $class = new ReflectionClass($transition);
-        $ability = ($class->getAttributes(Authorise::class)[0] ?? null)?->newInstance()->ability;
+        $ability = PhpAttribute::of($class, Authorise::class)?->ability;
 
         return new self(
             match (true) {

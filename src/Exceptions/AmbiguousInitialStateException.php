@@ -2,10 +2,10 @@
 
 namespace RobertBoes\Interlock\Exceptions;
 
-use BackedEnum;
 use Illuminate\Database\Eloquent\Model;
 use LogicException;
 use RobertBoes\Interlock\Graph\CompiledMachine;
+use RobertBoes\Interlock\Support\StateValues;
 
 final class AmbiguousInitialStateException extends LogicException implements InterlockException
 {
@@ -16,7 +16,7 @@ final class AmbiguousInitialStateException extends LogicException implements Int
             $model::class,
             $machine->stateAttribute,
             $machine->class,
-            implode(', ', array_map(fn(BackedEnum $state) => $state->value, $machine->initialStates)),
+            StateValues::listed($machine->initialStates),
         ));
     }
 }

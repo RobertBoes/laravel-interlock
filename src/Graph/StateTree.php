@@ -6,6 +6,7 @@ use BackedEnum;
 use ReflectionEnum;
 use RobertBoes\Interlock\Attributes\ParentState;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
+use RobertBoes\Interlock\Support\PhpAttribute;
 
 /**
  * How the states of one enum nest, read from the #[ParentState] attributes on its cases (ADR 0006).
@@ -29,13 +30,11 @@ final readonly class StateTree
         $parents = [];
 
         foreach ((new ReflectionEnum($enum))->getCases() as $case) {
-            $attribute = $case->getAttributes(ParentState::class)[0] ?? null;
+            $parent = PhpAttribute::of($case, ParentState::class)?->state;
 
-            if ($attribute === null) {
+            if ($parent === null) {
                 continue;
             }
-
-            $parent = $attribute->newInstance()->state;
 
             if ($parent::class !== $enum) {
                 throw InvalidDefinitionException::parentStateOfAnotherEnum($enum, $case->name, $parent);

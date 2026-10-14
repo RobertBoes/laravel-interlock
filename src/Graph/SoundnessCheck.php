@@ -5,6 +5,7 @@ namespace RobertBoes\Interlock\Graph;
 use BackedEnum;
 use Illuminate\Database\Eloquent\Model;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
+use RobertBoes\Interlock\Support\StateValues;
 
 /**
  * Finds the common mistakes in a model's state machines: states that cannot be reached, states with no way out, final states that can be left, and definitions the graph rejects.
@@ -54,7 +55,7 @@ final readonly class SoundnessCheck
                 $problems[] = $prefix . sprintf(
                     'state [%s] is unreachable. No transitions lead to it from the initial states [%s].',
                     $state->value,
-                    $this->values($machine->initialStates),
+                    StateValues::listed($machine->initialStates),
                 );
             }
 
@@ -113,13 +114,5 @@ final readonly class SoundnessCheck
             $transitions,
             fn(CompiledTransition $transition) => array_any($leaves, $transition->startsFrom(...)),
         ));
-    }
-
-    /**
-     * @param  list<BackedEnum>  $states
-     */
-    private function values(array $states): string
-    {
-        return implode(', ', array_map(fn(BackedEnum $state) => $state->value, $states));
     }
 }

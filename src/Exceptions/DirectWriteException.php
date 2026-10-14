@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use LogicException;
 use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\Graph\CompiledTransition;
+use RobertBoes\Interlock\Support\StateValues;
 
 final class DirectWriteException extends LogicException implements InterlockException
 {
@@ -119,7 +120,7 @@ final class DirectWriteException extends LogicException implements InterlockExce
             $machine->stateAttribute,
             $state->value,
             $machine->class,
-            implode(', ', array_map(fn(BackedEnum $initialState) => $initialState->value, $machine->initialStates)),
+            StateValues::listed($machine->initialStates),
         ));
     }
 
@@ -147,6 +148,6 @@ final class DirectWriteException extends LogicException implements InterlockExce
 
     private static function leafStatesWithin(CompiledMachine $machine, BackedEnum $parentState): string
     {
-        return implode(', ', array_map(fn(BackedEnum $leafState) => $leafState->value, $machine->states->leavesWithin($parentState)));
+        return StateValues::listed($machine->states->leavesWithin($parentState));
     }
 }

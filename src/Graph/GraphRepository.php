@@ -18,6 +18,7 @@ use RobertBoes\Interlock\Attributes\TargetState;
 use RobertBoes\Interlock\Attributes\UseStateMachine;
 use RobertBoes\Interlock\Definition\FluentTransition;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
+use RobertBoes\Interlock\Support\PhpAttribute;
 use RobertBoes\Interlock\Transition;
 
 /**
@@ -84,8 +85,8 @@ final class GraphRepository
 
     private function compileMachine(Model $model, UseStateMachine $declaration): CompiledMachine
     {
-        $attribute = (new ReflectionClass($declaration->machine))->getAttributes(InitialStates::class)[0] ?? null;
-        $initialStates = $attribute?->newInstance()->states ?? [];
+        $machineClass = new ReflectionClass($declaration->machine);
+        $initialStates = PhpAttribute::of($machineClass, InitialStates::class)->states ?? [];
 
         if ($initialStates === []) {
             throw InvalidDefinitionException::missingInitialStates($declaration->machine);
@@ -111,8 +112,7 @@ final class GraphRepository
             }
         }
 
-        $attribute = (new ReflectionClass($declaration->machine))->getAttributes(FinalStates::class)[0] ?? null;
-        $finalStates = $attribute?->newInstance()->states ?? [];
+        $finalStates = PhpAttribute::of($machineClass, FinalStates::class)->states ?? [];
 
         foreach ($finalStates as $state) {
             if ($state::class !== $castEnum) {
@@ -120,7 +120,7 @@ final class GraphRepository
             }
         }
 
-        $recordsHistory = (new ReflectionClass($declaration->machine))->getAttributes(RecordsHistory::class) !== [];
+        $recordsHistory = $machineClass->getAttributes(RecordsHistory::class) !== [];
 
         return new CompiledMachine($declaration->machine, $declaration->attribute, $initialStates, $states, $finalStates, $recordsHistory);
     }
@@ -200,15 +200,15 @@ final class GraphRepository
         }
 
         $reflection = new ReflectionClass($class);
-        $fromStates = ($reflection->getAttributes(FromStates::class)[0] ?? null)?->newInstance()->states ?? [];
-        $targetState = ($reflection->getAttributes(TargetState::class)[0] ?? null)?->newInstance()->state
+        $fromStates = PhpAttribute::of($reflection, FromStates::class)->states ?? [];
+        $targetState = PhpAttribute::of($reflection, TargetState::class)->state
             ?? throw InvalidDefinitionException::missingTargetStateAttribute($class);
 
         if ($fromStates === []) {
             throw InvalidDefinitionException::missingFromStatesAttribute($class);
         }
 
-        $ability = ($reflection->getAttributes(Authorise::class)[0] ?? null)?->newInstance()->ability;
+        $ability = PhpAttribute::of($reflection, Authorise::class)?->ability;
 
         if ($ability !== null && $reflection->hasMethod('authorise')) {
             throw InvalidDefinitionException::authorisedTwice($class, $ability);

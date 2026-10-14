@@ -8,6 +8,7 @@ use LogicException;
 use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\HasStateMachines;
 use RobertBoes\Interlock\StateMachine;
+use RobertBoes\Interlock\Support\StateValues;
 use RobertBoes\Interlock\Transition;
 
 final class InvalidDefinitionException extends LogicException implements InterlockException
@@ -116,7 +117,7 @@ final class InvalidDefinitionException extends LogicException implements Interlo
             $transition,
             $machine,
             $state->value,
-            implode(', ', array_map(fn(BackedEnum $leafState) => $leafState->value, $leafStates)),
+            StateValues::listed($leafStates),
         ));
     }
 
@@ -177,7 +178,7 @@ final class InvalidDefinitionException extends LogicException implements Interlo
             '%s declares parent state [%s] as an initial state. A model is always in a leaf state, so declare one of [%s] instead.',
             $machine,
             $state->value,
-            implode(', ', array_map(fn(BackedEnum $leafState) => $leafState->value, $leafStates)),
+            StateValues::listed($leafStates),
         ));
     }
 
@@ -219,7 +220,7 @@ final class InvalidDefinitionException extends LogicException implements Interlo
             '%s::%s is nested within itself: [%s]. Remove one of these #[ParentState] attributes.',
             $state::class,
             $state->name,
-            implode(', ', array_map(fn(BackedEnum $pathState) => $pathState->value, $path)),
+            StateValues::listed($path),
         ));
     }
 
