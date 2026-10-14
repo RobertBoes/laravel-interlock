@@ -685,18 +685,36 @@ describe('a trigger that fans out', function () {
     });
 
     it('stops waiting for chunk jobs that never finish once each could have run out its timeout in turn', function () {
+        config(['interlock.triggers.timeout' => 200]);
+        Queue::fake([RunTriggerChunk::class]);
+        collect(range(1, 3))->each(fn() => scheduledFeedPost('2026-10-14 09:00:00'));
+
+        $this->travelTo('2026-10-14 09:00:00');
+        $this->artisan('interlock:triggers');
+        $this->travelTo('2026-10-14 09:06:39');
+        $this->artisan('interlock:triggers');
+
+        Queue::assertPushed(RunTriggerChunk::class, 2);
+
+        $this->travelTo('2026-10-14 09:06:40');
+        $this->artisan('interlock:triggers');
+
+        Queue::assertPushed(RunTriggerChunk::class, 4);
+    });
+
+    it('waits at least five minutes for chunk jobs that never finish, however short their timeouts', function () {
         config(['interlock.triggers.timeout' => 60]);
         Queue::fake([RunTriggerChunk::class]);
         collect(range(1, 3))->each(fn() => scheduledFeedPost('2026-10-14 09:00:00'));
 
         $this->travelTo('2026-10-14 09:00:00');
         $this->artisan('interlock:triggers');
-        $this->travelTo('2026-10-14 09:01:59');
+        $this->travelTo('2026-10-14 09:04:59');
         $this->artisan('interlock:triggers');
 
         Queue::assertPushed(RunTriggerChunk::class, 2);
 
-        $this->travelTo('2026-10-14 09:02:00');
+        $this->travelTo('2026-10-14 09:05:00');
         $this->artisan('interlock:triggers');
 
         Queue::assertPushed(RunTriggerChunk::class, 4);

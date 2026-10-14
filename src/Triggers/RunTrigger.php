@@ -25,6 +25,9 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
     use AppliesTrigger;
     use Queueable;
 
+    /** The fewest seconds a fanned-out run waits for chunk jobs that never finish before the next run dispatches again. */
+    private const int MIN_PENDING_CHUNK_SECONDS = 300;
+
     public int $tries = 1;
 
     /**
@@ -125,8 +128,9 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
             return true;
         }
 
-        // Long enough for every chunk job to run out its timeout in turn on one worker.
-        $seconds = $this->timeout * $chunks->count();
+        // Long enough for every chunk job to run out its timeout in turn on one worker, and never less than the floor,
+        // so a few short chunk jobs still wait out a queue that is backed up for a while.
+        $seconds = max($this->timeout * $chunks->count(), self::MIN_PENDING_CHUNK_SECONDS);
         $run = $pendingChunks->start($chunks->count(), $seconds);
 
         foreach ($chunks as $index => $chunk) {
