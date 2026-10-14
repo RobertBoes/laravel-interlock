@@ -90,6 +90,19 @@ final readonly class StateTree
     }
 
     /**
+     * The states nested directly within the given parent state, or the top-level states when no parent state is given.
+     *
+     * @return list<BackedEnum>
+     */
+    public function childrenOf(?BackedEnum $parent): array
+    {
+        return array_values(array_filter(
+            $this->enum::cases(),
+            fn(BackedEnum $case) => ($this->parents[$case->value] ?? null) === $parent,
+        ));
+    }
+
+    /**
      * Every state a model can be in: each state that is not a parent state.
      *
      * @return list<BackedEnum>

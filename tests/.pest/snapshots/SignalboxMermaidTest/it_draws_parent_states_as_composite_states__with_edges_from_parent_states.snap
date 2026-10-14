@@ -1,0 +1,18 @@
+stateDiagram-v2
+    Pending
+    state Preparing {
+        Packing
+        LabelCreated
+    }
+    Shipped
+    Delivered
+    Cancelled
+    [*] --> Pending
+    Pending --> Packing: prepare
+    Packing --> LabelCreated: create_label
+    LabelCreated --> Shipped: ship
+    Shipped --> Delivered: deliver
+    Pending --> Cancelled: cancel
+    Preparing --> Cancelled: cancel
+    Delivered --> [*]
+    Cancelled --> [*]

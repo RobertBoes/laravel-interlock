@@ -7,6 +7,7 @@ use Pest\Expectation;
 use RobertBoes\Interlock\Bypass\BypassScope;
 use RobertBoes\Interlock\Commands\CacheCommand;
 use RobertBoes\Interlock\Commands\ClearCommand;
+use RobertBoes\Interlock\Commands\SignalboxCommand;
 use RobertBoes\Interlock\Discovery\ModelRegistry;
 use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Testing\PestExpectations;
@@ -20,7 +21,7 @@ class InterlockServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-interlock')
             ->hasConfigFile('interlock')
-            ->hasCommands(CacheCommand::class, ClearCommand::class);
+            ->hasCommands(CacheCommand::class, ClearCommand::class, SignalboxCommand::class);
     }
 
     public function packageRegistered(): void

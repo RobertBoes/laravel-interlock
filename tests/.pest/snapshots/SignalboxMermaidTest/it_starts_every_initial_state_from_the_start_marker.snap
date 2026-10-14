@@ -1,0 +1,15 @@
+stateDiagram-v2
+    Draft
+    Ready
+    Scheduled
+    Published
+    [*] --> Draft
+    [*] --> Ready
+    Draft --> Ready: submit
+    Ready --> Scheduled: schedule
+    Ready --> Published: publish
+    Scheduled --> Published: publish
+    Ready --> Draft: retract
+    Scheduled --> Draft: retract
+    Scheduled --> Scheduled: reschedule
+    Published --> [*]
