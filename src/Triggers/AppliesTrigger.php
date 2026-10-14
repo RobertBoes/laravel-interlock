@@ -95,7 +95,8 @@ trait AppliesTrigger
      */
     private function apply(Model $candidate, ExceptionHandler $exceptions): void
     {
-        // The registry only lists models that use HasStateMachines.
+        // The registry rejects a model without HasStateMachines, but a job queued before a deploy may name a model that
+        // has dropped the trait since.
         if (! method_exists($candidate, 'interlockApplyTrigger')) {
             throw InvalidDefinitionException::modelWithoutHasStateMachines($candidate::class);
         }
