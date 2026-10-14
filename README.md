@@ -476,6 +476,12 @@ $this->transition('publish')
     ->trigger(fn(Builder $query) => $query->where('publish_at', '<=', now())),
 ```
 
+The condition can be any callable that takes the query, so a tappable scope class your app already uses works as it is:
+
+```php
+->trigger(new PublishAtHasPassed()),
+```
+
 The transition's from-states are added to the condition, so it only says what is specific to the trigger. A class-based transition declares a static `trigger()` method instead:
 
 ```php

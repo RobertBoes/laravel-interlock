@@ -2,7 +2,6 @@
 
 namespace RobertBoes\Interlock\Tests\Fixtures\Feeds;
 
-use Illuminate\Database\Eloquent\Builder;
 use RobertBoes\Interlock\Attributes\FinalStates;
 use RobertBoes\Interlock\Attributes\InitialStates;
 use RobertBoes\Interlock\Attributes\RecordsHistory;
@@ -10,7 +9,8 @@ use RobertBoes\Interlock\StateMachine;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
 
 /**
- * The post lifecycle, with a publish trigger that dispatches one job per chunk of the posts that are due.
+ * The post lifecycle, with a publish trigger that dispatches one job per chunk of the posts that are due. Its
+ * condition is an invokable scope class rather than a closure.
  */
 #[RecordsHistory]
 #[InitialStates(PostStatus::Draft)]
@@ -25,7 +25,7 @@ class FeedPostStatusMachine extends StateMachine
             $this->transition('publish')
                 ->from(PostStatus::Ready, PostStatus::Scheduled)
                 ->to(PostStatus::Published)
-                ->trigger(fn(Builder $query) => $query->where('publish_at', '<=', now()), fanOut: true),
+                ->trigger(new PublishAtHasPassed(), fanOut: true),
             $this->transition('retract')->from(PostStatus::Ready, PostStatus::Scheduled)->to(PostStatus::Draft),
         ];
     }

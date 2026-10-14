@@ -525,6 +525,17 @@ describe('a trigger that fans out', function () {
             ->and($healthy->fresh()->status)->toBe(PostStatus::Published);
     });
 
+    it('takes an invokable scope class as its condition', function () {
+        $due = scheduledFeedPost('2026-10-14 09:00:00');
+        $later = scheduledFeedPost('2026-10-14 10:00:00');
+
+        $this->travelTo('2026-10-14 09:00:00');
+        $this->artisan('interlock:triggers');
+
+        expect($due->fresh()->status)->toBe(PostStatus::Published)
+            ->and($later->fresh()->status)->toBe(PostStatus::Ready);
+    });
+
     it('fails a chunk job, rather than reporting each model, when the database connection is lost', function () {
         Exceptions::fake();
         $posts = collect(range(1, 2))->map(fn() => scheduledFeedPost('2026-10-14 09:00:00'));
