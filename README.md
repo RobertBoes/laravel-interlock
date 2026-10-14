@@ -562,6 +562,8 @@ use RobertBoes\Interlock\Attributes\RecordsHistory;
 class OrderStatusMachine extends StateMachine
 ```
 
+Without the migration, the machine's first transition throws a `MissingHistoryTableException` that names the machine and says how to fix it.
+
 Every transition and every bypassed write on that machine's state attribute or guarded attributes is then recorded in the `interlock_history` table, inside the same transaction as the write, so history can never disagree with the stored state. Quiet saves are recorded too. Each entry holds:
 
 - the model's type and key, and the state attribute;

@@ -1,6 +1,10 @@
 <?php
 
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use RobertBoes\Interlock\Exceptions\MissingHistoryTableException;
 use RobertBoes\Interlock\History\DatabaseHistoryRecorder;
 use RobertBoes\Interlock\History\HistoryRecord;
 use RobertBoes\Interlock\History\HistoryRecorder;
@@ -13,6 +17,7 @@ use RobertBoes\Interlock\Tests\Fixtures\Expenses\Employee;
 use RobertBoes\Interlock\Tests\Fixtures\History\InMemoryHistoryRecorder;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Order;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatus;
+use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Ship;
 
 it('records a transition on a machine with history', function () {
@@ -331,4 +336,35 @@ it('writes nothing when a creating listener makes a bypassed write that cannot b
         ->toThrow(RuntimeException::class, 'History store unavailable');
 
     expect(Post::query()->exists())->toBeFalse();
+});
+
+it('says how to fix a missing history table, naming the machine that records history', function () {
+    $order = Order::create();
+    Schema::drop('interlock_history');
+
+    $thrown = thrownBy(fn() => $order->transition('prepare'));
+
+    expect($thrown)->toBeInstanceOf(MissingHistoryTableException::class)
+        ->and($thrown->getMessage())->toBe(sprintf(
+            '%s records history, but the interlock_history table does not exist on database connection [%s]. Publish and run the history migration with `php artisan vendor:publish --tag=interlock-migrations` and `php artisan migrate`, or remove #[RecordsHistory] from %s.',
+            OrderStatusMachine::class,
+            DB::getDefaultConnection(),
+            OrderStatusMachine::class,
+        ))
+        ->and($order->fresh()->status)->toBe(OrderStatus::Pending);
+})->skip(fn() => DB::connection()->getDriverName() === 'mysql', 'MySQL commits the test\'s transaction on dropping a table.');
+
+it('checks for the history table once per connection, before its first entry', function () {
+    [$first, $second] = [Order::create(), Order::create()];
+    $tableChecks = 0;
+    DB::listen(function (QueryExecuted $query) use (&$tableChecks) {
+        if (str_contains($query->sql, 'interlock_history') && ! str_starts_with($query->sql, 'insert')) {
+            $tableChecks++;
+        }
+    });
+
+    $first->transition('prepare')->transition('create_label');
+    $second->transition('prepare');
+
+    expect($tableChecks)->toBe(1);
 });

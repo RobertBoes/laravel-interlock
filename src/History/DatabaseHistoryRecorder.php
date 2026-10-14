@@ -2,13 +2,28 @@
 
 namespace RobertBoes\Interlock\History;
 
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\Model;
+use RobertBoes\Interlock\Exceptions\MissingHistoryTableException;
+use RobertBoes\Interlock\Graph\GraphRepository;
+use WeakMap;
 
 /**
  * Writes history to the interlock_history table, on the model's own connection so it joins the write's transaction.
  */
 final class DatabaseHistoryRecorder implements HistoryRecorder
 {
+    /**
+     * @var WeakMap<ConnectionInterface, true> the connections the history table was found on
+     */
+    private WeakMap $connectionsWithTable;
+
+    public function __construct(
+        private readonly GraphRepository $graphs,
+    ) {
+        $this->connectionsWithTable = new WeakMap();
+    }
+
     public function record(HistoryRecord $record): void
     {
         $entry = new HistoryEntry([
@@ -30,6 +45,32 @@ final class DatabaseHistoryRecorder implements HistoryRecorder
             'trigger_name' => $record->trigger,
         ]);
 
-        $entry->setConnection($record->model->getConnectionName())->save();
+        $entry->setConnection($record->model->getConnectionName());
+        $this->ensureTableExists($entry, $record);
+        $entry->save();
+    }
+
+    /**
+     * Checked before the first entry on each connection, rather than by catching the insert's failure: on Postgres a
+     * failed statement aborts the transaction the insert runs in, so nothing more could be asked of the database after
+     * it. Only a table that exists is remembered, so a long-running worker sees the migration once it has run.
+     */
+    private function ensureTableExists(HistoryEntry $entry, HistoryRecord $record): void
+    {
+        $connection = $entry->getConnection();
+
+        if (isset($this->connectionsWithTable[$connection])) {
+            return;
+        }
+
+        if (! $connection->getSchemaBuilder()->hasTable($entry->getTable())) {
+            throw MissingHistoryTableException::on(
+                $connection->getName(),
+                $entry->getTable(),
+                $this->graphs->for($record->model)->machines[$record->stateAttribute]->class,
+            );
+        }
+
+        $this->connectionsWithTable[$connection] = true;
     }
 }
