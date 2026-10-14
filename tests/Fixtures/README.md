@@ -15,6 +15,7 @@ The fixture domains from the spec (`.scratch/interlock-v1/spec.md`, "Testing Dec
 - `Feeds/`: a post from a high-volume feed, whose `publish` trigger fans out. Kept outside `BlogPosts/` so the tests that scan it don't see it. It shares the `posts` table.
 - `Returns/`: an order whose only transition, `return_to_sender`, takes a `Shipment` model as input, which the container could build empty. It shares the `orders` table and the order's `OrderStatus` enum.
 - `LegacyOrders/`: an order whose machine is also called `OrderStatusMachine`, in another namespace, for the XState export of every machine refusing two machines with the same ID. It shares the `orders` table and the order's `OrderStatus` enum.
+- `GatedPosts/`: a post whose triggered `publish` is authorised for a signed-in employee only, so authorisation denies its trigger. It shares the `posts` table and the blog post's `PostStatus` enum.
 - `History/`: a history recorder that keeps its records in memory, for swapping the recorder through the config. Namespace `RobertBoes\Interlock\Tests\Fixtures\History`.
 - `database/migrations/`: the fixture tables, loaded by `TestCase`, plus the package's own history migration.
 

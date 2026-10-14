@@ -2,6 +2,7 @@
 
 use Illuminate\Console\Scheduling\Event as ScheduledEvent;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
@@ -9,12 +10,15 @@ use Illuminate\Support\Facades\Queue;
 use RobertBoes\Interlock\Events\Transitioned;
 use RobertBoes\Interlock\Events\Transitioning;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
+use RobertBoes\Interlock\Exceptions\UnauthorisedTransitionException;
+use RobertBoes\Interlock\Exceptions\UnauthorisedTriggerException;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Employee;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Expense;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\ExpenseStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Feeds\FeedPost;
+use RobertBoes\Interlock\Tests\Fixtures\GatedPosts\GatedPost;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithInstanceTrigger;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithTriggeredTransitionTakingInput;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\TransitionWithInputAndTrigger;
@@ -336,6 +340,26 @@ describe('a trigger', function () {
             ->and($packing->fresh()->status)->toBe(OrderStatus::Cancelled)
             ->and($shipped->fresh()->status)->toBe(OrderStatus::Shipped)
             ->and($paid->fresh()->status)->toBe(OrderStatus::Pending);
+    });
+
+    it('reports a model that authorisation denies to the app\'s exception handler', function () {
+        config(['interlock.models' => [GatedPost::class]]);
+        $reported = [];
+        app(ExceptionHandler::class)->reportable(function (Throwable $exception) use (&$reported) {
+            $reported[] = $exception;
+
+            return false;
+        });
+        $post = GatedPost::create(['publish_at' => '2026-10-14 09:00:00'])->transition('submit', Employee::manager());
+
+        $this->travelTo('2026-10-14 09:00:00');
+        $this->artisan('interlock:triggers');
+
+        expect($post->fresh()->status)->toBe(PostStatus::Ready)
+            ->and($reported)->toHaveCount(1)
+            ->and($reported[0])->toBeInstanceOf(UnauthorisedTriggerException::class)
+            ->and($reported[0]->getMessage())->toBe('Trigger [publish] could not apply its transition to ' . GatedPost::class . ' [' . $post->id . ']: authorisation denied it with "You may not apply transition [publish].". A trigger applies its transition on behalf of no one, so the transition\'s authorisation must allow a null actor.')
+            ->and($reported[0]->getPrevious())->toBeInstanceOf(UnauthorisedTransitionException::class);
     });
 
     it('skips a model whose guard fails, without reporting it', function () {

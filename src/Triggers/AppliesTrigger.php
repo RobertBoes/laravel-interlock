@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Model;
 use RobertBoes\Interlock\Exceptions\FailedGuardException;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Exceptions\StaleStateException;
+use RobertBoes\Interlock\Exceptions\UnauthorisedTransitionException;
+use RobertBoes\Interlock\Exceptions\UnauthorisedTriggerException;
 use RobertBoes\Interlock\Scopes\CanTransition;
 use Throwable;
 
@@ -46,7 +48,8 @@ trait AppliesTrigger
     /**
      * A model that changed since it was loaded, or whose guard fails, is an expected outcome and is skipped quietly. Any
      * other failure is reported. Either way the run carries on, and the model is picked up again on a later run while
-     * it still matches, so there are no retries (ADR 0005).
+     * it still matches, so there are no retries (ADR 0005). A denial is reported wrapped, as the exception handler
+     * drops authorisation exceptions.
      */
     private function apply(Model $candidate, ExceptionHandler $exceptions): void
     {
@@ -59,6 +62,8 @@ trait AppliesTrigger
             $candidate->interlockApplyTrigger($this->trigger);
         } catch (StaleStateException|FailedGuardException) {
             return;
+        } catch (UnauthorisedTransitionException $denial) {
+            $exceptions->report(UnauthorisedTriggerException::denied($candidate, $this->trigger, $denial));
         } catch (Throwable $exception) {
             $exceptions->report($exception);
         }
