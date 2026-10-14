@@ -64,6 +64,11 @@ final readonly class TransitionSteps
         );
     }
 
+    public function withoutGuards(): self
+    {
+        return new self($this->authorisation, [], $this->apply, $this->afterCommit);
+    }
+
     /**
      * @return Closure(?Authenticatable, Model): Response
      */
@@ -98,16 +103,27 @@ final readonly class TransitionSteps
      */
     public function authorise(Model $model, ?Authenticatable $actor, CompiledTransition $transition): void
     {
-        if ($this->authorisation === null) {
-            return;
-        }
-
-        $result = ($this->authorisation)($actor, $model);
-        $response = $result instanceof Response ? $result : ($result ? Response::allow() : Response::deny());
+        $response = $this->authorisationResponse($model, $actor);
 
         if ($response->denied()) {
             throw UnauthorisedTransitionException::denied($model, $transition, $response);
         }
+    }
+
+    public function allows(Model $model, ?Authenticatable $actor): bool
+    {
+        return $this->authorisationResponse($model, $actor)->allowed();
+    }
+
+    private function authorisationResponse(Model $model, ?Authenticatable $actor): Response
+    {
+        if ($this->authorisation === null) {
+            return Response::allow();
+        }
+
+        $result = ($this->authorisation)($actor, $model);
+
+        return $result instanceof Response ? $result : ($result ? Response::allow() : Response::deny());
     }
 
     /**
@@ -115,11 +131,27 @@ final readonly class TransitionSteps
      */
     public function checkGuards(Model $model, CompiledTransition $transition): void
     {
+        $failed = $this->failedGuard($model);
+
+        if ($failed !== null) {
+            throw FailedGuardException::failed($model, $transition, $failed);
+        }
+    }
+
+    public function guardsHold(Model $model): bool
+    {
+        return $this->failedGuard($model) === null;
+    }
+
+    private function failedGuard(Model $model): ?CompiledGuard
+    {
         foreach ($this->guards as $guard) {
             if (! ($guard->check)($model)) {
-                throw FailedGuardException::failed($model, $transition, $guard);
+                return $guard;
             }
         }
+
+        return null;
     }
 
     public function apply(Model $model): void

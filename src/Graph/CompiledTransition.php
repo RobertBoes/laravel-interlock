@@ -4,7 +4,10 @@ namespace RobertBoes\Interlock\Graph;
 
 use BackedEnum;
 use Illuminate\Container\Container;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Container\BindingResolutionException;
+use Illuminate\Database\Eloquent\Model;
+use ReflectionClass;
 use RobertBoes\Interlock\Exceptions\MissingTransitionInputException;
 use RobertBoes\Interlock\Transition;
 
@@ -29,6 +32,39 @@ final readonly class CompiledTransition
     public function startsFrom(?BackedEnum $state): bool
     {
         return in_array($state, $this->leafFromStates, true);
+    }
+
+    /**
+     * Whether the actor can apply this transition to the model right now: the model's stored state is a from-state, the
+     * actor is authorised and its guards hold against the model, unsaved changes included.
+     */
+    public function isAvailable(Model $model, ?Authenticatable $actor): bool
+    {
+        if (! $this->startsFrom($model->getOriginal($this->stateAttribute))) {
+            return false;
+        }
+
+        $steps = $this->stepsWithoutInput();
+
+        return $steps->allows($model, $actor) && $steps->guardsHold($model);
+    }
+
+    /**
+     * The steps that can be checked before the transition's input is known. A transition class that takes input is
+     * built without its constructor, so only its authorisation is checked; its guards may read the input, and run
+     * once it is applied with it.
+     */
+    private function stepsWithoutInput(): TransitionSteps
+    {
+        if ($this->class === null) {
+            return $this->fluentSteps;
+        }
+
+        try {
+            return TransitionSteps::of(Container::getInstance()->make($this->class));
+        } catch (BindingResolutionException) {
+            return TransitionSteps::of(new ReflectionClass($this->class)->newInstanceWithoutConstructor())->withoutGuards();
+        }
     }
 
     /**

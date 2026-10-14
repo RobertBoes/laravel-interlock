@@ -9,6 +9,7 @@ use Illuminate\Contracts\Auth\Factory as AuthFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Event;
 use RobertBoes\Interlock\Bypass\BypassScope;
 use RobertBoes\Interlock\Events\BypassedWrite;
@@ -106,6 +107,34 @@ trait HasStateMachines
         });
 
         return $this;
+    }
+
+    /**
+     * The transitions the actor can apply to the model right now, across all its machines: those starting from its
+     * current state whose authorisation allows the actor and whose guards hold, unsaved changes included. A transition
+     * that takes input is offered on its authorisation alone; its guards run once it is applied with its input.
+     * Nothing is written and no events are dispatched.
+     *
+     * The actor is the authenticated user, unless one is given; pass null to ask on behalf of no one. Each transition
+     * serialises as its name and target state, ready for an API resource or Inertia props.
+     *
+     * @return Collection<int, AvailableTransition>
+     */
+    public function availableTransitions(?Authenticatable $actor = null): Collection
+    {
+        $actor = func_num_args() > 0 ? $actor : $this->authenticatedActor();
+        $graph = $this->interlockGraph();
+        $available = [];
+
+        foreach ($graph->machines as $machine) {
+            foreach ($graph->transitionsOf($machine) as $transition) {
+                if ($transition->isAvailable($this, $actor)) {
+                    $available[] = new AvailableTransition($transition->name, $transition->targetState);
+                }
+            }
+        }
+
+        return new Collection($available);
     }
 
     /**

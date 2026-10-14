@@ -14,6 +14,9 @@ use Illuminate\Support\Str;
  * it. Its guards are methods marked #[Guard('message')] that receive the model and return whether the condition holds.
  * Authorisation is checked before the transaction begins, guards inside it, before `apply`.
  *
+ * For available transitions, a transition that takes input is built without calling its constructor, and only its
+ * authorisation is checked, so `authorise()` must not read the input; guards may, as they run once it is applied.
+ *
  * It may define either of these steps, each receiving the model:
  * - `apply($model)` runs inside the transition's transaction, after the model's state attribute is set to the target
  *   state and before the compare-and-swap write. Attributes it sets are saved in the same update, and rows it writes
