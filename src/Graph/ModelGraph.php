@@ -12,11 +12,13 @@ final readonly class ModelGraph
      * @param  class-string<Model>  $modelClass
      * @param  array<string, CompiledMachine>  $machines  keyed by state attribute
      * @param  array<string, CompiledTransition>  $transitions  keyed by transition name
+     * @param  array<string, list<string>>  $guardedAttributes  the names of the transitions that may write each guarded attribute
      */
     public function __construct(
         private string $modelClass,
         public array $machines,
         private array $transitions,
+        public array $guardedAttributes,
     ) {}
 
     public function transition(string $name): CompiledTransition

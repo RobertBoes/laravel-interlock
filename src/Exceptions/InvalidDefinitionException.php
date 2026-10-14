@@ -184,6 +184,21 @@ final class InvalidDefinitionException extends LogicException implements Interlo
         ));
     }
 
+    /**
+     * @param  class-string<StateMachine>  $machine
+     * @param  list<string>  $transitions  the machine's transitions
+     */
+    public static function guardedAttributeWrittenByUnknownTransition(string $machine, string $guardedAttribute, string $transition, array $transitions): self
+    {
+        return new self(sprintf(
+            '%s lets [%s] write guarded attribute [%s], but has no such transition. Its transitions are [%s].',
+            $machine,
+            $transition,
+            $guardedAttribute,
+            implode(', ', $transitions),
+        ));
+    }
+
     public static function duplicateTransitionName(Model $model, string $transition, CompiledMachine $first, CompiledMachine $second): self
     {
         $declaredBy = $first->stateAttribute === $second->stateAttribute

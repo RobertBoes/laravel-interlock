@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use ReflectionClass;
 use RobertBoes\Interlock\Attributes\FinalStates;
 use RobertBoes\Interlock\Attributes\FromStates;
+use RobertBoes\Interlock\Attributes\GuardedAttribute;
 use RobertBoes\Interlock\Attributes\InitialStates;
 use RobertBoes\Interlock\Attributes\TargetState;
 use RobertBoes\Interlock\Attributes\UseStateMachine;
@@ -42,6 +43,7 @@ final class GraphRepository
     {
         $machines = [];
         $transitions = [];
+        $guardedAttributes = [];
 
         foreach ((new ReflectionClass($model))->getAttributes(UseStateMachine::class) as $attribute) {
             $declaration = $attribute->newInstance();
@@ -51,6 +53,7 @@ final class GraphRepository
             }
 
             $machine = $machines[$declaration->attribute] = $this->compileMachine($model, $declaration);
+            $machineTransitions = [];
 
             foreach ((new $declaration->machine())->transitions() as $definition) {
                 $transition = is_string($definition)
@@ -61,11 +64,15 @@ final class GraphRepository
                     throw InvalidDefinitionException::duplicateTransitionName($model, $transition->name, $machines[$transitions[$transition->name]->stateAttribute], $machine);
                 }
 
-                $transitions[$transition->name] = $transition;
+                $transitions[$transition->name] = $machineTransitions[] = $transition;
+            }
+
+            foreach ($this->compileGuardedAttributes($machine, $machineTransitions) as $attribute => $writers) {
+                $guardedAttributes[$attribute] = [...$guardedAttributes[$attribute] ?? [], ...$writers];
             }
         }
 
-        return new ModelGraph($model::class, $machines, $transitions);
+        return new ModelGraph($model::class, $machines, $transitions, $guardedAttributes);
     }
 
     private function compileMachine(Model $model, UseStateMachine $declaration): CompiledMachine
@@ -107,6 +114,46 @@ final class GraphRepository
         }
 
         return new CompiledMachine($declaration->machine, $declaration->attribute, $initialStates, $states, $finalStates);
+    }
+
+    /**
+     * @param  list<CompiledTransition>  $transitions  the machine's own transitions
+     * @return array<string, list<string>> the names of the transitions that may write each guarded attribute
+     */
+    private function compileGuardedAttributes(CompiledMachine $machine, array $transitions): array
+    {
+        $guardedAttributes = [];
+
+        foreach ((new ReflectionClass($machine->machine))->getAttributes(GuardedAttribute::class) as $attribute) {
+            $declaration = $attribute->newInstance();
+
+            $guardedAttributes[$declaration->attribute] = array_map(
+                fn(string $writer) => $this->transitionNamed($machine, $declaration->attribute, $writer, $transitions),
+                $declaration->transitions,
+            );
+        }
+
+        return $guardedAttributes;
+    }
+
+    /**
+     * @param  string|class-string<Transition>  $nameOrClass
+     * @param  list<CompiledTransition>  $transitions
+     */
+    private function transitionNamed(CompiledMachine $machine, string $guardedAttribute, string $nameOrClass, array $transitions): string
+    {
+        foreach ($transitions as $transition) {
+            if ($transition->name === $nameOrClass || $transition->class === $nameOrClass) {
+                return $transition->name;
+            }
+        }
+
+        throw InvalidDefinitionException::guardedAttributeWrittenByUnknownTransition(
+            $machine->machine,
+            $guardedAttribute,
+            $nameOrClass,
+            array_map(fn(CompiledTransition $transition) => $transition->name, $transitions),
+        );
     }
 
     private function compileFluentTransition(Model $model, CompiledMachine $machine, FluentTransition $definition): CompiledTransition

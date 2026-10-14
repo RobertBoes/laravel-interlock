@@ -74,6 +74,33 @@ trait HasStateMachines
     }
 
     /**
+     * The copy starts its lifecycle over: its state attributes are left out of the copy and its guarded attributes
+     * cleared, so a replicating listener may set them, and each state attribute it leaves unset starts in its
+     * machine's initial state, or stays null when the machine has several.
+     *
+     * @param  list<string>|null  $except
+     */
+    public function replicate(?array $except = null): static
+    {
+        $graph = $this->interlockGraph();
+        $copy = parent::replicate([...$except ?? [], ...array_keys($graph->machines), ...array_keys($graph->guardedAttributes)]);
+
+        foreach ($graph->machines as $machine) {
+            if (($copy->getAttributes()[$machine->stateAttribute] ?? null) === null) {
+                $copy->setAttribute($machine->stateAttribute, count($machine->initialStates) === 1 ? $machine->initialStates[0] : null);
+            }
+        }
+
+        foreach (array_keys($graph->guardedAttributes) as $guardedAttribute) {
+            if (! array_key_exists($guardedAttribute, $copy->getAttributes())) {
+                $copy->setAttribute($guardedAttribute, null);
+            }
+        }
+
+        return $copy;
+    }
+
+    /**
      * Runs the apply step and the compare-and-swap save in one transaction, which rolls back when the save fails or is cancelled.
      */
     private function writeTransition(CompiledTransition $transition, TransitionSteps $steps, BackedEnum $fromState): bool
@@ -147,6 +174,7 @@ trait HasStateMachines
     {
         $this->interlockBypassedWrites = [];
         $this->rejectDirectWritesToStateAttributes();
+        $this->rejectDirectWritesToGuardedAttributes();
 
         return parent::getDirtyForUpdate();
     }
@@ -160,6 +188,7 @@ trait HasStateMachines
     {
         $this->interlockBypassedWrites = [];
         $this->startStateAttributesInAnInitialState();
+        $this->rejectGuardedAttributesOnCreate();
 
         return parent::getAttributesForInsert();
     }
@@ -230,11 +259,40 @@ trait HasStateMachines
         }
     }
 
+    /**
+     * A guarded attribute may only change in a transition allowed to write it.
+     */
+    private function rejectDirectWritesToGuardedAttributes(): void
+    {
+        foreach ($this->interlockGraph()->guardedAttributes as $guardedAttribute => $writers) {
+            if (! $this->isDirty($guardedAttribute) || in_array($this->interlockRunningTransition?->name, $writers, true)) {
+                continue;
+            }
+
+            $this->bypassReason(DirectWriteException::toGuardedAttribute($this, $guardedAttribute, $writers, $this->interlockRunningTransition));
+        }
+    }
+
+    private function rejectGuardedAttributesOnCreate(): void
+    {
+        foreach ($this->interlockGraph()->guardedAttributes as $guardedAttribute => $writers) {
+            if (($this->getAttributes()[$guardedAttribute] ?? null) !== null) {
+                $this->bypassReason(DirectWriteException::createdWithGuardedAttribute($this, $guardedAttribute, $writers));
+            }
+        }
+    }
+
     private function bypassOrReject(string $stateAttribute, ?BackedEnum $oldState, ?BackedEnum $newState, DirectWriteException $rejection): void
     {
-        $reason = Container::getInstance()->make(BypassScope::class)->reason() ?? throw $rejection;
+        $this->interlockBypassedWrites[] = new BypassedWrite($this->bypassReason($rejection), $this, $stateAttribute, $oldState, $newState);
+    }
 
-        $this->interlockBypassedWrites[] = new BypassedWrite($reason, $this, $stateAttribute, $oldState, $newState);
+    /**
+     * Why the direct write is allowed after all; throws the rejection when no bypass is active.
+     */
+    private function bypassReason(DirectWriteException $rejection): string
+    {
+        return Container::getInstance()->make(BypassScope::class)->reason() ?? throw $rejection;
     }
 
     private function runningTransitionWrote(string $stateAttribute): bool
