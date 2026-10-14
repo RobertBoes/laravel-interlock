@@ -4,6 +4,7 @@ namespace RobertBoes\Interlock;
 
 use BackedEnum;
 use Illuminate\Container\Container;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Event;
 use RobertBoes\Interlock\Bypass\BypassScope;
@@ -16,6 +17,8 @@ use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\Graph\CompiledTransition;
 use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Graph\ModelGraph;
+use RobertBoes\Interlock\Persistence\CompareAndSwapBuilder;
+use Throwable;
 
 /**
  * @mixin Model
@@ -23,6 +26,8 @@ use RobertBoes\Interlock\Graph\ModelGraph;
 trait HasStateMachines
 {
     private ?CompiledTransition $interlockRunningTransition = null;
+
+    private ?BackedEnum $interlockLoadedState = null;
 
     /** @var list<BypassedWrite> dispatched once the save that writes them finishes */
     private array $interlockBypassedWrites = [];
@@ -40,11 +45,17 @@ trait HasStateMachines
         $this->setAttribute($transition->stateAttribute, $transition->targetState);
 
         $this->interlockRunningTransition = $transition;
+        $this->interlockLoadedState = $fromState;
 
         try {
             $saved = $this->save();
+        } catch (Throwable $exception) {
+            $this->setAttribute($transition->stateAttribute, $unsavedState);
+
+            throw $exception;
         } finally {
             $this->interlockRunningTransition = null;
+            $this->interlockLoadedState = null;
         }
 
         if (! $saved) {
@@ -56,6 +67,40 @@ trait HasStateMachines
         Event::dispatch(new Transitioned($this, $transition->name, $fromState, $transition->targetState));
 
         return $this;
+    }
+
+    /**
+     * A running transition always writes its state attribute, so a self-transition still
+     * reaches the compare-and-swap update instead of being skipped as a clean save.
+     *
+     * @return array<string, mixed>
+     */
+    public function getDirty(): array
+    {
+        $dirty = parent::getDirty();
+
+        if ($this->interlockRunningTransition !== null) {
+            $stateAttribute = $this->interlockRunningTransition->stateAttribute;
+            $dirty[$stateAttribute] ??= $this->getAttributes()[$stateAttribute];
+        }
+
+        return $dirty;
+    }
+
+    /**
+     * A running transition is saved through a compare-and-swap query (ADR 0004, ADR 0010).
+     *
+     * @param  Builder<static>  $query
+     */
+    protected function performUpdate(Builder $query): bool
+    {
+        if ($this->interlockRunningTransition === null || $this->interlockLoadedState === null) {
+            return parent::performUpdate($query);
+        }
+
+        return parent::performUpdate(
+            CompareAndSwapBuilder::replacing($query, $this->interlockRunningTransition, $this->interlockLoadedState),
+        );
     }
 
     /**

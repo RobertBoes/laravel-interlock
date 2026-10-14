@@ -6,6 +6,8 @@ use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Orchestra\Testbench\TestCase as Orchestra;
 use RobertBoes\Interlock\InterlockServiceProvider;
 
+use function Orchestra\Testbench\load_migration_paths;
+
 abstract class TestCase extends Orchestra
 {
     use LazilyRefreshDatabase;
@@ -23,6 +25,8 @@ abstract class TestCase extends Orchestra
 
     protected function defineDatabaseMigrations(): void
     {
-        $this->loadMigrationsFrom(__DIR__ . '/Fixtures/database/migrations');
+        // Not loadMigrationsFrom(): once the database is migrated, it runs and rolls back the migrations in every
+        // later test itself, and on MySQL that rollback commits the test's transaction and hangs the next test.
+        load_migration_paths($this->app, __DIR__ . '/Fixtures/database/migrations');
     }
 }

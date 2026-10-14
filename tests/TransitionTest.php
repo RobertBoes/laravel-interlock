@@ -51,7 +51,7 @@ it('throws when the model has no transition with the given name', function () {
 
     expect(fn() => $post->transition('pubilsh'))->toThrow(
         UnknownTransitionException::class,
-        Post::class . ' has no transition named [pubilsh]. Its transitions are [submit, schedule, publish, retract].',
+        Post::class . ' has no transition named [pubilsh]. Its transitions are [submit, schedule, publish, retract, reschedule].',
     );
 });
 

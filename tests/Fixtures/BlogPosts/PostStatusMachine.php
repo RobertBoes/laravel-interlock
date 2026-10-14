@@ -15,6 +15,7 @@ class PostStatusMachine extends StateMachine
             $this->transition('schedule')->from(PostStatus::Ready)->to(PostStatus::Scheduled),
             $this->transition('publish')->from(PostStatus::Ready, PostStatus::Scheduled)->to(PostStatus::Published),
             $this->transition('retract')->from(PostStatus::Ready, PostStatus::Scheduled)->to(PostStatus::Draft),
+            $this->transition('reschedule')->from(PostStatus::Scheduled)->to(PostStatus::Scheduled),
         ];
     }
 }
