@@ -3,11 +3,14 @@
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use RobertBoes\Interlock\Events\Transitioned;
+use RobertBoes\Interlock\Events\Transitioning;
 use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
 use RobertBoes\Interlock\Exceptions\InterlockException;
 use RobertBoes\Interlock\Exceptions\UnknownTransitionException;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
+use RobertBoes\Interlock\Tests\Fixtures\Orders\Order;
+use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatus;
 
 it('stores the target state and returns the model', function () {
     $post = Post::create(['status' => PostStatus::Draft]);
@@ -122,4 +125,50 @@ it('leaves the state unchanged and dispatches nothing when a saving listener can
     expect($post->status)->toBe(PostStatus::Draft)
         ->and($post->fresh()->status)->toBe(PostStatus::Draft);
     Event::assertNotDispatched(Transitioned::class);
+});
+
+it('lets an updated observer save the model again during the transition', function () {
+    $order = Order::create()->transition('prepare');
+    Order::updated(function (Order $order) {
+        if ($order->delivered_at === null) {
+            $order->delivered_at = now();
+            $order->saveQuietly();
+        }
+    });
+
+    $order->transition('create_label');
+
+    expect($order->fresh())
+        ->status->toBe(OrderStatus::LabelCreated)
+        ->delivered_at->not->toBeNull()
+        ->and($order->isDirty())->toBeFalse()
+        ->and($order->history('status')->count())->toBe(2);
+});
+
+it('lets a saved observer save the model again during the transition', function () {
+    $order = Order::create();
+    Order::saved(function (Order $order) {
+        if ($order->delivered_at === null) {
+            $order->delivered_at = now();
+            $order->save();
+        }
+    });
+
+    $order->transition('prepare');
+
+    expect($order->fresh())
+        ->status->toBe(OrderStatus::Packing)
+        ->delivered_at->not->toBeNull();
+});
+
+it('lets the model be saved before the transition writes it, and writes the transition once', function () {
+    $order = Order::create();
+    Event::listen(Transitioning::class, fn(Transitioning $event) => $event->model->save());
+    Event::fake([Transitioned::class]);
+
+    $order->transition('prepare');
+
+    expect($order->fresh()->status)->toBe(OrderStatus::Packing)
+        ->and($order->isDirty())->toBeFalse();
+    Event::assertDispatchedTimes(Transitioned::class, 1);
 });

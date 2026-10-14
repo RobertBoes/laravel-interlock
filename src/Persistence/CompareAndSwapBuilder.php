@@ -2,6 +2,7 @@
 
 namespace RobertBoes\Interlock\Persistence;
 
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -20,8 +21,9 @@ final class CompareAndSwapBuilder extends Builder
 {
     /**
      * @param  non-empty-array<string, StagedTransition>  $transitions  keyed by state attribute
+     * @param  Closure(): void  $written  called once the update wrote the target states
      */
-    private function __construct(QueryBuilder $query, private readonly array $transitions)
+    private function __construct(QueryBuilder $query, private readonly array $transitions, private readonly Closure $written)
     {
         parent::__construct($query);
     }
@@ -31,11 +33,12 @@ final class CompareAndSwapBuilder extends Builder
      *
      * @param  Builder<TSavedModel>  $saveQuery
      * @param  non-empty-array<string, StagedTransition>  $transitions  keyed by state attribute
+     * @param  Closure(): void  $written  called once the update wrote the target states, before Eloquent's updated event
      * @return self<TSavedModel>
      */
-    public static function replacing(Builder $saveQuery, array $transitions): self
+    public static function replacing(Builder $saveQuery, array $transitions, Closure $written): self
     {
-        return (new self($saveQuery->getQuery(), $transitions))->setModel($saveQuery->getModel());
+        return (new self($saveQuery->getQuery(), $transitions, $written))->setModel($saveQuery->getModel());
     }
 
     /**
@@ -54,6 +57,8 @@ final class CompareAndSwapBuilder extends Builder
         if ($affectedRows === 0) {
             $this->ensureStoredStatesAreUnchanged($storedStateQuery);
         }
+
+        ($this->written)();
 
         return $affectedRows;
     }

@@ -44,6 +44,9 @@ trait HasStateMachines
     /** @var array<string, StagedTransition> keyed by state attribute, being written by the current save */
     private array $interlockRunningTransitions = [];
 
+    /** Whether the compare-and-swap update of the running transitions ran, so a nested save writes as usual */
+    private bool $interlockRunningTransitionsWritten = false;
+
     /** @var list<BypassedWrite> dispatched once the save that writes them finishes */
     private array $interlockBypassedWrites = [];
 
@@ -340,6 +343,7 @@ trait HasStateMachines
             throw $exception;
         } finally {
             $this->interlockRunningTransitions = [];
+            $this->interlockRunningTransitionsWritten = false;
         }
 
         return $saved;
@@ -389,6 +393,10 @@ trait HasStateMachines
     {
         $dirty = parent::getDirty();
 
+        if ($this->interlockRunningTransitionsWritten) {
+            return $dirty;
+        }
+
         foreach (array_keys($this->interlockRunningTransitions) as $stateAttribute) {
             $dirty[$stateAttribute] ??= $this->getAttributes()[$stateAttribute];
         }
@@ -397,15 +405,19 @@ trait HasStateMachines
     }
 
     /**
-     * Running transitions are saved through a compare-and-swap query (ADR 0004, ADR 0010).
+     * Running transitions are saved through a compare-and-swap query (ADR 0004, ADR 0010). Once it ran, a save nested
+     * in the transition, from an observer or an apply step, writes through the plain query: the row is in the target
+     * state already, and the transaction holds it.
      *
      * @param  Builder<static>  $query
      */
     protected function performUpdate(Builder $query): bool
     {
-        $query = $this->interlockRunningTransitions === []
+        $query = $this->interlockRunningTransitions === [] || $this->interlockRunningTransitionsWritten
             ? $this->interlockModelSaveQuery($query)
-            : CompareAndSwapBuilder::replacing($query, $this->interlockRunningTransitions);
+            : CompareAndSwapBuilder::replacing($query, $this->interlockRunningTransitions, function () {
+                $this->interlockRunningTransitionsWritten = true;
+            });
 
         return $this->writeRecordingBypassedWrites(fn() => parent::performUpdate($query));
     }
