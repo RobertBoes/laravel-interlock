@@ -28,7 +28,7 @@ final class GraphRepository
         foreach ((new ReflectionClass($model))->getAttributes(UseStateMachine::class) as $attribute) {
             $declaration = $attribute->newInstance();
 
-            foreach ((new $declaration->machine)->transitions() as $definition) {
+            foreach ((new $declaration->machine())->transitions() as $definition) {
                 $transitions[$definition->name] = $this->compileTransition($model, $declaration, $definition);
             }
         }
