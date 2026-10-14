@@ -12,6 +12,7 @@ use RobertBoes\Interlock\Tests\Fixtures\Expenses\Employee;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Expense;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\ExpenseStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Order;
+use RobertBoes\Interlock\Tests\Fixtures\Returns\ReturnedOrder;
 
 /**
  * @param  iterable<AvailableTransition>  $available
@@ -99,4 +100,8 @@ it('offers a transition that takes input on its from-states and authorisation, l
     expect(availableNames($expense->availableTransitions(Employee::finance())))->toBe(['pay'])
         ->and(availableNames($expense->availableTransitions(Employee::manager())))->toBe([])
         ->and(availableNames(orderReadyToShip()->availableTransitions(null)))->toBe(['ship', 'cancel', 'authorise_payment']);
+});
+
+it('offers a transition whose input the container could build without running its guards against made-up input', function () {
+    expect(availableNames(ReturnedOrder::create()->availableTransitions(null)))->toBe(['return_to_sender']);
 });

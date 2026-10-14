@@ -4,9 +4,7 @@ namespace RobertBoes\Interlock\Graph;
 
 use BackedEnum;
 use Closure;
-use Illuminate\Container\Container;
 use Illuminate\Contracts\Auth\Authenticatable;
-use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use ReflectionClass;
@@ -80,16 +78,14 @@ final readonly class CompiledTransition
             return $this->fluentSteps;
         }
 
-        try {
-            return TransitionSteps::of(Container::getInstance()->make($this->class));
-        } catch (BindingResolutionException) {
-            return TransitionSteps::of(new ReflectionClass($this->class)->newInstanceWithoutConstructor())->withoutGuards();
-        }
+        return self::takesInput($this->class)
+            ? TransitionSteps::of(new ReflectionClass($this->class)->newInstanceWithoutConstructor())->withoutGuards()
+            : TransitionSteps::of(new $this->class());
     }
 
     /**
      * The steps to run: those of the given transition object, or, when the transition is applied by name, of a
-     * transition object the container builds, or the fluent transition's closures.
+     * transition object built without input, or the fluent transition's closures.
      */
     public function steps(?Transition $transition): TransitionSteps
     {
@@ -101,14 +97,25 @@ final readonly class CompiledTransition
     }
 
     /**
+     * Whether the transition class's constructor has required parameters. Those are its input, never built for it:
+     * the container would build a model it takes as an empty one.
+     *
+     * @param  class-string<Transition>  $class
+     */
+    public static function takesInput(string $class): bool
+    {
+        return (new ReflectionClass($class)->getConstructor()?->getNumberOfRequiredParameters() ?? 0) > 0;
+    }
+
+    /**
      * @param  class-string<Transition>  $class
      */
     private function build(string $class): Transition
     {
-        try {
-            return Container::getInstance()->make($class);
-        } catch (BindingResolutionException $exception) {
-            throw MissingTransitionInputException::appliedByName($this, $class, $exception);
+        if (self::takesInput($class)) {
+            throw MissingTransitionInputException::appliedByName($this, $class);
         }
+
+        return new $class();
     }
 }

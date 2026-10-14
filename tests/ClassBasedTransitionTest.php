@@ -16,6 +16,8 @@ use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderShipped;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Ship;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Shipment;
+use RobertBoes\Interlock\Tests\Fixtures\Returns\ReturnedOrder;
+use RobertBoes\Interlock\Tests\Fixtures\Returns\ReturnToSender;
 
 function orderWithLabel(): Order
 {
@@ -95,6 +97,25 @@ it('throws when a class-based transition that takes input is applied by name', f
     );
 
     expect($order->fresh()->status)->toBe(OrderStatus::LabelCreated);
+});
+
+it('throws when a transition whose input the container could build is applied by name', function () {
+    $order = ReturnedOrder::create();
+
+    expect(fn() => $order->transition('return_to_sender'))->toThrow(
+        MissingTransitionInputException::class,
+        'Transition [return_to_sender] takes input, so ' . ReturnToSender::class . ' cannot be built from its name.',
+    );
+
+    expect($order->fresh()->status)->toBe(OrderStatus::Pending);
+});
+
+it('applies a transition whose input is a model when it is given as an instance', function () {
+    $order = ReturnedOrder::create();
+
+    $order->transition(new ReturnToSender(Shipment::create(['order_id' => $order->getKey(), 'tracking_code' => 'TRACK-1'])));
+
+    expect($order->fresh()->status)->toBe(OrderStatus::Cancelled);
 });
 
 it('throws when the transition\'s class is not listed in any of the model\'s machines', function () {
