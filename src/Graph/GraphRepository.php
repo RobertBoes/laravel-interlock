@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use ReflectionClass;
 use RobertBoes\Interlock\Attributes\Authorise;
+use RobertBoes\Interlock\Attributes\FanOut;
 use RobertBoes\Interlock\Attributes\FinalStates;
 use RobertBoes\Interlock\Attributes\FromStates;
 use RobertBoes\Interlock\Attributes\GuardedAttribute;
@@ -181,6 +182,7 @@ final class GraphRepository
             null,
             TransitionSteps::fluent($definition),
             $definition->trigger,
+            $definition->triggerFansOut,
         );
     }
 
@@ -219,6 +221,7 @@ final class GraphRepository
             $class,
             TransitionSteps::none(),
             $this->triggerOf($reflection),
+            $this->triggerFansOut($reflection),
         );
     }
 
@@ -245,6 +248,14 @@ final class GraphRepository
     }
 
     /**
+     * @param  ReflectionClass<Transition>  $class
+     */
+    private function triggerFansOut(ReflectionClass $class): bool
+    {
+        return $class->hasMethod('trigger') && $class->getMethod('trigger')->getAttributes(FanOut::class) !== [];
+    }
+
+    /**
      * @param  non-empty-list<BackedEnum>  $fromStates
      * @param  class-string<Transition>|null  $class
      * @param  (Closure(Builder<Model>): mixed)|null  $trigger
@@ -258,6 +269,7 @@ final class GraphRepository
         ?string $class,
         TransitionSteps $fluentSteps,
         ?Closure $trigger,
+        bool $triggerFansOut,
     ): CompiledTransition {
         $castEnum = $model->getCasts()[$machine->stateAttribute] ?? null;
 
@@ -288,6 +300,7 @@ final class GraphRepository
             $class,
             $fluentSteps,
             $trigger,
+            $triggerFansOut,
         );
     }
 }

@@ -3,6 +3,8 @@
 namespace RobertBoes\Interlock\Triggers;
 
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Bus\Dispatcher;
+use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -10,18 +12,17 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
-use RobertBoes\Interlock\Exceptions\FailedGuardException;
-use RobertBoes\Interlock\Exceptions\StaleStateException;
 use RobertBoes\Interlock\Graph\GraphRepository;
-use RobertBoes\Interlock\Scopes\CanTransition;
-use Throwable;
 
 /**
- * Applies one trigger's transition to every model that matches its condition. Unique per trigger, so a slow run and
- * the next one never process the same trigger at once, and never retried: what fails still matches on the next run.
+ * Applies one trigger's transition to the models that match its condition, at most `interlock.triggers.max_per_run`
+ * of them per run. Unique per trigger, so a slow run and the next one never process the same trigger at once, and
+ * never retried: what fails still matches on a later run. A trigger that fans out dispatches one job per chunk instead,
+ * and does nothing while the chunk jobs of its last run are still pending.
  */
 final class RunTrigger implements ShouldQueue, ShouldBeUnique
 {
+    use AppliesTrigger;
     use Queueable;
 
     public int $tries = 1;
@@ -43,43 +44,95 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
         return $this->model . ':' . $this->trigger;
     }
 
-    public function handle(GraphRepository $graphs, Repository $config, ExceptionHandler $exceptions): void
+    public function handle(GraphRepository $graphs, Repository $config, Cache $cache, Dispatcher $bus, ExceptionHandler $exceptions): void
     {
-        $model = new $this->model();
-        $condition = $graphs->for($model)->transition($this->trigger)->trigger;
+        $transition = $graphs->for(new $this->model())->transition($this->trigger);
 
-        if ($condition === null) {
+        if ($transition->trigger === null) {
             return;
         }
 
-        $model->newQuery()
-            ->tap(new CanTransition($this->trigger))
-            ->where(fn(Builder $query) => $condition($query))
-            ->chunkById($config->get('interlock.triggers.chunk_size', 100), function (Collection $candidates) use ($exceptions) {
-                foreach ($candidates as $candidate) {
-                    $this->apply($candidate, $exceptions);
-                }
-            });
+        $pendingChunks = new PendingChunks($cache, $this->model, $this->trigger);
+
+        if ($transition->triggerFansOut && $pendingChunks->any()) {
+            return;
+        }
+
+        $maxPerRun = $config->integer('interlock.triggers.max_per_run', 1000);
+        $chunkSize = $config->integer('interlock.triggers.chunk_size', 100);
+        $cursor = $cache->get($this->cursorKey());
+
+        $candidates = $this->candidates($transition->trigger)
+            ->when($cursor !== null, fn(Builder $query) => $query->where($query->getModel()->getQualifiedKeyName(), '>', $cursor))
+            ->limit($maxPerRun);
+
+        $keys = $transition->triggerFansOut
+            ? $this->fanOut($candidates, $chunkSize, $bus, $pendingChunks)
+            : $this->applyInChunks($candidates, $chunkSize, $exceptions);
+
+        $this->moveCursor($cache, count($keys) >= $maxPerRun ? end($keys) : null);
     }
 
     /**
-     * A model that changed since it was loaded, or whose guard fails, is an expected outcome and is skipped quietly. Any
-     * other failure is reported. Either way the run carries on, and the model is picked up again on the next run while
-     * it still matches, so there are no retries (ADR 0005).
+     * @param  Builder<Model>  $candidates
+     * @return array<int, mixed> the keys of the models it got to, in key order
      */
-    private function apply(Model $candidate, ExceptionHandler $exceptions): void
+    private function applyInChunks(Builder $candidates, int $chunkSize, ExceptionHandler $exceptions): array
     {
-        // Every interlocked model uses HasStateMachines.
-        if (! method_exists($candidate, 'interlockApplyTrigger')) {
+        $keys = [];
+
+        $candidates->chunkById($chunkSize, function (Collection $chunk) use ($exceptions, &$keys) {
+            foreach ($chunk as $candidate) {
+                $this->apply($candidate, $exceptions);
+                $keys[] = $candidate->getKey();
+            }
+        });
+
+        return $keys;
+    }
+
+    /**
+     * Only the keys are loaded here; each chunk's job loads its models.
+     *
+     * @param  Builder<Model>  $candidates
+     * @return array<int, mixed> the keys of the models it dispatched jobs for, in key order
+     */
+    private function fanOut(Builder $candidates, int $chunkSize, Dispatcher $bus, PendingChunks $pendingChunks): array
+    {
+        $key = $candidates->getModel()->getQualifiedKeyName();
+        $keys = $candidates->orderBy($key)->pluck($key);
+        $chunks = $keys->chunk($chunkSize);
+
+        // Counted before the first is dispatched, as a chunk job may run, and finish, before the next is dispatched.
+        if ($chunks->isNotEmpty()) {
+            $pendingChunks->expect($chunks->count(), $this->uniqueFor);
+        }
+
+        foreach ($chunks as $chunk) {
+            $bus->dispatch(new RunTriggerChunk($this->model, $this->trigger, $chunk->values()->all()));
+        }
+
+        return $keys->all();
+    }
+
+    private function cursorKey(): string
+    {
+        return 'interlock:triggers:' . $this->uniqueId() . ':cursor';
+    }
+
+    /**
+     * A run that reached the cap leaves a cursor after the last model it got to, so the next run carries on from there
+     * and a backlog drains even when its first models are skipped on every run. A run that reached the end of the
+     * matching models clears it, so the next run starts from the first again.
+     */
+    private function moveCursor(Cache $cache, mixed $lastKey): void
+    {
+        if ($lastKey === null || $lastKey === false) {
+            $cache->forget($this->cursorKey());
+
             return;
         }
 
-        try {
-            $candidate->interlockApplyTrigger($this->trigger);
-        } catch (StaleStateException|FailedGuardException) {
-            return;
-        } catch (Throwable $exception) {
-            $exceptions->report($exception);
-        }
+        $cache->forever($this->cursorKey(), $lastKey);
     }
 }

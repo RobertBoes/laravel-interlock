@@ -21,6 +21,7 @@ final readonly class CompiledTransition
      * @param  class-string<Transition>|null  $class  the transition class, or null for a fluent transition
      * @param  TransitionSteps  $fluentSteps  a fluent transition's steps; a class-based transition's come from its object
      * @param  (Closure(Builder<Model>): mixed)|null  $trigger  the condition the trigger adds to the model's query, or null when the transition has none
+     * @param  bool  $triggerFansOut  whether a run of the trigger dispatches one job per chunk instead of applying the transition itself
      */
     public function __construct(
         public string $name,
@@ -31,6 +32,7 @@ final readonly class CompiledTransition
         public ?string $class,
         private TransitionSteps $fluentSteps,
         public ?Closure $trigger,
+        public bool $triggerFansOut = false,
     ) {}
 
     public function startsFrom(?BackedEnum $state): bool

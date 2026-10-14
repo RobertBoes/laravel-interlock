@@ -24,6 +24,8 @@ final class FluentTransition
 
     public private(set) ?Closure $trigger = null;
 
+    public private(set) bool $triggerFansOut = false;
+
     public function __construct(public readonly string $name) {}
 
     public function from(BackedEnum ...$states): self
@@ -82,10 +84,14 @@ final class FluentTransition
      * The transition's from-states are added to it, so it only says what is specific to the trigger. Every minute, the
      * scheduled interlock:triggers command applies the transition, on behalf of no one, to each model that matches.
      * Rescheduling means changing the data the condition reads; nothing needs cancelling.
+     *
+     * Each run applies it to at most `interlock.triggers.max_per_run` models, a chunk at a time. With `fanOut: true`,
+     * a run dispatches one job per chunk instead, so a busy trigger can use several queue workers.
      */
-    public function trigger(Closure $condition): self
+    public function trigger(Closure $condition, bool $fanOut = false): self
     {
         $this->trigger = $condition;
+        $this->triggerFansOut = $fanOut;
 
         return $this;
     }

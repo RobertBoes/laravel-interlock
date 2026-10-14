@@ -20,6 +20,10 @@ return [
         // How many matching models a trigger loads at a time, in key order, to apply its transition to.
         'chunk_size' => 100,
 
+        // The most matching models one run of a trigger applies its transition to. A bigger backlog drains over the
+        // next runs, each carrying on where the last one stopped.
+        'max_per_run' => 1000,
+
     ],
 
 ];

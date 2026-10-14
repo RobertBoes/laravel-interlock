@@ -20,7 +20,8 @@ use Illuminate\Support\Str;
  * It may declare a trigger, a static `trigger(Builder $query)` method that constrains the model's query, such as
  * `$query->where('publish_at', '<=', now())`. Its from-states are added to it, and every minute the scheduled
  * interlock:triggers command applies it by name, on behalf of no one, to each model that matches. A transition that
- * takes input cannot be built by name, so it cannot be triggered.
+ * takes input cannot be built by name, so it cannot be triggered. Each run applies it to at most
+ * `interlock.triggers.max_per_run` models; mark the method #[FanOut] to dispatch one job per chunk of them instead.
  *
  * It may define either of these steps, each receiving the model:
  * - `apply($model)` runs inside the transition's transaction, after the model's state attribute is set to the target

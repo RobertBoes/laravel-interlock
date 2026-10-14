@@ -11,8 +11,9 @@ The fixture domains from the spec (`.scratch/interlock-v1/spec.md`, "Testing Dec
 - `UnsoundMachines/`: models whose machines compile but are deliberately broken (a dead end, an unreachable state, a final state with an outgoing transition, duplicate transition names), for the soundness check. Nothing reads their table.
 - `Exports/`: a claim backed by an integer enum, whose `settle` transition has two guards, for the shapes the XState export has to encode. Nothing reads its table. Namespace `RobertBoes\Interlock\Tests\Fixtures\Exports`.
 - `Discovery/`: models for discovery and explicit registration, kept outside the paths the discovery tests scan. They share the `posts` and `orders` tables.
+- `Feeds/`: a post from a high-volume feed, whose `publish` trigger fans out. Kept outside `BlogPosts/` so the tests that scan it don't see it. It shares the `posts` table.
 - `database/migrations/`: the fixture tables, loaded by `TestCase`, plus the package's own history migration.
 
-Triggers: the post's `publish` once `publish_at` has passed, the expense's guarded `submit` 30 days after the expense was created, and the order's class-based `cancel` for orders still unpaid after 3 days.
+Triggers: the post's `publish` once `publish_at` has passed, the expense's guarded `submit` 30 days after the expense was created, and the order's class-based `cancel` for orders still unpaid after 3 days, which fans out. The feed post's `publish` fans out too.
 
 History is on for the post's `status` machine, the order's `status` machine and both contract machines. The order's `payment_status` machine has it off.
