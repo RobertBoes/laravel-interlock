@@ -6,6 +6,7 @@ use BackedEnum;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use RobertBoes\Interlock\Graph\GraphRepository;
 
 /**
@@ -21,14 +22,16 @@ final readonly class CanTransition
     /**
      * @template TModel of Model
      *
-     * @param  Builder<TModel>  $query
+     * @param  Builder<TModel>|Relation<TModel, *, *>  $query
      */
-    public function __invoke(Builder $query): void
+    public function __invoke(Builder|Relation $query): void
     {
-        $transition = Container::getInstance()->make(GraphRepository::class)->for($query->getModel())->transition($this->transition);
+        $builder = $query instanceof Relation ? $query->getQuery() : $query;
 
-        $query->whereIn(
-            $query->qualifyColumn($transition->stateAttribute),
+        $transition = Container::getInstance()->make(GraphRepository::class)->for($builder->getModel())->transition($this->transition);
+
+        $builder->whereIn(
+            $builder->qualifyColumn($transition->stateAttribute),
             array_map(fn(BackedEnum $state) => $state->value, $transition->leafFromStates),
         );
     }

@@ -367,6 +367,13 @@ Order::query()->tap(new CanTransition('ship'))->get();
 
 `CanTransition` checks from-states only. It does not evaluate guards or authorisation, so applying the transition to a model it finds can still fail. Ask the model for its [available transitions](#available-transitions) when that matters.
 
+The scopes also work as eager-load constraints, with `with()` and `load()`:
+
+```php
+Customer::with(['orders' => new InState(OrderStatus::Preparing)])->get();
+$customer->load(['orders' => new CanTransition('ship')]);
+```
+
 If you prefer Eloquent scope methods, add the opt-in `HasStateScopes` trait to the model:
 
 ```php

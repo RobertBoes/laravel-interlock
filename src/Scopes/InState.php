@@ -6,6 +6,7 @@ use BackedEnum;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use RobertBoes\Interlock\Exceptions\InvalidStateQueryException;
 use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\Graph\GraphRepository;
@@ -38,11 +39,13 @@ final readonly class InState
     /**
      * @template TModel of Model
      *
-     * @param  Builder<TModel>  $query
+     * @param  Builder<TModel>|Relation<TModel, *, *>  $query
      */
-    public function __invoke(Builder $query): void
+    public function __invoke(Builder|Relation $query): void
     {
-        $model = $query->getModel();
+        $builder = $query instanceof Relation ? $query->getQuery() : $query;
+
+        $model = $builder->getModel();
         $machine = $this->machineToQuery($model);
 
         $leafStates = [];
@@ -55,8 +58,8 @@ final readonly class InState
             array_push($leafStates, ...$machine->states->leavesWithin($state));
         }
 
-        $query->whereIn(
-            $query->qualifyColumn($machine->stateAttribute),
+        $builder->whereIn(
+            $builder->qualifyColumn($machine->stateAttribute),
             array_map(fn(BackedEnum $state) => $state->value, $leafStates),
         );
     }

@@ -5,6 +5,7 @@ namespace RobertBoes\Interlock\Scopes;
 use BackedEnum;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 
 /**
  * Limits a query to the models in none of the given states: `Order::query()->tap(new NotInState(OrderStatus::Preparing))`.
@@ -27,10 +28,12 @@ final readonly class NotInState
     /**
      * @template TModel of Model
      *
-     * @param  Builder<TModel>  $query
+     * @param  Builder<TModel>|Relation<TModel, *, *>  $query
      */
-    public function __invoke(Builder $query): void
+    public function __invoke(Builder|Relation $query): void
     {
-        $query->whereNot(($this->inState)(...));
+        $builder = $query instanceof Relation ? $query->getQuery() : $query;
+
+        $builder->whereNot(($this->inState)(...));
     }
 }

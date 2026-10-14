@@ -14,6 +14,7 @@ use RobertBoes\Interlock\Tests\Fixtures\Discovery\Comment;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Order;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\ScopedOrder;
+use RobertBoes\Interlock\Tests\Fixtures\Orders\Shipment;
 
 beforeEach(fn() => Interlock::bypassForTest('Create models in the states being queried'));
 
@@ -150,6 +151,31 @@ it('queries the model\'s own state attribute when another table in the query has
         ->and($joined()->tap(new NotInState(OrderStatus::Preparing))->pluck('orders.id')->all())->toBe([$shipped->getKey()])
         ->and($joined()->tap(new CanTransition('cancel'))->pluck('orders.id')->all())->toBe([$packing->getKey()]);
 });
+
+it('constrains an eager load', function (callable $scope, OrderStatus $kept) {
+    $packing = Order::create(['status' => OrderStatus::Packing]);
+    $shipped = Order::create(['status' => OrderStatus::Shipped]);
+    $toPacking = Shipment::create(['order_id' => $packing->getKey(), 'tracking_code' => 'PACKING']);
+    $toShipped = Shipment::create(['order_id' => $shipped->getKey(), 'tracking_code' => 'SHIPPED']);
+
+    $orderStatuses = fn($shipments) => $shipments->mapWithKeys(fn(Shipment $shipment) => [
+        $shipment->tracking_code => $shipment->order?->status,
+    ])->all();
+
+    $expected = [
+        'PACKING' => $kept === OrderStatus::Packing ? OrderStatus::Packing : null,
+        'SHIPPED' => $kept === OrderStatus::Shipped ? OrderStatus::Shipped : null,
+    ];
+
+    expect($orderStatuses(Shipment::with(['order' => $scope()])->orderBy('id')->get()))->toBe($expected)
+        ->and($orderStatuses(Shipment::query()->orderBy('id')->get()->load(['order' => $scope()])))->toBe($expected)
+        ->and($toPacking->load(['order' => $scope()])->order?->getKey())->toBe($kept === OrderStatus::Packing ? $packing->getKey() : null)
+        ->and($toShipped->load(['order' => $scope()])->order?->getKey())->toBe($kept === OrderStatus::Shipped ? $shipped->getKey() : null);
+})->with([
+    'in state' => [fn() => new InState(OrderStatus::Preparing), OrderStatus::Packing],
+    'not in state' => [fn() => new NotInState(OrderStatus::Preparing), OrderStatus::Shipped],
+    'can transition' => [fn() => new CanTransition('cancel'), OrderStatus::Packing],
+]);
 
 describe('scope methods', function () {
     it('finds the models in a state', function () {
