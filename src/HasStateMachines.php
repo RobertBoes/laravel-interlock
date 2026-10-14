@@ -32,7 +32,9 @@ use RobertBoes\Interlock\History\HistoryEntry;
 use RobertBoes\Interlock\History\HistoryRecord;
 use RobertBoes\Interlock\History\HistoryRecorder;
 use RobertBoes\Interlock\Persistence\CompareAndSwapBuilder;
+use RobertBoes\Interlock\Persistence\AppliedTransition;
 use RobertBoes\Interlock\Persistence\StagedTransition;
+use RobertBoes\Interlock\Persistence\UnsavedModel;
 use RobertBoes\Interlock\Testing\TransitionLog;
 use Throwable;
 
@@ -83,8 +85,8 @@ trait HasStateMachines
      */
     public function transition(string|Transition $transition, ?Authenticatable $actor = null): static
     {
-        $compiled = $this->interlockStageTransition($transition, func_num_args() > 1 ? $actor : $this->authenticatedActor(), null);
-        $this->saveOrThrowWhenCancelled($compiled);
+        $compiled = $this->interlockStageTransition($transition, func_num_args() > 1 ? $actor : $this->interlockAuthenticatedActor(), null);
+        $this->interlockSaveOrThrowWhenCancelled($compiled);
 
         return $this;
     }
@@ -100,7 +102,7 @@ trait HasStateMachines
      */
     public function stageTransition(string|Transition $transition, ?Authenticatable $actor = null): static
     {
-        $this->interlockStageTransition($transition, func_num_args() > 1 ? $actor : $this->authenticatedActor(), null);
+        $this->interlockStageTransition($transition, func_num_args() > 1 ? $actor : $this->interlockAuthenticatedActor(), null);
 
         return $this;
     }
@@ -110,10 +112,10 @@ trait HasStateMachines
      */
     public function interlockApplyTrigger(string $transition): void
     {
-        $this->saveOrThrowWhenCancelled($this->interlockStageTransition($transition, null, $transition));
+        $this->interlockSaveOrThrowWhenCancelled($this->interlockStageTransition($transition, null, $transition));
     }
 
-    private function saveOrThrowWhenCancelled(CompiledTransition $transition): void
+    private function interlockSaveOrThrowWhenCancelled(CompiledTransition $transition): void
     {
         if (! $this->save()) {
             throw CancelledTransitionException::saveCancelled($this, $transition);
@@ -151,10 +153,7 @@ trait HasStateMachines
      */
     public function discardStagedTransitions(): static
     {
-        foreach ($this->interlockStagedTransitions as $stateAttribute => $staged) {
-            $this->setAttribute($stateAttribute, $staged->fromState);
-        }
-
+        $this->interlockRevertToFromStates($this->interlockStagedTransitions);
         $this->interlockStagedTransitions = [];
 
         return $this;
@@ -171,32 +170,32 @@ trait HasStateMachines
             return parent::save($options);
         }
 
-        $staged = $this->interlockStagedTransitions;
+        $stagedTransitions = $this->interlockStagedTransitions;
         $this->interlockStagedTransitions = [];
-        $unsaved = [$this->getAttributes(), $this->getRawOriginal(), $this->getChanges(), $this->wasRecentlyCreated];
+        $unsaved = UnsavedModel::of($this);
 
         try {
-            $committed = $this->writeTransitions($staged, $options);
+            $committed = $this->interlockWriteTransitions($stagedTransitions, $options);
         } catch (Throwable $exception) {
-            $this->restoreUnsavedModel($unsaved, $staged);
+            $this->interlockRestoreUnsavedModel($unsaved, $stagedTransitions);
 
             throw $exception;
         }
 
         if (! $committed) {
-            $this->restoreUnsavedModel($unsaved, $staged);
+            $this->interlockRestoreUnsavedModel($unsaved, $stagedTransitions);
 
             return false;
         }
 
-        $this->getConnection()->afterCommit(function () use ($staged) {
+        $this->getConnection()->afterCommit(function () use ($stagedTransitions) {
             $log = Container::getInstance()->make(TransitionLog::class);
 
-            foreach ($staged as $transition) {
-                $log->record($this, $transition->transition->name);
-                $transition->steps->afterCommit($this);
+            foreach ($stagedTransitions as $staged) {
+                $log->record($this, $staged->transition->name);
+                $staged->steps->afterCommit($this);
 
-                Event::dispatch(new Transitioned($this, $transition->transition->name, $transition->fromState, $transition->transition->targetState));
+                Event::dispatch(new Transitioned($this, $staged->transition->name, $staged->fromState, $staged->transition->targetState));
             }
         });
 
@@ -230,7 +229,7 @@ trait HasStateMachines
      */
     public function availableTransitions(?Authenticatable $actor = null): Collection
     {
-        $actor = func_num_args() > 0 ? $actor : $this->authenticatedActor();
+        $actor = func_num_args() > 0 ? $actor : $this->interlockAuthenticatedActor();
 
         return new Collection($this->interlockGraph()->transitions())
             ->filter(fn(CompiledTransition $transition) => $transition->isAvailable($this, $actor))
@@ -285,63 +284,42 @@ trait HasStateMachines
      * the save fails or is cancelled. Guards and authorisation see the state each transition starts from, plus the changes of the
      * transitions staged before it.
      *
-     * @param  array<string, StagedTransition>  $staged
+     * @param  array<string, StagedTransition>  $stagedTransitions
      * @param  array<string, mixed>  $options
      */
-    private function writeTransitions(array $staged, array $options): bool
+    private function interlockWriteTransitions(array $stagedTransitions, array $options): bool
     {
-        foreach ($staged as $stateAttribute => $transition) {
-            if ($this->getAttribute($stateAttribute) !== $transition->transition->targetState) {
-                throw DirectWriteException::toStagedStateAttribute($this, $transition->transition, $this->getAttribute($stateAttribute));
+        foreach ($stagedTransitions as $stateAttribute => $staged) {
+            if ($this->getAttribute($stateAttribute) !== $staged->transition->targetState) {
+                throw DirectWriteException::toStagedStateAttribute($this, $staged->transition, $this->getAttribute($stateAttribute));
             }
-
-            $this->setAttribute($stateAttribute, $transition->fromState);
         }
 
-        foreach ($staged as $transition) {
-            $transition->steps->authorise($this, $transition->actor, $transition->transition);
+        $this->interlockRevertToFromStates($stagedTransitions);
+
+        foreach ($stagedTransitions as $staged) {
+            $staged->steps->authorise($this, $staged->actor, $staged->transition);
         }
 
         $connection = $this->getConnection();
         $connection->beginTransaction();
 
-        $this->interlockRunningTransitions = $staged;
-        $written = [];
-        $oldAttributes = [];
+        $this->interlockRunningTransitions = $stagedTransitions;
 
         try {
-            foreach ($staged as $stateAttribute => $transition) {
-                $compiled = $transition->transition;
+            $appliedTransitions = array_map($this->interlockApplyTransition(...), $stagedTransitions);
 
-                $transition->steps->checkGuards($this, $compiled);
-                $this->setAttribute($compiled->stateAttribute, $compiled->targetState);
-                $attributesBeforeApply = $this->getAttributes();
-                $transition->steps->apply($this);
-                $written[$stateAttribute] = $this->attributesWrittenSince($attributesBeforeApply, $compiled->stateAttribute);
-                $oldAttributes[$stateAttribute] = array_map(fn(string $attribute) => $this->getRawOriginal($attribute), $written[$stateAttribute]);
+            if (! parent::save($options)) {
+                $connection->rollBack();
 
-                Event::dispatch(new Transitioning($this, $compiled->name, $transition->fromState, $compiled->targetState));
+                return false;
             }
 
-            $saved = parent::save($options);
-
-            if ($saved) {
-                foreach ($staged as $stateAttribute => $transition) {
-                    $this->recordHistory(new HistoryRecord(
-                        $this,
-                        $stateAttribute,
-                        $transition->transition->name,
-                        $transition->fromState,
-                        $transition->transition->targetState,
-                        $transition->actor,
-                        $oldAttributes[$stateAttribute],
-                        array_map(fn(string $attribute) => $this->getAttributes()[$attribute] ?? null, $written[$stateAttribute]),
-                        trigger: $transition->trigger,
-                    ));
-                }
+            foreach ($appliedTransitions as $applied) {
+                $this->interlockRecordHistory($applied->historyRecord($this));
             }
 
-            $saved ? $connection->commit() : $connection->rollBack();
+            $connection->commit();
         } catch (Throwable $exception) {
             $connection->rollBack();
 
@@ -351,7 +329,26 @@ trait HasStateMachines
             $this->interlockRunningTransitionsWritten = false;
         }
 
-        return $saved;
+        return true;
+    }
+
+    /**
+     * Checks the transition's guards, moves its state attribute to the target state and runs its apply step.
+     */
+    private function interlockApplyTransition(StagedTransition $staged): AppliedTransition
+    {
+        $compiled = $staged->transition;
+
+        $staged->steps->checkGuards($this, $compiled);
+        $this->setAttribute($compiled->stateAttribute, $compiled->targetState);
+        $attributesBeforeApply = $this->getAttributes();
+        $staged->steps->apply($this);
+        $attributes = $this->interlockAttributesWrittenSince($attributesBeforeApply, $compiled->stateAttribute);
+        $applied = new AppliedTransition($staged, $attributes, array_map(fn(string $attribute) => $this->getRawOriginal($attribute), $attributes));
+
+        Event::dispatch(new Transitioning($this, $compiled->name, $staged->fromState, $compiled->targetState));
+
+        return $applied;
     }
 
     /**
@@ -360,15 +357,14 @@ trait HasStateMachines
      * @param  array<string, mixed>  $attributesBeforeApply
      * @return array<string, string>
      */
-    private function attributesWrittenSince(array $attributesBeforeApply, string $stateAttribute): array
+    private function interlockAttributesWrittenSince(array $attributesBeforeApply, string $stateAttribute): array
     {
-        $written = [$stateAttribute];
-
-        foreach ($this->getAttributes() as $attribute => $value) {
-            if (! array_key_exists($attribute, $attributesBeforeApply) || $attributesBeforeApply[$attribute] !== $value) {
-                $written[] = $attribute;
-            }
-        }
+        $changed = array_filter(
+            $this->getAttributes(),
+            fn(mixed $value, string $attribute) => ! array_key_exists($attribute, $attributesBeforeApply) || $attributesBeforeApply[$attribute] !== $value,
+            ARRAY_FILTER_USE_BOTH,
+        );
+        $written = [$stateAttribute, ...array_keys($changed)];
 
         return array_combine($written, $written);
     }
@@ -377,20 +373,27 @@ trait HasStateMachines
      * Puts the model back as it was before a failed save, without the transitions it tried to write. The save may
      * have synced the original attributes before it failed, while the database rolled back, so they are put back too.
      *
-     * @param  array{array<string, mixed>, array<string, mixed>, array<string, mixed>, bool}  $unsaved  the attributes, original attributes, changes and whether the model was recently created
-     * @param  array<string, StagedTransition>  $staged
+     * @param  array<string, StagedTransition>  $stagedTransitions
      */
-    private function restoreUnsavedModel(array $unsaved, array $staged): void
+    private function interlockRestoreUnsavedModel(UnsavedModel $unsaved, array $stagedTransitions): void
     {
-        [$attributes, $original, $changes, $wasRecentlyCreated] = $unsaved;
+        $this->setRawAttributes($unsaved->attributes);
+        $this->original = $unsaved->original;
+        $this->changes = $unsaved->changes;
+        $this->wasRecentlyCreated = $unsaved->wasRecentlyCreated;
 
-        $this->setRawAttributes($attributes);
-        $this->original = $original;
-        $this->changes = $changes;
-        $this->wasRecentlyCreated = $wasRecentlyCreated;
+        $this->interlockRevertToFromStates($stagedTransitions);
+    }
 
-        foreach ($staged as $stateAttribute => $transition) {
-            $this->setAttribute($stateAttribute, $transition->fromState);
+    /**
+     * Puts each state attribute back to the state its transition was staged from.
+     *
+     * @param  array<string, StagedTransition>  $stagedTransitions
+     */
+    private function interlockRevertToFromStates(array $stagedTransitions): void
+    {
+        foreach ($stagedTransitions as $stateAttribute => $staged) {
+            $this->setAttribute($stateAttribute, $staged->fromState);
         }
     }
 
@@ -430,7 +433,7 @@ trait HasStateMachines
                 $this->interlockRunningTransitionsWritten = true;
             });
 
-        return $this->writeRecordingBypassedWrites(fn() => parent::performUpdate($query));
+        return $this->interlockWriteRecordingBypassedWrites(fn() => parent::performUpdate($query));
     }
 
     /**
@@ -440,7 +443,7 @@ trait HasStateMachines
     {
         $query = $this->interlockModelSaveQuery($query);
 
-        return $this->writeRecordingBypassedWrites(fn() => parent::performInsert($query));
+        return $this->interlockWriteRecordingBypassedWrites(fn() => parent::performInsert($query));
     }
 
     /**
@@ -450,31 +453,31 @@ trait HasStateMachines
      *
      * @param  Closure(): bool  $write
      */
-    private function writeRecordingBypassedWrites(Closure $write): bool
+    private function interlockWriteRecordingBypassedWrites(Closure $write): bool
     {
         $writeAndRecord = function () use ($write): bool {
             if (! $write()) {
                 return false;
             }
 
-            foreach ($this->bypassedWritesByStateAttribute() as $stateAttribute => [$reason, $attributes]) {
-                $this->recordHistory(new HistoryRecord(
-                    $this,
-                    $stateAttribute,
-                    null,
-                    $this->getOriginal($stateAttribute),
-                    $this->getAttribute($stateAttribute),
-                    $this->authenticatedActor(),
-                    array_map(fn(string $attribute) => $this->getRawOriginal($attribute), $attributes),
-                    array_map(fn(string $attribute) => $this->getAttributes()[$attribute] ?? null, $attributes),
-                    $reason,
+            foreach ($this->interlockBypassedWritesByStateAttribute() as $stateAttribute => [$reason, $attributes]) {
+                $this->interlockRecordHistory(new HistoryRecord(
+                    model: $this,
+                    stateAttribute: $stateAttribute,
+                    transition: null,
+                    fromState: $this->getOriginal($stateAttribute),
+                    targetState: $this->getAttribute($stateAttribute),
+                    actor: $this->interlockAuthenticatedActor(),
+                    oldAttributes: array_map(fn(string $attribute) => $this->getRawOriginal($attribute), $attributes),
+                    newAttributes: array_map(fn(string $attribute) => $this->getAttributes()[$attribute] ?? null, $attributes),
+                    bypassReason: $reason,
                 ));
             }
 
             return true;
         };
 
-        return $this->interlockRunningTransitions === [] && $this->mayMakeABypassedWriteThatRecordsHistory()
+        return $this->interlockRunningTransitions === [] && $this->interlockMayMakeABypassedWriteThatRecordsHistory()
             ? $this->getConnection()->transaction($writeAndRecord)
             : $writeAndRecord();
     }
@@ -485,7 +488,7 @@ trait HasStateMachines
      *
      * @return array<string, array{string, array<string, string>}> the reason and the attributes written, keyed by state attribute
      */
-    private function bypassedWritesByStateAttribute(): array
+    private function interlockBypassedWritesByStateAttribute(): array
     {
         $graph = $this->interlockGraph();
         $grouped = [];
@@ -508,7 +511,7 @@ trait HasStateMachines
      * history. Not what is dirty now: this is decided before the updating or creating event, whose listeners may still
      * set a state or guarded attribute.
      */
-    private function mayMakeABypassedWriteThatRecordsHistory(): bool
+    private function interlockMayMakeABypassedWriteThatRecordsHistory(): bool
     {
         if (! $this->interlockGraph()->recordsAnyHistory()) {
             return false;
@@ -517,7 +520,7 @@ trait HasStateMachines
         return Container::getInstance()->make(BypassScope::class)->reason() !== null;
     }
 
-    private function recordHistory(HistoryRecord $record): void
+    private function interlockRecordHistory(HistoryRecord $record): void
     {
         if ($this->interlockGraph()->recordsHistory($record->stateAttribute)) {
             Container::getInstance()->make(HistoryRecorder::class)->record($record);
@@ -556,8 +559,8 @@ trait HasStateMachines
     protected function getDirtyForUpdate(): array
     {
         $this->interlockBypassedWrites = [];
-        $this->rejectDirectWritesToStateAttributes();
-        $this->rejectDirectWritesToGuardedAttributes();
+        $this->interlockRejectDirectWritesToStateAttributes();
+        $this->interlockRejectDirectWritesToGuardedAttributes();
 
         return parent::getDirtyForUpdate();
     }
@@ -570,8 +573,8 @@ trait HasStateMachines
     protected function getAttributesForInsert(): array
     {
         $this->interlockBypassedWrites = [];
-        $this->startStateAttributesInAnInitialState();
-        $this->rejectGuardedAttributesOnCreate();
+        $this->interlockStartStateAttributesInAnInitialState();
+        $this->interlockRejectGuardedAttributesOnCreate();
 
         return parent::getAttributesForInsert();
     }
@@ -593,17 +596,17 @@ trait HasStateMachines
         }
     }
 
-    private function startStateAttributesInAnInitialState(): void
+    private function interlockStartStateAttributesInAnInitialState(): void
     {
         foreach ($this->interlockGraph()->machines as $machine) {
             $state = $this->getAttribute($machine->stateAttribute);
 
             if ($state === null) {
-                $this->setAttribute($machine->stateAttribute, $this->onlyInitialState($machine));
+                $this->setAttribute($machine->stateAttribute, $this->interlockOnlyInitialState($machine));
             } elseif ($machine->states->isParent($state)) {
                 throw DirectWriteException::createdInParentState($this, $machine, $state);
             } elseif (! $machine->isInitialState($state)) {
-                $this->bypassOrReject(
+                $this->interlockBypassOrReject(
                     DirectWriteException::notAnInitialState($this, $machine, $state),
                     fn(string $reason) => new BypassedWrite($reason, $this, $machine->stateAttribute, null, $state),
                 );
@@ -611,12 +614,12 @@ trait HasStateMachines
         }
     }
 
-    private function onlyInitialState(CompiledMachine $machine): BackedEnum
+    private function interlockOnlyInitialState(CompiledMachine $machine): BackedEnum
     {
         return $machine->soleInitialState() ?? throw AmbiguousInitialStateException::noStateGiven($this, $machine);
     }
 
-    private function rejectDirectWritesToStateAttributes(): void
+    private function interlockRejectDirectWritesToStateAttributes(): void
     {
         foreach ($this->interlockGraph()->machines as $machine) {
             $stateAttribute = $machine->stateAttribute;
@@ -631,13 +634,13 @@ trait HasStateMachines
                 throw DirectWriteException::toParentState($this, $machine, $newState);
             }
 
-            if ($this->runningTransitionWrote($stateAttribute)) {
+            if ($this->interlockRunningTransitionWrote($stateAttribute)) {
                 continue;
             }
 
             $oldState = $this->getOriginal($stateAttribute);
 
-            $this->bypassOrReject(
+            $this->interlockBypassOrReject(
                 DirectWriteException::toStateAttribute($this, $stateAttribute, $oldState, $newState),
                 fn(string $reason) => new BypassedWrite($reason, $this, $stateAttribute, $oldState, $newState),
             );
@@ -647,31 +650,31 @@ trait HasStateMachines
     /**
      * A guarded attribute may only change in a transition allowed to write it.
      */
-    private function rejectDirectWritesToGuardedAttributes(): void
+    private function interlockRejectDirectWritesToGuardedAttributes(): void
     {
-        $running = array_values(array_map(fn(StagedTransition $transition) => $transition->transition->name, $this->interlockRunningTransitions));
+        $running = array_values(array_map(fn(StagedTransition $staged) => $staged->transition->name, $this->interlockRunningTransitions));
 
         foreach ($this->interlockGraph()->guardedAttributes as $guardedAttribute => $writers) {
             if (! $this->isDirty($guardedAttribute) || array_intersect($running, $writers) !== []) {
                 continue;
             }
 
-            $this->bypassGuardedAttributeOrReject($guardedAttribute, DirectWriteException::toGuardedAttribute($this, $guardedAttribute, $writers, $running));
+            $this->interlockBypassGuardedAttributeOrReject($guardedAttribute, DirectWriteException::toGuardedAttribute($this, $guardedAttribute, $writers, $running));
         }
     }
 
-    private function rejectGuardedAttributesOnCreate(): void
+    private function interlockRejectGuardedAttributesOnCreate(): void
     {
         foreach ($this->interlockGraph()->guardedAttributes as $guardedAttribute => $writers) {
             if (($this->getAttributes()[$guardedAttribute] ?? null) !== null) {
-                $this->bypassGuardedAttributeOrReject($guardedAttribute, DirectWriteException::createdWithGuardedAttribute($this, $guardedAttribute, $writers));
+                $this->interlockBypassGuardedAttributeOrReject($guardedAttribute, DirectWriteException::createdWithGuardedAttribute($this, $guardedAttribute, $writers));
             }
         }
     }
 
-    private function bypassGuardedAttributeOrReject(string $guardedAttribute, DirectWriteException $rejection): void
+    private function interlockBypassGuardedAttributeOrReject(string $guardedAttribute, DirectWriteException $rejection): void
     {
-        $this->bypassOrReject($rejection, fn(string $reason) => new BypassedGuardedAttributeWrite(
+        $this->interlockBypassOrReject($rejection, fn(string $reason) => new BypassedGuardedAttributeWrite(
             $reason,
             $this,
             $guardedAttribute,
@@ -686,21 +689,21 @@ trait HasStateMachines
      *
      * @param  Closure(string): (BypassedWrite|BypassedGuardedAttributeWrite)  $bypassedWrite  builds the bypassed write from the bypass reason
      */
-    private function bypassOrReject(DirectWriteException $rejection, Closure $bypassedWrite): void
+    private function interlockBypassOrReject(DirectWriteException $rejection, Closure $bypassedWrite): void
     {
         $reason = Container::getInstance()->make(BypassScope::class)->reason() ?? throw $rejection;
 
         $this->interlockBypassedWrites[] = $bypassedWrite($reason);
     }
 
-    private function runningTransitionWrote(string $stateAttribute): bool
+    private function interlockRunningTransitionWrote(string $stateAttribute): bool
     {
         $running = $this->interlockRunningTransitions[$stateAttribute] ?? null;
 
         return $running !== null && $this->getAttribute($stateAttribute) === $running->transition->targetState;
     }
 
-    private function authenticatedActor(): ?Authenticatable
+    private function interlockAuthenticatedActor(): ?Authenticatable
     {
         return Container::getInstance()->make(AuthFactory::class)->guard()->user();
     }
