@@ -6,6 +6,8 @@ use BackedEnum;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Event;
+use RobertBoes\Interlock\Bypass\BypassScope;
+use RobertBoes\Interlock\Events\BypassedWrite;
 use RobertBoes\Interlock\Events\Transitioned;
 use RobertBoes\Interlock\Exceptions\AmbiguousInitialStateException;
 use RobertBoes\Interlock\Exceptions\DirectWriteException;
@@ -21,6 +23,9 @@ use RobertBoes\Interlock\Graph\ModelGraph;
 trait HasStateMachines
 {
     private ?CompiledTransition $interlockRunningTransition = null;
+
+    /** @var list<BypassedWrite> dispatched once the save that writes them finishes */
+    private array $interlockBypassedWrites = [];
 
     public function transition(string $name): static
     {
@@ -60,6 +65,7 @@ trait HasStateMachines
      */
     protected function getDirtyForUpdate(): array
     {
+        $this->interlockBypassedWrites = [];
         $this->rejectDirectWritesToStateAttributes();
 
         return parent::getDirtyForUpdate();
@@ -72,9 +78,27 @@ trait HasStateMachines
      */
     protected function getAttributesForInsert(): array
     {
+        $this->interlockBypassedWrites = [];
         $this->startStateAttributesInAnInitialState();
 
         return parent::getAttributesForInsert();
+    }
+
+    /**
+     * Called by save() once the write succeeded, whether or not model events are muted.
+     *
+     * @param  array<string, mixed>  $options
+     */
+    protected function finishSave(array $options): void
+    {
+        $bypassedWrites = $this->interlockBypassedWrites;
+        $this->interlockBypassedWrites = [];
+
+        parent::finishSave($options);
+
+        foreach ($bypassedWrites as $bypassedWrite) {
+            Event::dispatch($bypassedWrite);
+        }
     }
 
     private function startStateAttributesInAnInitialState(): void
@@ -85,7 +109,7 @@ trait HasStateMachines
             if ($state === null) {
                 $this->setAttribute($machine->stateAttribute, $this->onlyInitialState($machine));
             } elseif (! $machine->isInitialState($state)) {
-                throw DirectWriteException::notAnInitialState($this, $machine, $state);
+                $this->bypassOrReject($machine->stateAttribute, null, $state, DirectWriteException::notAnInitialState($this, $machine, $state));
             }
         }
     }
@@ -108,8 +132,18 @@ trait HasStateMachines
                 continue;
             }
 
-            throw DirectWriteException::toStateAttribute($this, $stateAttribute, $this->getOriginal($stateAttribute), $this->getAttribute($stateAttribute));
+            $oldState = $this->getOriginal($stateAttribute);
+            $newState = $this->getAttribute($stateAttribute);
+
+            $this->bypassOrReject($stateAttribute, $oldState, $newState, DirectWriteException::toStateAttribute($this, $stateAttribute, $oldState, $newState));
         }
+    }
+
+    private function bypassOrReject(string $stateAttribute, ?BackedEnum $oldState, ?BackedEnum $newState, DirectWriteException $rejection): void
+    {
+        $reason = Container::getInstance()->make(BypassScope::class)->reason() ?? throw $rejection;
+
+        $this->interlockBypassedWrites[] = new BypassedWrite($reason, $this, $stateAttribute, $oldState, $newState);
     }
 
     private function runningTransitionWrote(string $stateAttribute): bool

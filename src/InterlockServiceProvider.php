@@ -3,6 +3,7 @@
 namespace RobertBoes\Interlock;
 
 use Illuminate\Contracts\Foundation\Application;
+use RobertBoes\Interlock\Bypass\BypassScope;
 use RobertBoes\Interlock\Commands\CacheCommand;
 use RobertBoes\Interlock\Commands\ClearCommand;
 use RobertBoes\Interlock\Discovery\ModelRegistry;
@@ -23,6 +24,7 @@ class InterlockServiceProvider extends PackageServiceProvider
     public function packageRegistered(): void
     {
         $this->app->singleton(GraphRepository::class);
+        $this->app->singleton(BypassScope::class);
         $this->app->singleton(ModelRegistry::class, fn(Application $app) => new ModelRegistry(
             $app->make('config'),
             $app->bootstrapPath('cache/interlock.php'),
