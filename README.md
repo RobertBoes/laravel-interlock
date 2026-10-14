@@ -1,13 +1,12 @@
 # Laravel Interlock
 
-Interlock keeps the state of an Eloquent model consistent with a transition graph you declare. On a railway, the interlocking stops a signaller from setting conflicting routes, whichever lever they pull. Interlock does the same for model state:
+Interlock keeps an Eloquent model's state consistent with a transition graph you declare. The name comes from railways: an interlocking stops a signaller from setting conflicting routes, whichever lever they pull. Interlock does the same for model state. A model can't reach a state its machine doesn't allow, and two conflicting transitions can't both succeed.
 
-- **A model cannot reach a state its state machine does not allow.** State changes only through named transitions (`ship`, `cancel`, `publish`). Assigning the attribute and saving, `update([...])`, `create([...])` in a non-initial state and `Order::where(...)->update([...])` all throw.
-- **Two conflicting transitions cannot both succeed.** Every transition is written with compare-and-swap, so a transition from a state that has changed since the model was loaded fails instead of overwriting it.
+State only changes through named transitions such as `ship`, `cancel` or `publish`. Assigning the attribute and saving throws. So do `update([...])`, `create([...])` in a state that isn't initial, and `Order::where(...)->update([...])`. Every transition writes with compare-and-swap, so when the state has changed since the model was loaded, the transition fails instead of overwriting it.
 
-Around that core, transitions can take typed input, check guards and authorisation, write related rows and run follow-up work after commit, all atomically. Triggers apply a transition by themselves once a condition holds, opt-in history records who changed what and why, and the machines can be exported as Mermaid or XState for docs and the frontend.
+Transitions can also take typed input, check guards and authorisation, and write related rows in the same transaction, with follow-up work held back until it commits. Triggers apply a transition on their own once a condition holds. History, if you turn it on, records who changed what and why. You can export the machines to Mermaid for your docs, or to XState for the frontend.
 
-Enforcement covers everything that goes through Eloquent. It stops at the query builder and raw SQL; see [Where enforcement stops](#where-enforcement-stops).
+Enforcement covers everything that goes through Eloquent. The query builder and raw SQL are outside it; see [Where enforcement stops](#where-enforcement-stops).
 
 ## Contents
 
@@ -52,7 +51,7 @@ The migration uses `morphs()` for the model and the actor. Change them to `uuidM
 
 ## Defining a state machine
 
-A state machine belongs to one **state attribute** of a model, such as `status`. Its **states** are the cases of a backed enum, and its **transitions** are named changes from one or more **from-states** to exactly one **target state**.
+A state machine belongs to one state attribute of a model, such as `status`. Its states are the cases of a backed enum. Its transitions are named changes from one or more from-states to exactly one target state.
 
 Start with the enum. Labels, colours and other behaviour can live on it as usual:
 
@@ -111,15 +110,15 @@ class Order extends Model
 }
 ```
 
-The machine is compiled and checked the first time the model is used. A transition without from-states or a target state, a target state that is a parent state, or two transitions with the same name throw an `InvalidDefinitionException` that says what to fix. Discovery, the triggers and the exports throw one too for a model that declares `#[UseStateMachine]` but forgets the `HasStateMachines` trait, since nothing would enforce its machines.
+The machine is compiled and checked the first time the model is used. A mistake in it, such as a transition without from-states or a target state, a parent state as a target, or two transitions with the same name, throws an `InvalidDefinitionException` that says what to fix. Discovery, triggers and exports also throw one for a model that declares `#[UseStateMachine]` but forgot the `HasStateMachines` trait, because nothing would enforce its machines.
 
 ### Initial and final states
 
-**Initial states** are the states a model may be created in. When a machine has exactly one, Interlock fills it in on create, so `Order::create()` starts the order in `pending`. When it has several, the model has to be created with one of them; creating it without a state throws `AmbiguousInitialStateException`. Creating it in a state that is not initial throws `DirectWriteException`.
+Initial states are the states a model may be created in. When a machine has exactly one, Interlock fills it in on create, so `Order::create()` starts the order in `pending`. When it has several, the model has to be created with one of them; creating it without a state throws `AmbiguousInitialStateException`. Creating it in a state that is not initial throws `DirectWriteException`.
 
 Initial states are declared on the machine rather than the enum, because one enum may back several machines.
 
-**Final states** are the states a model is meant to end in. They have no outgoing transitions. Declaring them lets the [soundness check](#checking-machines-are-sound) tell an intended end from a dead end.
+Final states are where a model is meant to end up, so they have no outgoing transitions. Declaring them lets the [soundness check](#checking-machines-are-sound) tell an intended end from a dead end.
 
 ### Fluent and class-based transitions
 
@@ -176,7 +175,7 @@ Both steps are optional. The transition's name comes from its class name in snak
 
 ### Nested states
 
-A **parent state** groups child states in the same column, such as `preparing` grouping `packing` and `label_created`. Mark each child with `#[ParentState]`:
+A parent state groups child states in the same column, such as `preparing` grouping `packing` and `label_created`. Mark each child with `#[ParentState]`:
 
 ```php
 use RobertBoes\Interlock\Attributes\ParentState;
@@ -199,7 +198,7 @@ A model is never in a parent state itself, only in one of its children, so a par
 
 ### Guarded attributes
 
-A **guarded attribute** is an attribute other than the state attribute that only named transitions may write, such as a `tracking_code` that only `ship` may set. Declare it on the machine, by transition name or class:
+A guarded attribute is one that only named transitions may write, such as a `tracking_code` that only `ship` may set. Declare it on the machine, by transition name or class:
 
 ```php
 use RobertBoes\Interlock\Attributes\GuardedAttribute;
@@ -239,7 +238,12 @@ $post->fill($request->validated())->transition('publish');
 
 History and events still record only what the transition itself wrote. Eloquent's own model events (`saving`, `updating`, `updated`, `saved`) and timestamps fire as usual, so observers and search indexing keep working. A declared self-transition, from a state to itself, is applied like any other.
 
-Applying a transition the model doesn't have throws `UnknownTransitionException`. Applying one whose from-states don't include the current state throws `IllegalTransitionException`. Applying a class-based transition that takes input by name throws `MissingTransitionInputException`. When a `saving` or `updating` listener cancels the save, `transition()` writes nothing and throws `CancelledTransitionException`; a `save()` that writes staged transitions returns `false` instead, as Eloquent's does.
+When a transition can't be applied, you get an exception that says why:
+
+- `UnknownTransitionException`: the model has no transition with that name.
+- `IllegalTransitionException`: the current state isn't one of its from-states.
+- `MissingTransitionInputException`: you applied a class-based transition that takes input by name, instead of passing an instance.
+- `CancelledTransitionException`: a `saving` or `updating` listener cancelled the save, so nothing was written. A `save()` that writes [staged transitions](#staged-transitions) returns `false` instead, like Eloquent's.
 
 ### Stale state
 
@@ -265,7 +269,7 @@ $order->stageTransition(new Ship($trackingCode))
     ->save();
 ```
 
-Staging checks only the graph, and fails straight away when the current state is not a from-state. The state attribute reads the target state from then on. Authorisation, guards, the `apply` step and the compare-and-swap write happen on `save()`, against the data as it will be stored. Each machine holds one staged transition at a time; staging a second on the same machine throws. `discardStagedTransitions()` drops them and puts the state attributes back, and so does `refresh()`.
+Staging only checks the graph, so it fails straight away when the current state isn't a from-state, and from then on the state attribute reads the target state. Everything else waits for `save()`: authorisation, guards, the `apply` step and the compare-and-swap write, all checked against the data as it will be stored. Each machine holds one staged transition at a time; staging a second on the same machine throws. `discardStagedTransitions()` drops them and puts the state attributes back, and so does `refresh()`.
 
 ## Guards, authorisation and actors
 
@@ -273,7 +277,7 @@ A guard says "not now", authorisation says "not you". They throw different excep
 
 ### Guards
 
-A **guard** is a condition on the model that must hold for the transition to apply, such as "stock is available". It sees the model's unsaved changes, so it checks the model as it will be stored. Fluent transitions take a name, a check and a message:
+A guard is a condition on the model that must hold for the transition to apply, such as "stock is available". It sees the model's unsaved changes, so it checks the model as it will be stored. Fluent transitions take a name, a check and a message:
 
 ```php
 $this->transition('publish')
@@ -318,7 +322,7 @@ A denied actor gets `UnauthorisedTransitionException`. It extends Laravel's `Aut
 
 ### Actors
 
-The **actor** is the user a transition is applied on behalf of. It defaults to the authenticated user. Jobs and commands can pass one explicitly, or pass `null` to act on behalf of no one:
+The actor is the user a transition is applied on behalf of. It defaults to the authenticated user. Jobs and commands can pass one explicitly, or pass `null` to act on behalf of no one:
 
 ```php
 $expense->transition('approve', $manager);
@@ -375,7 +379,7 @@ Order::whereCanTransition('ship')->get();
 
 ## Enforcement
 
-A **direct write** is any change to a state attribute or guarded attribute that does not happen through a transition. Interlock rejects it with `DirectWriteException`, and the write is not made. That covers:
+A direct write is any change to a state attribute or guarded attribute that doesn't go through a transition. Interlock rejects it with `DirectWriteException` and writes nothing. That covers:
 
 - assigning the attribute and calling `save()`, or passing it to `update()` or `fill()` and saving;
 - `create()` and `insert` in a state that is not an initial state, or with a guarded attribute set;
@@ -444,11 +448,11 @@ Interlock::bypass('Import orders from the old shop', function () use ($rows) {
 
 The reason is required, so the audit trail says why and not just that something changed. The bypass covers model saves and mass writes through the Eloquent builder, and it ends when the callback returns or throws, so it can never stay on by accident. `bypass()` returns whatever the callback returns.
 
-Each bypassed write to a state attribute dispatches a `BypassedWrite` event with the reason, and each bypassed write to a guarded attribute a `BypassedGuardedAttributeWrite` event with the reason and the attribute's old and new value. Both are recorded in [history](#history) when the machine they belong to records it. A bypassed mass write dispatches `BypassedMassWrite` instead; it names the model class and the attributes written, but not the rows, because the query decides those, and so it is not recorded in history.
+A bypassed write to a state attribute dispatches `BypassedWrite` with the reason. A bypassed write to a guarded attribute dispatches `BypassedGuardedAttributeWrite`, which also carries the attribute's old and new value. If the machine records [history](#history), both end up there. A bypassed mass write dispatches `BypassedMassWrite` instead. It names the model class and the attributes written, but not the rows (the query picks those), so it isn't recorded in history.
 
 ## Triggers
 
-A **trigger** applies a transition by itself once a condition holds, such as "`publish_at` has passed". Declare it on the transition as a constraint on the model's query:
+A trigger applies a transition on its own once a condition holds, such as "`publish_at` has passed". Declare it on the transition as a constraint on the model's query:
 
 ```php
 use Illuminate\Database\Eloquent\Builder;
