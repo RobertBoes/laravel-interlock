@@ -1,0 +1,48 @@
+{
+    "id": "PostStatusMachine",
+    "initial": "draft",
+    "states": {
+        "draft": {
+            "on": {
+                "submit": {
+                    "target": "ready"
+                }
+            }
+        },
+        "ready": {
+            "on": {
+                "schedule": {
+                    "target": "scheduled"
+                },
+                "publish": {
+                    "target": "published",
+                    "meta": {
+                        "trigger": true
+                    }
+                },
+                "retract": {
+                    "target": "draft"
+                }
+            }
+        },
+        "scheduled": {
+            "on": {
+                "publish": {
+                    "target": "published",
+                    "meta": {
+                        "trigger": true
+                    }
+                },
+                "retract": {
+                    "target": "draft"
+                },
+                "reschedule": {
+                    "target": "scheduled"
+                }
+            }
+        },
+        "published": {
+            "type": "final"
+        }
+    }
+}

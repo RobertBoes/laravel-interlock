@@ -1,0 +1,58 @@
+export const importedPostStatusMachine = {
+    "id": "ImportedPostStatusMachine",
+    "initial": "draft",
+    "states": {
+        "draft": {
+            "on": {
+                "submit": {
+                    "target": "ready"
+                }
+            }
+        },
+        "ready": {
+            "on": {
+                "schedule": {
+                    "target": "scheduled"
+                },
+                "publish": {
+                    "target": "published",
+                    "meta": {
+                        "trigger": true
+                    }
+                },
+                "retract": {
+                    "target": "draft"
+                }
+            }
+        },
+        "scheduled": {
+            "on": {
+                "publish": {
+                    "target": "published",
+                    "meta": {
+                        "trigger": true
+                    }
+                },
+                "retract": {
+                    "target": "draft"
+                },
+                "reschedule": {
+                    "target": "scheduled"
+                }
+            }
+        },
+        "published": {
+            "type": "final"
+        }
+    },
+    "meta": {
+        "initialStates": [
+            "draft",
+            "ready"
+        ]
+    }
+} as const;
+
+export type ImportedPostStatusMachineState = "draft" | "ready" | "scheduled" | "published";
+
+export type ImportedPostStatusMachineEvent = { type: "submit" } | { type: "schedule" } | { type: "publish" } | { type: "retract" } | { type: "reschedule" };

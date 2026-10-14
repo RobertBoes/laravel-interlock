@@ -1,0 +1,30 @@
+{
+    "id": "PaymentStatusMachine",
+    "initial": "unpaid",
+    "states": {
+        "unpaid": {
+            "on": {
+                "authorise_payment": {
+                    "target": "authorised"
+                }
+            }
+        },
+        "authorised": {
+            "on": {
+                "capture_payment": {
+                    "target": "paid"
+                }
+            }
+        },
+        "paid": {
+            "on": {
+                "refund": {
+                    "target": "refunded"
+                }
+            }
+        },
+        "refunded": {
+            "type": "final"
+        }
+    }
+}

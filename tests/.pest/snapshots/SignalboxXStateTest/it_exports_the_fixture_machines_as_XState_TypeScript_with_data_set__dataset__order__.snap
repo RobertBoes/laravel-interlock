@@ -1,0 +1,63 @@
+export const orderStatusMachine = {
+    "id": "OrderStatusMachine",
+    "initial": "pending",
+    "states": {
+        "pending": {
+            "on": {
+                "prepare": {
+                    "target": "#OrderStatusMachine.preparing.packing"
+                },
+                "cancel": {
+                    "target": "cancelled",
+                    "meta": {
+                        "trigger": true
+                    }
+                }
+            }
+        },
+        "preparing": {
+            "initial": "packing",
+            "on": {
+                "cancel": {
+                    "target": "cancelled",
+                    "meta": {
+                        "trigger": true
+                    }
+                }
+            },
+            "states": {
+                "packing": {
+                    "on": {
+                        "create_label": {
+                            "target": "label_created"
+                        }
+                    }
+                },
+                "label_created": {
+                    "on": {
+                        "ship": {
+                            "target": "#OrderStatusMachine.shipped"
+                        }
+                    }
+                }
+            }
+        },
+        "shipped": {
+            "on": {
+                "deliver": {
+                    "target": "delivered"
+                }
+            }
+        },
+        "delivered": {
+            "type": "final"
+        },
+        "cancelled": {
+            "type": "final"
+        }
+    }
+} as const;
+
+export type OrderStatusMachineState = "pending" | "packing" | "label_created" | "shipped" | "delivered" | "cancelled";
+
+export type OrderStatusMachineEvent = { type: "prepare" } | { type: "create_label" } | { type: "ship" } | { type: "deliver" } | { type: "cancel" };

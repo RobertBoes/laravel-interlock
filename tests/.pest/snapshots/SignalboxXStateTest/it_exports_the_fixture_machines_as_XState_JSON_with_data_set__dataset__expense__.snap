@@ -1,0 +1,46 @@
+{
+    "id": "ExpenseStatusMachine",
+    "initial": "draft",
+    "states": {
+        "draft": {
+            "on": {
+                "submit": {
+                    "target": "submitted",
+                    "guard": "has_amount",
+                    "meta": {
+                        "trigger": true
+                    }
+                }
+            }
+        },
+        "submitted": {
+            "on": {
+                "approve": {
+                    "target": "approved",
+                    "guard": "within_approval_limit"
+                },
+                "reject": {
+                    "target": "rejected",
+                    "guard": "has_rejection_reason"
+                },
+                "withdraw": {
+                    "target": "draft"
+                }
+            }
+        },
+        "approved": {
+            "on": {
+                "pay": {
+                    "target": "paid",
+                    "guard": "has_reference"
+                }
+            }
+        },
+        "rejected": {
+            "type": "final"
+        },
+        "paid": {
+            "type": "final"
+        }
+    }
+}

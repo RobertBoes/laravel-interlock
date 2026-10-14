@@ -1,0 +1,30 @@
+export const financeApprovalMachine = {
+    "id": "FinanceApprovalMachine",
+    "initial": "pending",
+    "states": {
+        "pending": {
+            "on": {
+                "approve_budget": {
+                    "target": "approved"
+                },
+                "reject_budget": {
+                    "target": "rejected"
+                }
+            }
+        },
+        "approved": {
+            "type": "final"
+        },
+        "rejected": {
+            "on": {
+                "reopen_budget": {
+                    "target": "pending"
+                }
+            }
+        }
+    }
+} as const;
+
+export type FinanceApprovalMachineState = "pending" | "approved" | "rejected";
+
+export type FinanceApprovalMachineEvent = { type: "approve_budget" } | { type: "reject_budget" } | { type: "reopen_budget" };

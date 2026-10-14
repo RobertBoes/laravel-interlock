@@ -54,6 +54,20 @@ final readonly class CompiledTransition
     }
 
     /**
+     * The names of the transition's guards, read without building a transition class, so without its input.
+     *
+     * @return list<string>
+     */
+    public function guardNames(): array
+    {
+        $steps = $this->class === null
+            ? $this->fluentSteps
+            : TransitionSteps::of(new ReflectionClass($this->class)->newInstanceWithoutConstructor());
+
+        return $steps->guardNames();
+    }
+
+    /**
      * The steps that can be checked before the transition's input is known. A transition class that takes input is
      * built without its constructor, so only its authorisation is checked; its guards may read the input, and run
      * once it is applied with it.

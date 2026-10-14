@@ -64,6 +64,14 @@ final readonly class TransitionSteps
         );
     }
 
+    /**
+     * @return list<string>
+     */
+    public function guardNames(): array
+    {
+        return array_map(fn(CompiledGuard $guard) => $guard->name, $this->guards);
+    }
+
     public function withoutGuards(): self
     {
         return new self($this->authorisation, [], $this->apply, $this->afterCommit);

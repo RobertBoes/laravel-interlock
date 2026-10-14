@@ -1,0 +1,36 @@
+export const claimStatusMachine = {
+    "id": "ClaimStatusMachine",
+    "initial": "0",
+    "states": {
+        "0": {
+            "on": {
+                "assess": {
+                    "target": "1"
+                }
+            }
+        },
+        "1": {
+            "on": {
+                "settle": {
+                    "target": "2",
+                    "guard": {
+                        "type": "and",
+                        "params": {
+                            "guards": [
+                                "has_assessment",
+                                "within_policy_limit"
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "2": {
+            "type": "final"
+        }
+    }
+} as const;
+
+export type ClaimStatusMachineState = "0" | "1" | "2";
+
+export type ClaimStatusMachineEvent = { type: "assess" } | { type: "settle" };

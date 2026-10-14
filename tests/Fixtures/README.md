@@ -9,6 +9,7 @@ The fixture domains from the spec (`.scratch/interlock-v1/spec.md`, "Testing Dec
 - `CustomBuilders/`: orders with an app's own Eloquent builder, set through `newEloquentBuilder()` or the builder attribute, with and without Interlock's builder trait. They share the `orders` table.
 - `InvalidDefinitions/`: models whose machines are declared wrongly, for the errors raised when the graph is compiled. They share the `posts` and `orders` tables.
 - `UnsoundMachines/`: models whose machines compile but are deliberately broken (a dead end, an unreachable state, a final state with an outgoing transition, duplicate transition names), for the soundness check. Nothing reads their table.
+- `Exports/`: a claim backed by an integer enum, whose `settle` transition has two guards, for the shapes the XState export has to encode. Nothing reads its table. Namespace `RobertBoes\Interlock\Tests\Fixtures\Exports`.
 - `Discovery/`: models for discovery and explicit registration, kept outside the paths the discovery tests scan. They share the `posts` and `orders` tables.
 - `database/migrations/`: the fixture tables, loaded by `TestCase`, plus the package's own history migration.
 

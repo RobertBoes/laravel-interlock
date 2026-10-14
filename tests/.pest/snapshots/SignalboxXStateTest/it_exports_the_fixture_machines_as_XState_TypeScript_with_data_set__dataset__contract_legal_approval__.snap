@@ -1,0 +1,26 @@
+export const legalApprovalMachine = {
+    "id": "LegalApprovalMachine",
+    "initial": "pending",
+    "states": {
+        "pending": {
+            "on": {
+                "approve_legally": {
+                    "target": "approved"
+                },
+                "reject_legally": {
+                    "target": "rejected"
+                }
+            }
+        },
+        "approved": {
+            "type": "final"
+        },
+        "rejected": {
+            "type": "final"
+        }
+    }
+} as const;
+
+export type LegalApprovalMachineState = "pending" | "approved" | "rejected";
+
+export type LegalApprovalMachineEvent = { type: "approve_legally" } | { type: "reject_legally" };

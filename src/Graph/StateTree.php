@@ -76,6 +76,14 @@ final readonly class StateTree
     }
 
     /**
+     * The parent state the state is nested directly within, or null for a top-level state.
+     */
+    public function parentOf(BackedEnum $state): ?BackedEnum
+    {
+        return $this->parents[$state->value] ?? null;
+    }
+
+    /**
      * Whether the state is the given state, or nested within it at any depth.
      */
     public function isWithin(BackedEnum $state, BackedEnum $ancestor): bool

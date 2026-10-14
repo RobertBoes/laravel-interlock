@@ -64,6 +64,6 @@ it('fails for a machine that no registered model uses', function () {
 
 it('fails for a format it cannot export', function () {
     $this->artisan('interlock:signalbox', ['--format' => 'graphviz'])
-        ->expectsOutputToContain('Interlock cannot export the format [graphviz]. The formats are: mermaid.')
+        ->expectsOutputToContain('Interlock cannot export the format [graphviz]. The formats are: mermaid, xstate, xstate-ts.')
         ->assertFailed();
 });

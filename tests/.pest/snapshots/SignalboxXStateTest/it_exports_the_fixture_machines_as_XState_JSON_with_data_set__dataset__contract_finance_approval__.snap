@@ -1,0 +1,26 @@
+{
+    "id": "FinanceApprovalMachine",
+    "initial": "pending",
+    "states": {
+        "pending": {
+            "on": {
+                "approve_budget": {
+                    "target": "approved"
+                },
+                "reject_budget": {
+                    "target": "rejected"
+                }
+            }
+        },
+        "approved": {
+            "type": "final"
+        },
+        "rejected": {
+            "on": {
+                "reopen_budget": {
+                    "target": "pending"
+                }
+            }
+        }
+    }
+}

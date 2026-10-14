@@ -1,0 +1,22 @@
+{
+    "id": "LegalApprovalMachine",
+    "initial": "pending",
+    "states": {
+        "pending": {
+            "on": {
+                "approve_legally": {
+                    "target": "approved"
+                },
+                "reject_legally": {
+                    "target": "rejected"
+                }
+            }
+        },
+        "approved": {
+            "type": "final"
+        },
+        "rejected": {
+            "type": "final"
+        }
+    }
+}
