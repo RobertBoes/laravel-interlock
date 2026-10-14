@@ -6,6 +6,7 @@ use BackedEnum;
 use Illuminate\Database\Eloquent\Model;
 use LogicException;
 use RobertBoes\Interlock\Graph\CompiledMachine;
+use RobertBoes\Interlock\HasStateMachines;
 use RobertBoes\Interlock\StateMachine;
 use RobertBoes\Interlock\Transition;
 
@@ -276,6 +277,18 @@ final class InvalidDefinitionException extends LogicException implements Interlo
         return new self(sprintf(
             '%s is registered with Interlock, but has no #[UseStateMachine] attribute.',
             $model,
+        ));
+    }
+
+    /**
+     * @param  class-string<Model>  $model
+     */
+    public static function modelWithoutHasStateMachines(string $model): self
+    {
+        return new self(sprintf(
+            '%s declares #[UseStateMachine], but does not use the %s trait, so none of its machines is enforced and its triggers cannot run. Add `use HasStateMachines;` to the model.',
+            $model,
+            HasStateMachines::class,
         ));
     }
 }

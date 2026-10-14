@@ -111,7 +111,7 @@ class Order extends Model
 }
 ```
 
-The machine is compiled and checked the first time the model is used. A transition without from-states or a target state, a target state that is a parent state, or two transitions with the same name throw an `InvalidDefinitionException` that says what to fix.
+The machine is compiled and checked the first time the model is used. A transition without from-states or a target state, a target state that is a parent state, or two transitions with the same name throw an `InvalidDefinitionException` that says what to fix. Discovery, the triggers and the exports throw one too for a model that declares `#[UseStateMachine]` but forgets the `HasStateMachines` trait, since nothing would enforce its machines.
 
 ### Initial and final states
 

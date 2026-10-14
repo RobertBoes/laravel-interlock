@@ -7,6 +7,7 @@ use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use RobertBoes\Interlock\Exceptions\FailedGuardException;
+use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Exceptions\StaleStateException;
 use RobertBoes\Interlock\Scopes\CanTransition;
 use Throwable;
@@ -37,9 +38,9 @@ trait AppliesTrigger
      */
     private function apply(Model $candidate, ExceptionHandler $exceptions): void
     {
-        // Every interlocked model uses HasStateMachines.
+        // The registry only lists models that use HasStateMachines.
         if (! method_exists($candidate, 'interlockApplyTrigger')) {
-            return;
+            throw InvalidDefinitionException::modelWithoutHasStateMachines($candidate::class);
         }
 
         try {

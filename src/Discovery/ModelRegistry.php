@@ -9,6 +9,7 @@ use RecursiveIteratorIterator;
 use ReflectionClass;
 use RobertBoes\Interlock\Attributes\UseStateMachine;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
+use RobertBoes\Interlock\HasStateMachines;
 use RobertBoes\Interlock\StateMachine;
 use SplFileInfo;
 
@@ -153,6 +154,8 @@ final class ModelRegistry
     }
 
     /**
+     * A model that declares machines must use HasStateMachines, or nothing enforces them and its triggers never run.
+     *
      * @param  ReflectionClass<Model>  $model
      * @return array<string, class-string<StateMachine>>
      */
@@ -163,6 +166,10 @@ final class ModelRegistry
         foreach ($model->getAttributes(UseStateMachine::class) as $attribute) {
             $declaration = $attribute->newInstance();
             $machines[$declaration->attribute] = $declaration->machine;
+        }
+
+        if ($machines !== [] && ! in_array(HasStateMachines::class, class_uses_recursive($model->getName()), true)) {
+            throw InvalidDefinitionException::modelWithoutHasStateMachines($model->getName());
         }
 
         return $machines;

@@ -19,3 +19,5 @@ The fixture domains from the spec (`.scratch/interlock-v1/spec.md`, "Testing Dec
 Triggers: the post's `publish` once `publish_at` has passed, the expense's guarded `submit` 30 days after the expense was created, and the order's class-based `cancel` for orders still unpaid after 3 days, which fans out. The feed post's `publish` fans out too.
 
 History is on for the post's `status` machine, the order's `status` machine and both contract machines. The order's `payment_status` machine has it off.
+
+One model lives outside this directory: `tests/MisdeclaredModels/PostWithoutHasStateMachines` declares a machine without using `HasStateMachines`, and discovery fails on any path that holds it, so it is kept out of the paths the discovery tests scan recursively.
