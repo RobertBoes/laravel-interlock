@@ -7,6 +7,7 @@ use RobertBoes\Interlock\Attributes\UseStateMachine;
 use RobertBoes\Interlock\HasStateMachines;
 
 #[UseStateMachine('status', OrderStatusMachine::class)]
+#[UseStateMachine('payment_status', PaymentStatusMachine::class)]
 class Order extends Model
 {
     use HasStateMachines;
@@ -15,6 +16,9 @@ class Order extends Model
 
     protected function casts(): array
     {
-        return ['status' => OrderStatus::class];
+        return [
+            'status' => OrderStatus::class,
+            'payment_status' => PaymentStatus::class,
+        ];
     }
 }

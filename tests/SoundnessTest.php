@@ -52,7 +52,7 @@ it('fails for two transitions with the same name', function () {
 
     expect(fn() => Interlock::assertMachinesAreSound())->toThrow(
         AssertionFailedError::class,
-        '- ' . TaskWithDuplicateTransitionNames::class . ' has two transitions named [start], in ' . MachineWithDuplicateTransitionNames::class . '. Transition names are unique per model, so rename one of them.',
+        '- Transition [start] is declared twice in ' . MachineWithDuplicateTransitionNames::class . '. Transition names are unique per model, so rename one of them.',
     );
 });
 
@@ -65,7 +65,7 @@ it('reports every problem in every registered machine at once', function () {
         ->toStartWith('Interlock found 3 problems in the state machines:')
         ->toContain(MachineWithDeadEnd::class . ' on ' . TaskWithDeadEnd::class . ' [status]: state [dropped] has no way out.')
         ->toContain(MachineWithUnreachableState::class . ' on ' . TaskWithUnreachableState::class . ' [status]: state [dropped] is unreachable.')
-        ->toContain(TaskWithDuplicateTransitionNames::class . ' has two transitions named [start]');
+        ->toContain('Transition [start] is declared twice in ' . MachineWithDuplicateTransitionNames::class);
 });
 
 it('checks only the given models when they are named', function () {

@@ -43,7 +43,7 @@ it('rejects a final state of an enum the state attribute is not cast to', functi
 it('rejects two transitions with the same name', function () {
     expect(fn() => (new TaskWithDuplicateTransitionNames())->transition('finish'))->toThrow(
         InvalidDefinitionException::class,
-        TaskWithDuplicateTransitionNames::class . ' has two transitions named [start], in ' . MachineWithDuplicateTransitionNames::class . '. Transition names are unique per model, so rename one of them.',
+        'Transition [start] is declared twice in ' . MachineWithDuplicateTransitionNames::class . '. Transition names are unique per model, so rename one of them.',
     );
 });
 

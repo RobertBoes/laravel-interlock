@@ -10,6 +10,8 @@ return new class extends Migration {
         Schema::create('orders', function (Blueprint $table) {
             $table->id();
             $table->string('status');
+            // Nullable because the InvalidDefinitions and Discovery models share this table without a payment machine.
+            $table->string('payment_status')->nullable();
             $table->timestamps();
         });
     }

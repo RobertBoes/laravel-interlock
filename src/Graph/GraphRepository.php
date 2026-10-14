@@ -42,16 +42,16 @@ final class GraphRepository
 
         foreach ((new ReflectionClass($model))->getAttributes(UseStateMachine::class) as $attribute) {
             $declaration = $attribute->newInstance();
+
+            if (isset($machines[$declaration->attribute])) {
+                throw InvalidDefinitionException::twoMachinesForOneStateAttribute($model, $declaration->attribute, $machines[$declaration->attribute]->machine, $declaration->machine);
+            }
+
             $machine = $machines[$declaration->attribute] = $this->compileMachine($model, $declaration);
 
             foreach ((new $declaration->machine())->transitions() as $definition) {
                 if (isset($transitions[$definition->name])) {
-                    throw InvalidDefinitionException::duplicateTransitionName(
-                        $model,
-                        $definition->name,
-                        $machines[$transitions[$definition->name]->stateAttribute]->machine,
-                        $machine->machine,
-                    );
+                    throw InvalidDefinitionException::duplicateTransitionName($model, $definition->name, $machines[$transitions[$definition->name]->stateAttribute], $machine);
                 }
 
                 $transitions[$definition->name] = $this->compileTransition($model, $machine, $definition);

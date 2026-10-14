@@ -5,7 +5,7 @@ namespace RobertBoes\Interlock\Attributes;
 use Attribute;
 use RobertBoes\Interlock\StateMachine;
 
-#[Attribute(Attribute::TARGET_CLASS)]
+#[Attribute(Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE)]
 final readonly class UseStateMachine
 {
     /**

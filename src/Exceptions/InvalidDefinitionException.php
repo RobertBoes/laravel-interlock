@@ -5,6 +5,7 @@ namespace RobertBoes\Interlock\Exceptions;
 use BackedEnum;
 use Illuminate\Database\Eloquent\Model;
 use LogicException;
+use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\StateMachine;
 
 final class InvalidDefinitionException extends LogicException implements InterlockException
@@ -45,20 +46,6 @@ final class InvalidDefinitionException extends LogicException implements Interlo
             $machine,
             $state->value,
             implode(', ', array_map(fn(BackedEnum $leafState) => $leafState->value, $leafStates)),
-        ));
-    }
-
-    /**
-     * @param  class-string<StateMachine>  $firstMachine
-     * @param  class-string<StateMachine>  $secondMachine
-     */
-    public static function duplicateTransitionName(Model $model, string $transition, string $firstMachine, string $secondMachine): self
-    {
-        return new self(sprintf(
-            '%s has two transitions named [%s], in %s. Transition names are unique per model, so rename one of them.',
-            $model::class,
-            $transition,
-            implode(' and ', array_unique([$firstMachine, $secondMachine])),
         ));
     }
 
@@ -158,6 +145,41 @@ final class InvalidDefinitionException extends LogicException implements Interlo
             $state::class,
             $state->name,
             implode(', ', array_map(fn(BackedEnum $pathState) => $pathState->value, $path)),
+        ));
+    }
+
+    public static function duplicateTransitionName(Model $model, string $transition, CompiledMachine $first, CompiledMachine $second): self
+    {
+        $declaredBy = $first->stateAttribute === $second->stateAttribute
+            ? sprintf('twice in %s', $first->machine)
+            : sprintf(
+                'by both %s for [%s] and %s for [%s] on %s',
+                $first->machine,
+                $first->stateAttribute,
+                $second->machine,
+                $second->stateAttribute,
+                $model::class,
+            );
+
+        return new self(sprintf(
+            'Transition [%s] is declared %s. Transition names are unique per model, so rename one of them.',
+            $transition,
+            $declaredBy,
+        ));
+    }
+
+    /**
+     * @param  class-string<StateMachine>  $firstMachine
+     * @param  class-string<StateMachine>  $secondMachine
+     */
+    public static function twoMachinesForOneStateAttribute(Model $model, string $stateAttribute, string $firstMachine, string $secondMachine): self
+    {
+        return new self(sprintf(
+            '%s declares both %s and %s for [%s]. A state attribute has one state machine.',
+            $model::class,
+            $firstMachine,
+            $secondMachine,
+            $stateAttribute,
         ));
     }
 
