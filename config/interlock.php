@@ -1,5 +1,7 @@
 <?php
 
+use RobertBoes\Interlock\History\DatabaseHistoryRecorder;
+
 return [
 
     'discovery' => [
@@ -14,6 +16,14 @@ return [
     // Interlocked models outside the scanned paths, such as models from packages or modules.
     // A service provider can add to these with Interlock::registerModels().
     'models' => [],
+
+    'history' => [
+
+        // The class that writes history for the machines that record it, an implementation of
+        // RobertBoes\Interlock\History\HistoryRecorder. It is called inside the write's transaction.
+        'recorder' => DatabaseHistoryRecorder::class,
+
+    ],
 
     'triggers' => [
 

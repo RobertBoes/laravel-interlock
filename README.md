@@ -569,7 +569,7 @@ $order->history('status')->oldest('id')->get();
 
 Each entry is a `RobertBoes\Interlock\History\HistoryEntry` model, with `model` and `actor` relationships.
 
-To write history somewhere else, bind your own implementation of the recorder in a service provider. It is called inside the write's transaction, so throwing rolls the write back:
+To write history somewhere else, implement `RobertBoes\Interlock\History\HistoryRecorder` and name your class in `interlock.history.recorder` (default `DatabaseHistoryRecorder`). It is resolved from the container, and called inside the write's transaction, so throwing rolls the write back. Binding the interface in a service provider works too, and wins over the config:
 
 ```php
 use RobertBoes\Interlock\History\HistoryRecorder;

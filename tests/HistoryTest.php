@@ -1,5 +1,7 @@
 <?php
 
+use Illuminate\Support\Arr;
+use RobertBoes\Interlock\History\DatabaseHistoryRecorder;
 use RobertBoes\Interlock\History\HistoryRecord;
 use RobertBoes\Interlock\History\HistoryRecorder;
 use RobertBoes\Interlock\Interlock;
@@ -8,6 +10,7 @@ use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Contracts\Contract;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Employee;
+use RobertBoes\Interlock\Tests\Fixtures\History\InMemoryHistoryRecorder;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Order;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Ship;
@@ -67,6 +70,23 @@ it('leaves no entry when the transition fails', function () {
     rescue(fn() => $second->transition('retract'), report: false);
 
     expect($post->history()->oldest('id')->pluck('transition_name')->all())->toBe(['submit', 'publish']);
+});
+
+it('records history through the recorder the config names', function () {
+    config(['interlock.history.recorder' => InMemoryHistoryRecorder::class]);
+    $order = Order::create();
+
+    $order->transition('prepare');
+
+    expect(app(HistoryRecorder::class))->toBeInstanceOf(InMemoryHistoryRecorder::class)
+        ->records->toHaveCount(1)
+        ->and($order->history()->count())->toBe(0);
+});
+
+it('records history in the database when a published config predates the recorder key', function () {
+    config(['interlock' => Arr::except(config('interlock'), 'history')]);
+
+    expect(app(HistoryRecorder::class))->toBeInstanceOf(DatabaseHistoryRecorder::class);
 });
 
 it('records history in the transition\'s transaction, so a failing recorder writes nothing', function () {
