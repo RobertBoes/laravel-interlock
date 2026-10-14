@@ -39,12 +39,6 @@ final readonly class CompiledMachine
      */
     public function isFinalState(BackedEnum $state): bool
     {
-        foreach ($this->finalStates as $finalState) {
-            if ($this->states->isWithin($state, $finalState)) {
-                return true;
-            }
-        }
-
-        return false;
+        return array_any($this->finalStates, fn(BackedEnum $finalState) => $this->states->isWithin($state, $finalState));
     }
 }

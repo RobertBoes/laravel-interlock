@@ -9,7 +9,9 @@ use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use ReflectionAttribute;
 use ReflectionClass;
+use ReflectionMethod;
 use RobertBoes\Interlock\Attributes\Authorise;
 use RobertBoes\Interlock\Attributes\Guard;
 use RobertBoes\Interlock\Definition\FluentTransition;
@@ -92,19 +94,18 @@ final readonly class TransitionSteps
      */
     private static function guardMethodsOf(ReflectionClass $class, Transition $transition): array
     {
-        $guards = [];
+        return array_merge(...array_map(fn(ReflectionMethod $method) => self::guardsOf($method, $transition), $class->getMethods()));
+    }
 
-        foreach ($class->getMethods() as $method) {
-            foreach ($method->getAttributes(Guard::class) as $attribute) {
-                $guards[] = new CompiledGuard(
-                    Str::snake($method->getName()),
-                    $method->getClosure($transition),
-                    $attribute->newInstance()->message,
-                );
-            }
-        }
-
-        return $guards;
+    /**
+     * @return list<CompiledGuard> the method's guard, when it is one
+     */
+    private static function guardsOf(ReflectionMethod $method, Transition $transition): array
+    {
+        return array_map(
+            fn(ReflectionAttribute $guard) => new CompiledGuard(Str::snake($method->getName()), $method->getClosure($transition), $guard->newInstance()->message),
+            $method->getAttributes(Guard::class),
+        );
     }
 
     /**
@@ -158,13 +159,7 @@ final readonly class TransitionSteps
 
     private function failedGuard(Model $model): ?CompiledGuard
     {
-        foreach ($this->guards as $guard) {
-            if (! ($guard->check)($model)) {
-                return $guard;
-            }
-        }
-
-        return null;
+        return array_find($this->guards, fn(CompiledGuard $guard) => ! ($guard->check)($model));
     }
 
     public function apply(Model $model): void

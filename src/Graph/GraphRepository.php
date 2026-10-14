@@ -85,42 +85,36 @@ final class GraphRepository
 
     private function compileMachine(Model $model, UseStateMachine $declaration): CompiledMachine
     {
-        $machineClass = new ReflectionClass($declaration->machine);
-        $initialStates = PhpAttribute::of($machineClass, InitialStates::class)->states ?? [];
+        $reflection = new ReflectionClass($declaration->machine);
+        $initialStates = PhpAttribute::of($reflection, InitialStates::class)->states ?? [];
 
         if ($initialStates === []) {
             throw InvalidDefinitionException::missingInitialStates($declaration->machine);
         }
 
-        $castEnum = $model->getCasts()[$declaration->attribute] ?? null;
+        $castEnum = $model->getCasts()[$declaration->attribute]
+            ?? throw InvalidDefinitionException::stateAttributeNotCast($declaration->machine, $model, $declaration->attribute, $initialStates[0]);
+        $initialStateOfAnotherEnum = self::stateNotOf($castEnum, $initialStates);
 
-        foreach ($initialStates as $state) {
-            if ($castEnum === null) {
-                throw InvalidDefinitionException::stateAttributeNotCast($declaration->machine, $model, $declaration->attribute, $state);
-            }
-
-            if ($state::class !== $castEnum) {
-                throw InvalidDefinitionException::initialStateNotOfCastEnum($declaration->machine, $model, $declaration->attribute, $state, $castEnum);
-            }
+        if ($initialStateOfAnotherEnum !== null) {
+            throw InvalidDefinitionException::initialStateNotOfCastEnum($declaration->machine, $model, $declaration->attribute, $initialStateOfAnotherEnum, $castEnum);
         }
 
         $states = $this->stateTree($initialStates[0]::class);
+        $parentInitialState = array_find($initialStates, fn(BackedEnum $state) => $states->isParent($state));
 
-        foreach ($initialStates as $state) {
-            if ($states->isParent($state)) {
-                throw InvalidDefinitionException::initialStateIsParentState($declaration->machine, $state, $states->leavesWithin($state));
-            }
+        if ($parentInitialState !== null) {
+            throw InvalidDefinitionException::initialStateIsParentState($declaration->machine, $parentInitialState, $states->leavesWithin($parentInitialState));
         }
 
-        $finalStates = PhpAttribute::of($machineClass, FinalStates::class)->states ?? [];
+        $finalStates = PhpAttribute::of($reflection, FinalStates::class)->states ?? [];
+        $finalStateOfAnotherEnum = self::stateNotOf($castEnum, $finalStates);
 
-        foreach ($finalStates as $state) {
-            if ($state::class !== $castEnum) {
-                throw InvalidDefinitionException::finalStateNotOfCastEnum($declaration->machine, $model, $declaration->attribute, $state, $castEnum);
-            }
+        if ($finalStateOfAnotherEnum !== null) {
+            throw InvalidDefinitionException::finalStateNotOfCastEnum($declaration->machine, $model, $declaration->attribute, $finalStateOfAnotherEnum, $castEnum);
         }
 
-        $recordsHistory = $machineClass->getAttributes(RecordsHistory::class) !== [];
+        $recordsHistory = $reflection->getAttributes(RecordsHistory::class) !== [];
 
         return new CompiledMachine($declaration->machine, $declaration->attribute, $initialStates, $states, $finalStates, $recordsHistory);
     }
@@ -151,18 +145,21 @@ final class GraphRepository
      */
     private function transitionNamed(CompiledMachine $machine, string $guardedAttribute, string $nameOrClass, array $transitions): string
     {
-        foreach ($transitions as $transition) {
-            if ($transition->name === $nameOrClass || $transition->class === $nameOrClass) {
-                return $transition->name;
-            }
+        $transition = array_find(
+            $transitions,
+            fn(CompiledTransition $transition) => $transition->name === $nameOrClass || $transition->class === $nameOrClass,
+        );
+
+        if ($transition === null) {
+            throw InvalidDefinitionException::guardedAttributeWrittenByUnknownTransition(
+                $machine->class,
+                $guardedAttribute,
+                $nameOrClass,
+                array_map(fn(CompiledTransition $transition) => $transition->name, $transitions),
+            );
         }
 
-        throw InvalidDefinitionException::guardedAttributeWrittenByUnknownTransition(
-            $machine->class,
-            $guardedAttribute,
-            $nameOrClass,
-            array_map(fn(CompiledTransition $transition) => $transition->name, $transitions),
-        );
+        return $transition->name;
     }
 
     private function compileFluentTransition(Model $model, CompiledMachine $machine, FluentTransition $definition): CompiledTransition
@@ -277,12 +274,10 @@ final class GraphRepository
         ?Closure $trigger,
         bool $triggerFansOut,
     ): CompiledTransition {
-        $castEnum = $model->getCasts()[$machine->stateAttribute] ?? null;
+        $stateOfAnotherEnum = self::stateNotOf($model->getCasts()[$machine->stateAttribute] ?? null, [...$fromStates, $targetState]);
 
-        foreach ([...$fromStates, $targetState] as $state) {
-            if ($state::class !== $castEnum) {
-                throw InvalidDefinitionException::stateAttributeNotCast($machine->class, $model, $machine->stateAttribute, $state);
-            }
+        if ($stateOfAnotherEnum !== null) {
+            throw InvalidDefinitionException::stateAttributeNotCast($machine->class, $model, $machine->stateAttribute, $stateOfAnotherEnum);
         }
 
         if ($machine->states->isParent($targetState)) {
@@ -308,5 +303,15 @@ final class GraphRepository
             $trigger,
             $triggerFansOut,
         );
+    }
+
+    /**
+     * The first of the states that is not a case of the enum, or of any enum when the state attribute is not cast.
+     *
+     * @param  list<BackedEnum>  $states
+     */
+    private static function stateNotOf(?string $enum, array $states): ?BackedEnum
+    {
+        return array_find($states, fn(BackedEnum $state) => $state::class !== $enum);
     }
 }

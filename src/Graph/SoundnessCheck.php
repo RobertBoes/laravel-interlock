@@ -20,65 +20,94 @@ final readonly class SoundnessCheck
      */
     public function problems(array $models): array
     {
-        $problems = [];
-
-        foreach ($models as $model) {
-            try {
-                $graph = $this->graphs->for(new $model());
-            } catch (InvalidDefinitionException $exception) {
-                $problems[] = $exception->getMessage();
-
-                continue;
-            }
-
-            foreach ($graph->machines as $machine) {
-                $problems = [...$problems, ...$this->problemsOf($model, $machine, $graph->transitionsOf($machine))];
-            }
-        }
-
-        return $problems;
+        return array_merge(...array_map($this->problemsOfModel(...), $models));
     }
 
     /**
+     * @param  class-string<Model>  $model
+     * @return list<string>
+     */
+    private function problemsOfModel(string $model): array
+    {
+        try {
+            $graph = $this->graphs->for(new $model());
+        } catch (InvalidDefinitionException $exception) {
+            return [$exception->getMessage()];
+        }
+
+        return array_merge(...array_map(
+            fn(CompiledMachine $machine) => $this->problemsOf($model, $machine, $graph->transitionsOf($machine)),
+            array_values($graph->machines),
+        ));
+    }
+
+    /**
+     * Each leaf state's problems in turn, then each final state's.
+     *
      * @param  class-string<Model>  $model
      * @param  list<CompiledTransition>  $transitions
      * @return list<string>
      */
     private function problemsOf(string $model, CompiledMachine $machine, array $transitions): array
     {
-        $prefix = sprintf('%s on %s [%s]: ', $machine->class, $model, $machine->stateAttribute);
         $reachable = $this->reachableStates($machine, $transitions);
-        $problems = [];
 
-        foreach ($machine->states->leaves() as $state) {
-            if (! in_array($state, $reachable, true)) {
-                $problems[] = $prefix . sprintf(
-                    'state [%s] is unreachable. No transitions lead to it from the initial states [%s].',
-                    $state->value,
-                    StateValues::listed($machine->initialStates),
-                );
-            }
+        $leafStateProblems = array_map(fn(BackedEnum $state) => [
+            ...$this->unreachable($machine, $state, $reachable),
+            ...$this->withNoWayOut($machine, $state, $transitions),
+        ], $machine->states->leaves());
+        $finalStateProblems = array_map(fn(BackedEnum $finalState) => $this->leftFinalState($machine, $finalState, $transitions), $machine->finalStates);
 
-            if (! $machine->isFinalState($state) && $this->transitionsLeaving($machine, $state, $transitions) === []) {
-                $problems[] = $prefix . sprintf(
-                    'state [%s] has no way out. No transition starts from it, and it is not a final state, so add a transition from it or declare it in #[FinalStates].',
-                    $state->value,
-                );
-            }
+        $prefix = sprintf('%s on %s [%s]: ', $machine->class, $model, $machine->stateAttribute);
+
+        return array_map(fn(string $problem) => $prefix . $problem, array_merge(...$leafStateProblems, ...$finalStateProblems));
+    }
+
+    /**
+     * @param  list<BackedEnum>  $reachable
+     * @return list<string>
+     */
+    private function unreachable(CompiledMachine $machine, BackedEnum $state, array $reachable): array
+    {
+        if (in_array($state, $reachable, true)) {
+            return [];
         }
 
-        foreach ($machine->finalStates as $finalState) {
-            foreach ($this->transitionsLeaving($machine, $finalState, $transitions) as $transition) {
-                $problems[] = $prefix . sprintf(
-                    'final state [%s] has outgoing transition [%s]. A final state is never left, so remove [%s] or the state from #[FinalStates].',
-                    $finalState->value,
-                    $transition->name,
-                    $transition->name,
-                );
-            }
+        return [sprintf(
+            'state [%s] is unreachable. No transitions lead to it from the initial states [%s].',
+            $state->value,
+            StateValues::listed($machine->initialStates),
+        )];
+    }
+
+    /**
+     * @param  list<CompiledTransition>  $transitions
+     * @return list<string>
+     */
+    private function withNoWayOut(CompiledMachine $machine, BackedEnum $state, array $transitions): array
+    {
+        if ($machine->isFinalState($state) || $this->transitionsLeaving($machine, $state, $transitions) !== []) {
+            return [];
         }
 
-        return $problems;
+        return [sprintf(
+            'state [%s] has no way out. No transition starts from it, and it is not a final state, so add a transition from it or declare it in #[FinalStates].',
+            $state->value,
+        )];
+    }
+
+    /**
+     * @param  list<CompiledTransition>  $transitions
+     * @return list<string>
+     */
+    private function leftFinalState(CompiledMachine $machine, BackedEnum $finalState, array $transitions): array
+    {
+        return array_map(fn(CompiledTransition $transition) => sprintf(
+            'final state [%s] has outgoing transition [%s]. A final state is never left, so remove [%s] or the state from #[FinalStates].',
+            $finalState->value,
+            $transition->name,
+            $transition->name,
+        ), $this->transitionsLeaving($machine, $finalState, $transitions));
     }
 
     /**
