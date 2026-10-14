@@ -10,6 +10,7 @@ use RobertBoes\Interlock\Attributes\FinalStates;
 use RobertBoes\Interlock\Attributes\FromStates;
 use RobertBoes\Interlock\Attributes\GuardedAttribute;
 use RobertBoes\Interlock\Attributes\InitialStates;
+use RobertBoes\Interlock\Attributes\RecordsHistory;
 use RobertBoes\Interlock\Attributes\TargetState;
 use RobertBoes\Interlock\Attributes\UseStateMachine;
 use RobertBoes\Interlock\Definition\FluentTransition;
@@ -114,7 +115,9 @@ final class GraphRepository
             }
         }
 
-        return new CompiledMachine($declaration->machine, $declaration->attribute, $initialStates, $states, $finalStates);
+        $recordsHistory = (new ReflectionClass($declaration->machine))->getAttributes(RecordsHistory::class) !== [];
+
+        return new CompiledMachine($declaration->machine, $declaration->attribute, $initialStates, $states, $finalStates, $recordsHistory);
     }
 
     /**

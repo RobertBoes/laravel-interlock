@@ -5,8 +5,10 @@ namespace RobertBoes\Interlock\Tests\Fixtures\Orders;
 use RobertBoes\Interlock\Attributes\FinalStates;
 use RobertBoes\Interlock\Attributes\GuardedAttribute;
 use RobertBoes\Interlock\Attributes\InitialStates;
+use RobertBoes\Interlock\Attributes\RecordsHistory;
 use RobertBoes\Interlock\StateMachine;
 
+#[RecordsHistory]
 #[InitialStates(OrderStatus::Pending)]
 #[FinalStates(OrderStatus::Delivered, OrderStatus::Cancelled)]
 #[GuardedAttribute('tracking_code', Ship::class)]

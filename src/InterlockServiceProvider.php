@@ -10,6 +10,8 @@ use RobertBoes\Interlock\Commands\ClearCommand;
 use RobertBoes\Interlock\Commands\SignalboxCommand;
 use RobertBoes\Interlock\Discovery\ModelRegistry;
 use RobertBoes\Interlock\Graph\GraphRepository;
+use RobertBoes\Interlock\History\DatabaseHistoryRecorder;
+use RobertBoes\Interlock\History\HistoryRecorder;
 use RobertBoes\Interlock\Testing\PestExpectations;
 use RobertBoes\Interlock\Testing\TransitionLog;
 use Spatie\LaravelPackageTools\Package;
@@ -22,6 +24,7 @@ class InterlockServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-interlock')
             ->hasConfigFile('interlock')
+            ->hasMigration('create_interlock_history_table')
             ->hasCommands(CacheCommand::class, ClearCommand::class, SignalboxCommand::class);
     }
 
@@ -29,6 +32,7 @@ class InterlockServiceProvider extends PackageServiceProvider
     {
         $this->app->singleton(GraphRepository::class);
         $this->app->singleton(BypassScope::class);
+        $this->app->singleton(HistoryRecorder::class, DatabaseHistoryRecorder::class);
         $this->app->singleton(TransitionLog::class, fn(Application $app) => new TransitionLog(recording: $app->runningUnitTests()));
         $this->app->singleton(ModelRegistry::class, fn(Application $app) => new ModelRegistry(
             $app->make('config'),

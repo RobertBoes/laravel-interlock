@@ -3,11 +3,13 @@
 namespace RobertBoes\Interlock;
 
 use BackedEnum;
+use Closure;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Auth\Factory as AuthFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Event;
@@ -23,6 +25,9 @@ use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Graph\ModelGraph;
 use RobertBoes\Interlock\Graph\TransitionSteps;
+use RobertBoes\Interlock\History\HistoryEntry;
+use RobertBoes\Interlock\History\HistoryRecord;
+use RobertBoes\Interlock\History\HistoryRecorder;
 use RobertBoes\Interlock\Persistence\CompareAndSwapBuilder;
 use RobertBoes\Interlock\Persistence\StagedTransition;
 use RobertBoes\Interlock\Testing\TransitionLog;
@@ -240,9 +245,23 @@ trait HasStateMachines
     }
 
     /**
+     * The model's history: every transition and bypassed write on its machines that record history, or on one of them
+     * when a state attribute is given. Unordered; entries recorded in the same second share a timestamp, so order a
+     * timeline by key: `$order->history('status')->oldest('id')->get()`.
+     *
+     * @return MorphMany<HistoryEntry, $this>
+     */
+    public function history(?string $stateAttribute = null): MorphMany
+    {
+        $history = $this->morphMany(HistoryEntry::class, 'model');
+
+        return $stateAttribute === null ? $history : $history->where('state_attribute', $stateAttribute);
+    }
+
+    /**
      * Authorises every actor, then checks each transition's guards and runs its apply step, and saves them all through
-     * one compare-and-swap update, in one transaction that rolls back when a guard fails or the save fails or is
-     * cancelled. Guards and authorisation see the state each transition starts from, plus the changes of the
+     * one compare-and-swap update and records their history, in one transaction that rolls back when a guard fails or
+     * the save fails or is cancelled. Guards and authorisation see the state each transition starts from, plus the changes of the
      * transitions staged before it.
      *
      * @param  array<string, StagedTransition>  $staged
@@ -266,19 +285,40 @@ trait HasStateMachines
         $connection->beginTransaction();
 
         $this->interlockRunningTransitions = $staged;
+        $written = [];
+        $oldAttributes = [];
 
         try {
-            foreach ($staged as $transition) {
+            foreach ($staged as $stateAttribute => $transition) {
                 $compiled = $transition->transition;
 
                 $transition->steps->checkGuards($this, $compiled);
                 $this->setAttribute($compiled->stateAttribute, $compiled->targetState);
+                $attributesBeforeApply = $this->getAttributes();
                 $transition->steps->apply($this);
+                $written[$stateAttribute] = $this->attributesWrittenSince($attributesBeforeApply, $compiled->stateAttribute);
+                $oldAttributes[$stateAttribute] = array_map(fn(string $attribute) => $this->getRawOriginal($attribute), $written[$stateAttribute]);
 
                 Event::dispatch(new Transitioning($this, $compiled->name, $transition->fromState, $compiled->targetState));
             }
 
             $saved = parent::save($options);
+
+            if ($saved) {
+                foreach ($staged as $stateAttribute => $transition) {
+                    $this->recordHistory(new HistoryRecord(
+                        $this,
+                        $stateAttribute,
+                        $transition->transition->name,
+                        $transition->fromState,
+                        $transition->transition->targetState,
+                        $transition->actor,
+                        $oldAttributes[$stateAttribute],
+                        array_map(fn(string $attribute) => $this->getAttributes()[$attribute] ?? null, $written[$stateAttribute]),
+                    ));
+                }
+            }
+
             $saved ? $connection->commit() : $connection->rollBack();
         } catch (Throwable $exception) {
             $connection->rollBack();
@@ -289,6 +329,25 @@ trait HasStateMachines
         }
 
         return $saved;
+    }
+
+    /**
+     * The transition's own writes: its state attribute and the attributes its apply step set, keyed by themselves.
+     *
+     * @param  array<string, mixed>  $attributesBeforeApply
+     * @return array<string, string>
+     */
+    private function attributesWrittenSince(array $attributesBeforeApply, string $stateAttribute): array
+    {
+        $written = [$stateAttribute];
+
+        foreach ($this->getAttributes() as $attribute => $value) {
+            if (! array_key_exists($attribute, $attributesBeforeApply) || $attributesBeforeApply[$attribute] !== $value) {
+                $written[] = $attribute;
+            }
+        }
+
+        return array_combine($written, $written);
     }
 
     /**
@@ -330,11 +389,11 @@ trait HasStateMachines
      */
     protected function performUpdate(Builder $query): bool
     {
-        if ($this->interlockRunningTransitions === []) {
-            return parent::performUpdate($this->interlockModelSaveQuery($query));
-        }
+        $query = $this->interlockRunningTransitions === []
+            ? $this->interlockModelSaveQuery($query)
+            : CompareAndSwapBuilder::replacing($query, $this->interlockRunningTransitions);
 
-        return parent::performUpdate(CompareAndSwapBuilder::replacing($query, $this->interlockRunningTransitions));
+        return $this->writeRecordingBypassedWrites(fn() => parent::performUpdate($query));
     }
 
     /**
@@ -342,7 +401,66 @@ trait HasStateMachines
      */
     protected function performInsert(Builder $query): bool
     {
-        return parent::performInsert($this->interlockModelSaveQuery($query));
+        $query = $this->interlockModelSaveQuery($query);
+
+        return $this->writeRecordingBypassedWrites(fn() => parent::performInsert($query));
+    }
+
+    /**
+     * Records the history of the write's bypassed writes, in one transaction with the write. A running transition's
+     * write is in the transition's transaction already.
+     *
+     * @param  Closure(): bool  $write
+     */
+    private function writeRecordingBypassedWrites(Closure $write): bool
+    {
+        $writeAndRecord = function () use ($write): bool {
+            if (! $write()) {
+                return false;
+            }
+
+            foreach ($this->interlockBypassedWrites as $bypassedWrite) {
+                $this->recordHistory(new HistoryRecord(
+                    $this,
+                    $bypassedWrite->stateAttribute,
+                    null,
+                    $bypassedWrite->oldState,
+                    $bypassedWrite->newState,
+                    $this->authenticatedActor(),
+                    [$bypassedWrite->stateAttribute => $bypassedWrite->oldState?->value],
+                    [$bypassedWrite->stateAttribute => $bypassedWrite->newState?->value],
+                    $bypassedWrite->reason,
+                ));
+            }
+
+            return true;
+        };
+
+        return $this->interlockRunningTransitions === [] && $this->mayMakeABypassedWriteThatRecordsHistory()
+            ? $this->getConnection()->transaction($writeAndRecord)
+            : $writeAndRecord();
+    }
+
+    /**
+     * Whether a state attribute whose machine records history is about to be written, so the write may be a bypassed
+     * write to record.
+     */
+    private function mayMakeABypassedWriteThatRecordsHistory(): bool
+    {
+        foreach ($this->interlockGraph()->machines as $machine) {
+            if ($machine->recordsHistory && $this->isDirty($machine->stateAttribute)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function recordHistory(HistoryRecord $record): void
+    {
+        if ($this->interlockGraph()->machines[$record->stateAttribute]->recordsHistory) {
+            Container::getInstance()->make(HistoryRecorder::class)->record($record);
+        }
     }
 
     /**

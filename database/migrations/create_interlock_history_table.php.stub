@@ -1,0 +1,33 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
+    public function up(): void
+    {
+        Schema::create('interlock_history', function (Blueprint $table) {
+            $table->id();
+            // Use uuidMorphs() or ulidMorphs() here and below when your models use UUID or ULID keys.
+            $table->morphs('model');
+            $table->string('state_attribute');
+            // Null for a bypassed write.
+            $table->string('transition_name')->nullable();
+            // Null for a model created in its state inside a bypass.
+            $table->string('from_state')->nullable();
+            $table->string('target_state')->nullable();
+            $table->nullableMorphs('actor');
+            $table->json('old_attributes');
+            $table->json('new_attributes');
+            $table->text('bypass_reason')->nullable();
+            $table->string('trigger_name')->nullable();
+            $table->timestamp('created_at')->nullable();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('interlock_history');
+    }
+};

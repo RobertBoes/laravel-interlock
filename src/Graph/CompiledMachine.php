@@ -18,6 +18,7 @@ final readonly class CompiledMachine
         public array $initialStates,
         public StateTree $states,
         public array $finalStates,
+        public bool $recordsHistory,
     ) {}
 
     public function isInitialState(BackedEnum $state): bool
