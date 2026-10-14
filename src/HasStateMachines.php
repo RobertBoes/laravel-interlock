@@ -80,7 +80,8 @@ trait HasStateMachines
      * Apply a transition by name, `transition('publish')`, or as an instance of its class, `transition(new Ship($trackingCode))`.
      *
      * The actor is the authenticated user, unless one is given: `transition('approve', $manager)`. Pass null to apply
-     * it on behalf of no one, as a trigger does. Transitions staged on the model's other machines are written with it.
+     * it on behalf of no one; authorisation still decides. Transitions staged on the model's other machines are written
+     * with it.
      * When a saving or updating listener cancels the save, nothing is written and it throws.
      */
     public function transition(string|Transition $transition, ?Authenticatable $actor = null): static
@@ -108,7 +109,8 @@ trait HasStateMachines
     }
 
     /**
-     * @internal Applies the transition as its trigger does: on behalf of no one, recorded under the trigger's name.
+     * @internal Applies the transition as its trigger does: without an actor and without checking its authorisation,
+     * though its guards still run (ADR 0011), recorded under the trigger's name.
      */
     public function interlockApplyTrigger(string $transition): void
     {
@@ -292,10 +294,10 @@ trait HasStateMachines
     }
 
     /**
-     * Authorises every actor, then checks each transition's guards and runs its apply step, and saves them all through
-     * one compare-and-swap update and records their history, in one transaction that rolls back when a guard fails or
-     * the save fails or is cancelled. Guards and authorisation see the state each transition starts from, plus the changes of the
-     * transitions staged before it.
+     * Authorises every actor, except for a transition its trigger applies (ADR 0011), then checks each transition's
+     * guards and runs its apply step, and saves them all through one compare-and-swap update and records their history,
+     * in one transaction that rolls back when a guard fails or the save fails or is cancelled. Guards and authorisation
+     * see the state each transition starts from, plus the changes of the transitions staged before it.
      *
      * @param  array<string, StagedTransition>  $stagedTransitions
      * @param  array<string, mixed>  $options
@@ -311,7 +313,9 @@ trait HasStateMachines
         $this->interlockRevertToFromStates($stagedTransitions);
 
         foreach ($stagedTransitions as $staged) {
-            $staged->steps->authorise($this, $staged->actor, $staged->compiled);
+            if ($staged->trigger === null) {
+                $staged->steps->authorise($this, $staged->actor, $staged->compiled);
+            }
         }
 
         $connection = $this->getConnection();

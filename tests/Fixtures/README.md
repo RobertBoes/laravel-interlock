@@ -15,12 +15,12 @@ The fixture domains from the spec (`.scratch/interlock-v1/spec.md`, "Testing Dec
 - `Feeds/`: a post from a high-volume feed, whose `publish` trigger fans out. Its condition is an invokable scope class, `PublishAtHasPassed`, rather than a closure. Kept outside `BlogPosts/` so the tests that scan it don't see it. It shares the `posts` table.
 - `Returns/`: an order whose only transition, `return_to_sender`, takes a `Shipment` model as input, which the container could build empty. It shares the `orders` table and the order's `OrderStatus` enum.
 - `LegacyOrders/`: an order whose machine is also called `OrderStatusMachine`, in another namespace, for the XState export of every machine refusing two machines with the same ID. It shares the `orders` table and the order's `OrderStatus` enum.
-- `GatedPosts/`: a post whose triggered `publish` is authorised for a signed-in employee only, so authorisation denies its trigger. It shares the `posts` table and the blog post's `PostStatus` enum.
+- `TriggerOnlyPosts/`: a post whose triggered `publish` authorises no one, so only its trigger applies it. It shares the `posts` table and the blog post's `PostStatus` enum.
 - `History/`: a history recorder that keeps its records in memory, for swapping the recorder through the config. Namespace `RobertBoes\Interlock\Tests\Fixtures\History`.
 - `database/migrations/`: the fixture tables, loaded by `TestCase`, plus the package's own history migration.
 
 Triggers: the post's `publish` once `publish_at` has passed, the expense's guarded `submit` 30 days after the expense was created, and the order's class-based `cancel` for orders still unpaid after 3 days, which fans out. The feed post's `publish` fans out too.
 
-History is on for the post's `status` machine, the order's `status` machine and both contract machines. The order's `payment_status` machine has it off.
+History is on for the post's and the trigger-only post's `status` machines, the order's `status` machine and both contract machines. The order's `payment_status` machine has it off.
 
 One model lives outside this directory: `tests/MisdeclaredModels/PostWithoutHasStateMachines` declares a machine without using `HasStateMachines`, and discovery fails on any path that holds it, so it is kept out of the paths the discovery tests scan recursively.

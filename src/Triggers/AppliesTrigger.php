@@ -12,8 +12,6 @@ use Illuminate\Database\Eloquent\Model;
 use RobertBoes\Interlock\Exceptions\FailedGuardException;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Exceptions\StaleStateException;
-use RobertBoes\Interlock\Exceptions\UnauthorisedTransitionException;
-use RobertBoes\Interlock\Exceptions\UnauthorisedTriggerException;
 use RobertBoes\Interlock\Exceptions\UnknownTransitionException;
 use RobertBoes\Interlock\Graph\CompiledTransition;
 use RobertBoes\Interlock\Graph\GraphRepository;
@@ -93,8 +91,8 @@ trait AppliesTrigger
     /**
      * A model that changed since it was loaded, or whose guard fails, is an expected outcome and is skipped quietly. Any
      * other failure is reported. Either way the run carries on, and the model is picked up again on a later run while
-     * it still matches, so there are no retries (ADR 0005). A denial is reported wrapped, as the exception handler
-     * drops authorisation exceptions.
+     * it still matches, so there are no retries (ADR 0005). Authorisation is not checked, so it never denies a trigger
+     * (ADR 0011).
      *
      * A lost database connection is rethrown instead, failing the job: every other candidate would fail the same way,
      * and the outage would be reported once per model while the run counted as a success.
@@ -111,8 +109,6 @@ trait AppliesTrigger
             $candidate->interlockApplyTrigger($this->trigger);
         } catch (StaleStateException|FailedGuardException) {
             return;
-        } catch (UnauthorisedTransitionException $denial) {
-            $exceptions->report(UnauthorisedTriggerException::denied($candidate, $this->trigger, $denial));
         } catch (Throwable $exception) {
             if ($this->causedByLostConnection($exception)) {
                 throw $exception;

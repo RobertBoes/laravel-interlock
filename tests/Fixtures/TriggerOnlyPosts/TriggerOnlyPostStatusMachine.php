@@ -1,20 +1,21 @@
 <?php
 
-namespace RobertBoes\Interlock\Tests\Fixtures\GatedPosts;
+namespace RobertBoes\Interlock\Tests\Fixtures\TriggerOnlyPosts;
 
 use Illuminate\Database\Eloquent\Builder;
 use RobertBoes\Interlock\Attributes\FinalStates;
 use RobertBoes\Interlock\Attributes\InitialStates;
+use RobertBoes\Interlock\Attributes\RecordsHistory;
 use RobertBoes\Interlock\StateMachine;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
-use RobertBoes\Interlock\Tests\Fixtures\Expenses\Employee;
 
 /**
- * The post lifecycle, with a publish trigger whose authorisation wants an actor, which a trigger never has.
+ * The post lifecycle, with a triggered publish whose authorisation allows no one, a null actor included.
  */
+#[RecordsHistory]
 #[InitialStates(PostStatus::Draft)]
 #[FinalStates(PostStatus::Published)]
-class GatedPostStatusMachine extends StateMachine
+class TriggerOnlyPostStatusMachine extends StateMachine
 {
     public function transitions(): array
     {
@@ -24,7 +25,7 @@ class GatedPostStatusMachine extends StateMachine
             $this->transition('publish')
                 ->from(PostStatus::Ready, PostStatus::Scheduled)
                 ->to(PostStatus::Published)
-                ->authorise(fn(?Employee $actor) => $actor !== null)
+                ->authorise(fn() => false)
                 ->trigger(fn(Builder $query) => $query->where('publish_at', '<=', now())),
             $this->transition('retract')->from(PostStatus::Ready, PostStatus::Scheduled)->to(PostStatus::Draft),
         ];

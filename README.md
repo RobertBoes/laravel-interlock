@@ -331,7 +331,9 @@ $expense->transition('approve', $manager);
 $expense->transition('approve', null);
 ```
 
-[Triggers](#triggers) always apply their transition with a null actor, so authorisation decides explicitly whether system-applied transitions are allowed. A Gate ability whose callback takes a non-nullable user denies a null actor, as Laravel's Gate does for guests.
+A null actor means no user, such as a guest, and authorisation still decides for it. A Gate ability whose callback takes a non-nullable user denies a null actor, as Laravel's Gate does for guests.
+
+[Triggers](#triggers) are different: a trigger applies its transition without an actor and without checking its authorisation. Declaring the trigger is your decision that the system may apply the transition, so there is no user to ask about. Its guards still run, and history records the trigger's name with no actor.
 
 ## Available transitions
 
@@ -506,7 +508,7 @@ Two config keys change that:
 
 The command does no querying itself. It dispatches one queued job per trigger, so a large backlog never slows the scheduler down, and a queue worker must be running to process them. The jobs go to the app's default queue connection and queue; `interlock.triggers.connection` and `interlock.triggers.queue` send them elsewhere, such as a queue with its own workers so a big backlog doesn't hold up other work. Each job is unique per trigger, so a slow run and the next one never work on the same trigger at once; this needs a cache store that supports locks, as Laravel's unique jobs do. When a job can't be dispatched, say because the queue is down, the command reports it, dispatches the other triggers, and exits with a failure; the next run tries that trigger again.
 
-The job applies the transition on behalf of no one (a null actor) to each matching model, a chunk at a time in key order, and records the trigger's name in history. Three config keys size it:
+The job applies the transition to each matching model, a chunk at a time in key order, without an actor and without checking its authorisation, and records the trigger's name in history. Its guards still run. Three config keys size it:
 
 - `interlock.triggers.chunk_size` (default 100): how many models it loads at a time.
 - `interlock.triggers.max_per_run` (default 1000): the most models one run handles. A bigger backlog drains over the next runs, each carrying on where the last stopped, even when the last died partway: the run saves its place after every chunk.
@@ -524,7 +526,7 @@ Each chunk job carries its chunk's keys in its payload. With UUID or ULID keys, 
 
 Queue workers keep running the code they booted with, so run `php artisan queue:restart` after a deploy that adds, renames or removes a trigger. A trigger job still queued for a transition that was removed, or lost its trigger, does nothing.
 
-A model whose state changed since it was loaded, or whose guard fails, is skipped quietly. Any other exception is reported and the run carries on with the rest. That includes authorisation that denies the null actor, so a triggered transition's authorisation must allow it: Laravel's exception handler never reports an authorisation exception, so a denial is reported as an `UnauthorisedTriggerException` that names the trigger and the model, with the denial as its previous exception. Either way the model still matches the condition, so the next run picks it up again. There are no retries, and nothing to clean up. A lost database connection is the exception: it fails the job instead of being reported once per model, and the next run tries again.
+A model whose state changed since it was loaded, or whose guard fails, is skipped quietly. Any other exception is reported and the run carries on with the rest. Either way the model still matches the condition, so the next run picks it up again. There are no retries, and nothing to clean up. A lost database connection is the exception: it fails the job instead of being reported once per model, and the next run tries again. Authorisation can't stop a trigger; to stop it, change or remove the trigger, or add a guard.
 
 ### The "scheduled and locked" pattern
 
@@ -555,7 +557,7 @@ $post->publish_at = $request->date('publish_at');
 $post->transition('schedule');
 ```
 
-Once scheduled, no transition but `publish` leaves `scheduled`, and only `schedule` may write `publish_at`, so neither the state nor the time can change until the trigger publishes the post. The lock shows up in the graph and in the exports, rather than hiding in a flag. To allow unlocking, add a transition out of `scheduled`, such as `unschedule` back to `ready`. `publish` itself can still be applied by hand; to leave it to the trigger alone, authorise it for no actor with `->authorise(fn(?User $actor) => $actor === null)`.
+Once scheduled, no transition but `publish` leaves `scheduled`, and only `schedule` may write `publish_at`, so neither the state nor the time can change until the trigger publishes the post. The lock shows up in the graph and in the exports, rather than hiding in a flag. To allow unlocking, add a transition out of `scheduled`, such as `unschedule` back to `ready`. `publish` itself can still be applied by hand; to leave it to the trigger alone, authorise it for no one with `->authorise(fn() => false)`. The trigger still applies it, as triggers don't check authorisation. Don't authorise only the null actor, `$actor === null`, to mean "only the trigger": a guest is a null actor too, so any code a guest can reach could apply it, and `availableTransitions()` would offer it to guests.
 
 ## History
 

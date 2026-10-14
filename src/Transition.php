@@ -19,9 +19,9 @@ use Illuminate\Support\Str;
  *
  * It may declare a trigger, a static `trigger(Builder $query)` method that constrains the model's query, such as
  * `$query->where('publish_at', '<=', now())`. Its from-states are added to it, and every minute the scheduled
- * interlock:triggers command applies it by name, on behalf of no one, to each model that matches. A transition whose
- * constructor has required parameters takes input and cannot be built by name, so declaring a trigger on it fails
- * when the graph is compiled. Each run applies it to at most
+ * interlock:triggers command applies it by name to each model that matches, without an actor and without checking its
+ * authorisation; its guards still run. A transition whose constructor has required parameters takes input and cannot
+ * be built by name, so declaring a trigger on it fails when the graph is compiled. Each run applies it to at most
  * `interlock.triggers.max_per_run` models; mark the method #[FanOut] to dispatch one job per chunk of them instead.
  *
  * It may define either of these steps, each receiving the model:

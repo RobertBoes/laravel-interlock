@@ -2,7 +2,6 @@
 
 use Illuminate\Console\Scheduling\Event as ScheduledEvent;
 use Illuminate\Console\Scheduling\Schedule;
-use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -13,14 +12,13 @@ use RobertBoes\Interlock\Events\Transitioned;
 use RobertBoes\Interlock\Events\Transitioning;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Exceptions\UnauthorisedTransitionException;
-use RobertBoes\Interlock\Exceptions\UnauthorisedTriggerException;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Employee;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Expense;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\ExpenseStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Feeds\FeedPost;
-use RobertBoes\Interlock\Tests\Fixtures\GatedPosts\GatedPost;
+use RobertBoes\Interlock\Tests\Fixtures\TriggerOnlyPosts\TriggerOnlyPost;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithInstanceTrigger;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithTriggeredTransitionTakingInput;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\TransitionWithInputAndTrigger;
@@ -427,25 +425,44 @@ describe('a trigger', function () {
             ->and($paid->fresh()->status)->toBe(OrderStatus::Pending);
     });
 
-    it('reports a model that authorisation denies to the app\'s exception handler', function () {
-        config(['interlock.models' => [GatedPost::class]]);
-        $reported = [];
-        app(ExceptionHandler::class)->reportable(function (Throwable $exception) use (&$reported) {
-            $reported[] = $exception;
-
-            return false;
-        });
-        $post = GatedPost::create(['publish_at' => '2026-10-14 09:00:00'])->transition('submit', Employee::manager());
+    it('applies a transition whose authorisation allows no one, without an actor', function () {
+        config(['interlock.models' => [TriggerOnlyPost::class]]);
+        Exceptions::fake();
+        $post = TriggerOnlyPost::create(['publish_at' => '2026-10-14 09:00:00'])->transition('submit');
 
         $this->travelTo('2026-10-14 09:00:00');
         $this->artisan('interlock:triggers');
 
-        expect($post->fresh()->status)->toBe(PostStatus::Ready)
-            ->and($reported)->toHaveCount(1)
-            ->and($reported[0])->toBeInstanceOf(UnauthorisedTriggerException::class)
-            ->and($reported[0]->getMessage())->toBe('Trigger [publish] could not apply its transition to ' . GatedPost::class . ' [' . $post->id . ']: authorisation denied it with "You may not apply transition [publish].". A trigger applies its transition on behalf of no one, so the transition\'s authorisation must allow a null actor.')
-            ->and($reported[0]->getPrevious())->toBeInstanceOf(UnauthorisedTransitionException::class);
+        Exceptions::assertNothingReported();
+        expect($post->fresh()->status)->toBe(PostStatus::Published)
+            ->and($post->history()->latest('id')->first())
+            ->transition_name->toBe('publish')
+            ->trigger_name->toBe('publish')
+            ->actor_type->toBeNull()
+            ->actor_id->toBeNull();
     });
+
+    it('lets no one apply a transition whose authorisation allows no one by hand, a guest included', function (Closure $apply) {
+        $post = TriggerOnlyPost::create(['publish_at' => '2026-10-14 09:00:00'])->transition('submit');
+
+        expect(fn() => $apply($post))->toThrow(UnauthorisedTransitionException::class)
+            ->and($post->fresh()->status)->toBe(PostStatus::Ready);
+    })->with([
+        'a guest' => [fn(TriggerOnlyPost $post) => $post->transition('publish')],
+        'on behalf of no one' => [fn(TriggerOnlyPost $post) => $post->transition('publish', null)],
+        'a manager' => [fn(TriggerOnlyPost $post) => $post->transition('publish', Employee::manager())],
+        'a staged transition on behalf of no one' => [fn(TriggerOnlyPost $post) => $post->stageTransition('publish', null)->save()],
+    ]);
+
+    it('offers a transition whose authorisation allows no one to no one, a guest included', function (?Employee $actor) {
+        $post = TriggerOnlyPost::create(['publish_at' => '2026-10-14 09:00:00'])->transition('submit');
+
+        expect($post->availableTransitions($actor)->pluck('name')->all())->toBe(['schedule', 'retract'])
+            ->and($post->availableTransitions()->pluck('name')->all())->toBe(['schedule', 'retract']);
+    })->with([
+        'no one' => [null],
+        'a manager' => fn() => Employee::manager(),
+    ]);
 
     it('does nothing when its job was queued for a transition that no longer exists', function () {
         Exceptions::fake();
