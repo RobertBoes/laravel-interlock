@@ -17,7 +17,7 @@ final readonly class StateTree
      * @param  array<int|string, BackedEnum>  $parents  each nested state's parent state, keyed by the nested state's value
      */
     private function __construct(
-        private string $enum,
+        public string $enum,
         private array $parents,
     ) {}
 
