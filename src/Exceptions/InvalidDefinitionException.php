@@ -85,6 +85,17 @@ final class InvalidDefinitionException extends LogicException implements Interlo
     /**
      * @param  class-string<Transition>  $transition
      */
+    public static function triggeredTransitionTakesInput(string $transition): self
+    {
+        return new self(sprintf(
+            'Transition %s declares a trigger, but its constructor takes input. A trigger applies the transition by name, without input: remove the trigger, or give the constructor parameters defaults.',
+            $transition,
+        ));
+    }
+
+    /**
+     * @param  class-string<Transition>  $transition
+     */
     public static function missingFromStatesAttribute(string $transition): self
     {
         return new self(sprintf(

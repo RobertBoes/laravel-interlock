@@ -16,6 +16,8 @@ use RobertBoes\Interlock\Tests\Fixtures\Expenses\Expense;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\ExpenseStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Feeds\FeedPost;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithInstanceTrigger;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithTriggeredTransitionTakingInput;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\TransitionWithInputAndTrigger;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\TransitionWithInstanceTrigger;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Order;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatus;
@@ -37,6 +39,13 @@ it('rejects a transition class whose trigger is not static', function () {
     expect(fn() => (new PostWithInstanceTrigger())->availableTransitions(null))->toThrow(
         InvalidDefinitionException::class,
         'Transition ' . TransitionWithInstanceTrigger::class . ' declares trigger() as an instance method. Make it static: a trigger is a query condition, checked without building the transition.',
+    );
+});
+
+it('rejects a trigger on a transition class that takes input', function () {
+    expect(fn() => (new PostWithTriggeredTransitionTakingInput())->availableTransitions(null))->toThrow(
+        InvalidDefinitionException::class,
+        'Transition ' . TransitionWithInputAndTrigger::class . ' declares a trigger, but its constructor takes input. A trigger applies the transition by name, without input: remove the trigger, or give the constructor parameters defaults.',
     );
 });
 

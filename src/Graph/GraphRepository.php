@@ -229,7 +229,7 @@ final class GraphRepository
 
     /**
      * A transition class declares its trigger as a static trigger() method, so the condition is known without building
-     * the class, which may take input.
+     * the class. A trigger applies the transition by name, so the class may not take input.
      *
      * @param  ReflectionClass<Transition>  $class
      * @return (Closure(Builder<Model>): mixed)|null
@@ -244,6 +244,10 @@ final class GraphRepository
 
         if (! $method->isStatic()) {
             throw InvalidDefinitionException::triggerNotStatic($class->getName());
+        }
+
+        if (CompiledTransition::takesInput($class->getName())) {
+            throw InvalidDefinitionException::triggeredTransitionTakesInput($class->getName());
         }
 
         return $method->getClosure();

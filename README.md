@@ -468,7 +468,7 @@ public static function trigger(Builder $query): void
 }
 ```
 
-A transition that takes input cannot be built by name, so it cannot have a trigger.
+A transition that takes input cannot be built by name, so it cannot have a trigger: a transition class whose constructor has required parameters and declares `trigger()` throws `InvalidDefinitionException` when its graph is compiled.
 
 Scheduling means setting the data the condition reads, never storing a pending run. To reschedule a post, change `publish_at`. To stop it, move it back to draft. Nothing needs cancelling.
 
