@@ -11,6 +11,7 @@ The fixture domains from the spec (`.scratch/interlock-v1/spec.md`, "Testing Dec
 - `UnsoundMachines/`: models whose machines compile but are deliberately broken (a dead end, an unreachable state, a final state with an outgoing transition, duplicate transition names), for the soundness check. Nothing reads their table.
 - `Exports/`: a claim backed by an integer enum, whose `settle` transition has two guards, for the shapes the XState export has to encode. Nothing reads its table. Namespace `RobertBoes\Interlock\Tests\Fixtures\Exports`.
 - `Discovery/`: models for discovery and explicit registration, kept outside the paths the discovery tests scan. They share the `posts` and `orders` tables.
+- `LockedPosts/`: a post following the README's "scheduled and locked" pattern: once scheduled, its only way out is the triggered `publish`, and only `schedule` may write its `publish_at`. It shares the `posts` table and the blog post's `PostStatus` enum.
 - `Feeds/`: a post from a high-volume feed, whose `publish` trigger fans out. Kept outside `BlogPosts/` so the tests that scan it don't see it. It shares the `posts` table.
 - `database/migrations/`: the fixture tables, loaded by `TestCase`, plus the package's own history migration.
 
