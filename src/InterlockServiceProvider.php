@@ -2,6 +2,7 @@
 
 namespace RobertBoes\Interlock;
 
+use RobertBoes\Interlock\Graph\GraphRepository;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -12,5 +13,10 @@ class InterlockServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-interlock')
             ->hasConfigFile('interlock');
+    }
+
+    public function packageRegistered(): void
+    {
+        $this->app->singleton(GraphRepository::class);
     }
 }

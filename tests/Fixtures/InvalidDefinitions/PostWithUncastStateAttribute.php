@@ -1,0 +1,22 @@
+<?php
+
+namespace RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions;
+
+use Illuminate\Database\Eloquent\Model;
+use RobertBoes\Interlock\Attributes\UseStateMachine;
+use RobertBoes\Interlock\HasStateMachines;
+
+#[UseStateMachine('status', MachineForUncastAttribute::class)]
+class PostWithUncastStateAttribute extends Model
+{
+    use HasStateMachines;
+
+    protected $table = 'posts';
+
+    protected $guarded = [];
+
+    protected function casts(): array
+    {
+        return [];
+    }
+}
