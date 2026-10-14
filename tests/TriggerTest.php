@@ -109,6 +109,38 @@ describe('the triggers command', function () {
         Queue::assertPushed(fn(RunTrigger $job) => $job->connection === 'redis' && $job->queue === 'triggers');
     });
 
+    it('reports a trigger whose dispatch fails, releases its lock and dispatches the rest', function () {
+        config(['interlock.models' => [Post::class, Expense::class, Order::class], 'queue.default' => 'sync']);
+        Exceptions::fake();
+        $dispatched = [];
+        $queueDown = true;
+        Queue::createPayloadUsing(function (string $connection, ?string $queue, array $payload) use (&$dispatched, &$queueDown) {
+            $model = $payload['data']['command']->model;
+
+            if ($queueDown && $model === Expense::class) {
+                throw new RuntimeException('The queue is down.');
+            }
+
+            $dispatched[] = $model;
+
+            return [];
+        });
+
+        try {
+            $this->artisan('interlock:triggers')->assertFailed();
+
+            Exceptions::assertReported(fn(RuntimeException $exception) => $exception->getMessage() === 'The queue is down.');
+            expect($dispatched)->toBe([Post::class, Order::class]);
+
+            $queueDown = false;
+            $this->artisan('interlock:triggers')->assertSuccessful();
+
+            expect($dispatched)->toBe([Post::class, Order::class, Post::class, Expense::class, Order::class]);
+        } finally {
+            Queue::createPayloadUsing(null);
+        }
+    });
+
     it('does not dispatch a trigger again while its job has not finished', function () {
         Queue::fake();
 
