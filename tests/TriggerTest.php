@@ -3,6 +3,7 @@
 use Illuminate\Console\Scheduling\Event as ScheduledEvent;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
@@ -221,6 +222,30 @@ describe('a trigger', function () {
         }
 
         expect($published)->toBe([1 => 2, 2 => 4, 3 => 5]);
+    });
+
+    it('carries on after the last chunk a run finished when every run dies at the same point', function () {
+        config(['interlock.triggers.chunk_size' => 2]);
+        Exceptions::fake();
+        $posts = collect(range(1, 5))->map(fn() => scheduledPost('2026-10-14 09:00:00'));
+        $broken = $posts->take(2);
+        Event::listen(Transitioning::class, fn(Transitioning $event) => $broken->contains(fn(Post $post) => $post->is($event->model)) ? throw new RuntimeException('The search index is down.') : null);
+        $this->travelTo('2026-10-14 09:00:00');
+        $chunksLoaded = 0;
+        DB::listen(function (QueryExecuted $query) use (&$chunksLoaded) {
+            if (str_starts_with($query->sql, 'select') && str_contains($query->sql, 'limit 2') && ++$chunksLoaded === 2) {
+                throw new RuntimeException('The worker was killed.');
+            }
+        });
+
+        $published = [];
+        foreach (range(1, 3) as $run) {
+            $chunksLoaded = 0;
+            $this->artisan('interlock:triggers');
+            $published[$run] = Post::query()->where('status', PostStatus::Published)->count();
+        }
+
+        expect($published)->toBe([1 => 0, 2 => 2, 3 => 3]);
     });
 
     it('drains the backlog past models that are skipped on every run', function () {

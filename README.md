@@ -499,7 +499,7 @@ The command does no querying itself. It dispatches one queued job per trigger, s
 The job applies the transition on behalf of no one (a null actor) to each matching model, a chunk at a time in key order, and records the trigger's name in history. Two config keys size it:
 
 - `interlock.triggers.chunk_size` (default 100): how many models it loads at a time.
-- `interlock.triggers.max_per_run` (default 1000): the most models one run handles. A bigger backlog drains over the next runs, each carrying on where the last stopped.
+- `interlock.triggers.max_per_run` (default 1000): the most models one run handles. A bigger backlog drains over the next runs, each carrying on where the last stopped, even when the last died partway: the run saves its place after every chunk.
 
 A busy trigger can fan out into one job per chunk, so it can use several queue workers. Pass `fanOut: true` to the fluent `trigger()`, or mark a class-based transition's `trigger()` method with `#[FanOut]`:
 

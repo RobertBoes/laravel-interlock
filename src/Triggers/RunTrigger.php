@@ -68,38 +68,42 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
             ->when($cursor !== null, fn(Builder $query) => $query->where($query->getModel()->getQualifiedKeyName(), '>', $cursor))
             ->limit($maxPerRun);
 
-        $keys = $transition->triggerFansOut
-            ? $this->fanOut($candidates, $chunkSize, $bus, $pendingChunks)
-            : $this->applyInChunks($candidates, $chunkSize, $exceptions);
+        $handled = $transition->triggerFansOut
+            ? $this->fanOut($candidates, $chunkSize, $bus, $pendingChunks, $cache)
+            : $this->applyInChunks($candidates, $chunkSize, $exceptions, $cache);
 
-        $this->moveCursor($cache, count($keys) >= $maxPerRun ? end($keys) : null);
+        if ($handled < $maxPerRun) {
+            $cache->forget($this->cursorKey());
+        }
     }
 
     /**
      * @param  Builder<Model>  $candidates
-     * @return array<int, mixed> the keys of the models it got to, in key order
+     * @return int how many models it got to
      */
-    private function applyInChunks(Builder $candidates, int $chunkSize, ExceptionHandler $exceptions): array
+    private function applyInChunks(Builder $candidates, int $chunkSize, ExceptionHandler $exceptions, Cache $cache): int
     {
-        $keys = [];
+        $handled = 0;
 
-        $candidates->chunkById($chunkSize, function (Collection $chunk) use ($exceptions, &$keys) {
+        $candidates->chunkById($chunkSize, function (Collection $chunk) use ($exceptions, $cache, &$handled) {
             foreach ($chunk as $candidate) {
                 $this->apply($candidate, $exceptions);
-                $keys[] = $candidate->getKey();
             }
+
+            $handled += $chunk->count();
+            $this->moveCursor($cache, $chunk->last()?->getKey());
         });
 
-        return $keys;
+        return $handled;
     }
 
     /**
      * Only the keys are loaded here; each chunk's job loads its models.
      *
      * @param  Builder<Model>  $candidates
-     * @return array<int, mixed> the keys of the models it dispatched jobs for, in key order
+     * @return int how many models it dispatched jobs for
      */
-    private function fanOut(Builder $candidates, int $chunkSize, Dispatcher $bus, PendingChunks $pendingChunks): array
+    private function fanOut(Builder $candidates, int $chunkSize, Dispatcher $bus, PendingChunks $pendingChunks, Cache $cache): int
     {
         $key = $candidates->getModel()->getQualifiedKeyName();
         $keys = $candidates->orderBy($key)->pluck($key);
@@ -112,9 +116,10 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
 
         foreach ($chunks as $chunk) {
             $bus->dispatch(new RunTriggerChunk($this->model, $this->trigger, $chunk->values()->all()));
+            $this->moveCursor($cache, $chunk->last());
         }
 
-        return $keys->all();
+        return $keys->count();
     }
 
     private function cursorKey(): string
@@ -123,18 +128,12 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
     }
 
     /**
-     * A run that reached the cap leaves a cursor after the last model it got to, so the next run carries on from there
-     * and a backlog drains even when its first models are skipped on every run. A run that reached the end of the
-     * matching models clears it, so the next run starts from the first again.
+     * The cursor follows a run, chunk by chunk, so the next run carries on after the last model it got to: a backlog
+     * drains even when its first models are skipped on every run, and so does one whose runs die before their end. A
+     * run that reached the end of the matching models clears it, so the next run starts from the first again.
      */
     private function moveCursor(Cache $cache, mixed $lastKey): void
     {
-        if ($lastKey === null || $lastKey === false) {
-            $cache->forget($this->cursorKey());
-
-            return;
-        }
-
         $cache->forever($this->cursorKey(), $lastKey);
     }
 }
