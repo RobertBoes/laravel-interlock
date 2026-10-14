@@ -8,6 +8,7 @@ use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use RobertBoes\Interlock\Bypass\BypassScope;
@@ -134,10 +135,80 @@ trait RejectsDirectWrites
     }
 
     /**
+     * @param  array<mixed>  $values  one row, or a list of rows
+     * @param  non-empty-array<non-empty-string>  $returning
+     * @param  non-empty-string|non-empty-array<non-empty-string>|null  $uniqueBy
+     * @return Collection<int, mixed>
+     */
+    public function insertOrIgnoreReturning(array $values, array $returning = ['*'], array|string|null $uniqueBy = null)
+    {
+        return $this->interlockWrite('insertOrIgnoreReturning', fn() => $this->toBase()->insertOrIgnoreReturning($values, $returning, $uniqueBy), inserted: self::interlockRowsOf($values));
+    }
+
+    /**
+     * The values a subquery inserts are not known up front, so a state attribute or guarded attribute among the
+     * columns is a direct write, whatever the subquery selects.
+     *
+     * @param  list<string>  $columns
+     * @param  mixed  $query
+     * @return int
+     */
+    public function insertUsing(array $columns, $query)
+    {
+        return $this->interlockWrite('insertUsing', fn() => $this->toBase()->insertUsing($columns, $query), $columns);
+    }
+
+    /**
+     * @param  list<string>  $columns
+     * @param  mixed  $query
+     * @return int
+     */
+    public function insertOrIgnoreUsing(array $columns, $query)
+    {
+        return $this->interlockWrite('insertOrIgnoreUsing', fn() => $this->toBase()->insertOrIgnoreUsing($columns, $query), $columns);
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     * @return int
+     */
+    public function updateFrom(array $values)
+    {
+        return $this->interlockWrite('updateFrom', fn() => $this->toBase()->updateFrom($values), array_keys($values));
+    }
+
+    /**
+     * Inserts the row when no row matches the attributes, as creating a model does, and otherwise updates the first
+     * row that matches with the values; checked as that insert or that update.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>|(Closure(bool): array<string, mixed>)  $values
+     * @return bool
+     */
+    public function updateOrInsert(array $attributes, array|Closure $values = [])
+    {
+        $query = $this->toBase();
+        $exists = $query->where($attributes)->exists();
+        $values = $values instanceof Closure ? $values($exists) : $values;
+
+        if (! $exists) {
+            $row = [...$attributes, ...$values];
+
+            return $this->interlockWrite('updateOrInsert', fn() => $query->insert($row), inserted: [$row]);
+        }
+
+        if ($values === []) {
+            return true;
+        }
+
+        return $this->interlockWrite('updateOrInsert', fn() => (bool) $query->limit(1)->update($values), updated: array_keys($values));
+    }
+
+    /**
      * @template TResult
      *
      * @param  Closure(): TResult  $write
-     * @param  list<mixed>  $updated  the columns the write updates
+     * @param  list<mixed>  $updated  the columns the write sets, whatever their values
      * @param  list<array<mixed>>  $inserted  the rows the write inserts
      * @return TResult
      */

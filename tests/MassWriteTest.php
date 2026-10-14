@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use RobertBoes\Interlock\Events\BypassedMassWrite;
 use RobertBoes\Interlock\Events\BypassedWrite;
@@ -53,6 +54,15 @@ it('throws whichever mass write writes a state attribute, and writes nothing', f
     'insert() of several rows' => ['insert', fn(Builder $orders) => $orders->insert([['status' => OrderStatus::Pending->value, 'delivery_attempts' => 1], ['status' => OrderStatus::Shipped->value]])],
     'insertOrIgnore()' => ['insertOrIgnore', fn(Builder $orders) => $orders->insertOrIgnore(['status' => OrderStatus::Shipped->value])],
     'insertGetId()' => ['insertGetId', fn(Builder $orders) => $orders->insertGetId(['status' => OrderStatus::Shipped->value])],
+    'insertOrIgnoreReturning()' => ['insertOrIgnoreReturning', fn(Builder $orders) => $orders->insertOrIgnoreReturning(['status' => OrderStatus::Shipped->value], ['id'])],
+    'insertUsing()' => ['insertUsing', fn(Builder $orders) => $orders->insertUsing(['status'], DB::query()->selectRaw("'shipped'"))],
+    'insertUsing() of an initial state' => ['insertUsing', fn(Builder $orders) => $orders->insertUsing(['status'], DB::query()->selectRaw("'pending'"))],
+    'insertOrIgnoreUsing()' => ['insertOrIgnoreUsing', fn(Builder $orders) => $orders->insertOrIgnoreUsing(['status'], DB::query()->selectRaw("'shipped'"))],
+    'updateFrom()' => ['updateFrom', fn(Builder $orders) => $orders->updateFrom(['status' => OrderStatus::Shipped->value])],
+    'updateOrInsert() updating a row' => ['updateOrInsert', fn(Builder $orders, Order $order) => $orders->updateOrInsert(['id' => $order->getKey()], ['status' => OrderStatus::Shipped->value])],
+    'updateOrInsert() updating a row to an initial state' => ['updateOrInsert', fn(Builder $orders, Order $order) => $orders->updateOrInsert(['id' => $order->getKey()], ['status' => OrderStatus::Pending->value])],
+    'updateOrInsert() inserting a row' => ['updateOrInsert', fn(Builder $orders) => $orders->updateOrInsert(['id' => 999], ['status' => OrderStatus::Shipped->value])],
+    'updateOrInsert() with values from a closure' => ['updateOrInsert', fn(Builder $orders, Order $order) => $orders->updateOrInsert(['id' => $order->getKey()], fn(bool $exists) => ['status' => OrderStatus::Shipped->value])],
     'the static Model::insert()' => ['insert', fn() => Order::insert(['status' => OrderStatus::Shipped->value])],
     'increment() on a model' => ['increment', fn(Builder $orders, Order $order) => $order->increment('delivery_attempts', 1, ['status' => OrderStatus::Shipped])],
 ]);
@@ -72,6 +82,8 @@ it('throws whichever mass write writes a guarded attribute, and writes nothing',
     'upsert()' => ['upsert', fn(Builder $orders, Order $order) => $orders->upsert([['id' => $order->getKey(), 'status' => OrderStatus::Pending->value, 'tracking_code' => 'TRACK-1']], ['id'], ['tracking_code'])],
     'increment()' => ['increment', fn(Builder $orders) => $orders->increment('delivery_attempts', 1, ['tracking_code' => 'TRACK-1'])],
     'insert()' => ['insert', fn(Builder $orders) => $orders->insert(['tracking_code' => 'TRACK-1'])],
+    'insertUsing()' => ['insertUsing', fn(Builder $orders) => $orders->insertUsing(['tracking_code'], DB::query()->selectRaw("'TRACK-1'"))],
+    'updateOrInsert()' => ['updateOrInsert', fn(Builder $orders, Order $order) => $orders->updateOrInsert(['id' => $order->getKey()], ['tracking_code' => 'TRACK-1'])],
 ]);
 
 it('names every state attribute and guarded attribute a mass write writes', function () {
@@ -101,6 +113,7 @@ it('leaves mass writes to other attributes alone', function (Closure $write) {
     'incrementEach()' => fn(Builder $orders) => $orders->incrementEach(['delivery_attempts' => 1]),
     'decrementEach()' => fn(Builder $orders) => $orders->decrementEach(['delivery_attempts' => -1]),
     'increment() on a model' => fn(Builder $orders, Order $order) => $order->increment('delivery_attempts'),
+    'updateOrInsert()' => fn(Builder $orders, Order $order) => $orders->updateOrInsert(['id' => $order->getKey()], ['delivery_attempts' => 3]),
 ]);
 
 it('leaves mass inserts in an initial state alone, as creating a model is', function (Closure $insert) {
@@ -117,6 +130,7 @@ it('leaves mass inserts in an initial state alone, as creating a model is', func
     'insertOrIgnore()' => fn(Builder $orders) => $orders->insertOrIgnore(['status' => OrderStatus::Pending->value, 'delivery_attempts' => 1]),
     'insertGetId()' => fn(Builder $orders) => $orders->insertGetId(['status' => OrderStatus::Pending->value, 'delivery_attempts' => 1]),
     'upsert() of a new row' => fn(Builder $orders) => $orders->upsert([['id' => 1, 'status' => OrderStatus::Pending->value, 'delivery_attempts' => 1]], ['id'], ['delivery_attempts']),
+    'updateOrInsert() of a new row' => fn(Builder $orders) => $orders->updateOrInsert(['id' => 1], ['status' => OrderStatus::Pending->value, 'delivery_attempts' => 1]),
 ]);
 
 it('throws when a mass upsert updates a state attribute, even to an initial state', function () {
