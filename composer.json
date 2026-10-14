@@ -1,0 +1,60 @@
+{
+    "name": "robertboes/laravel-interlock",
+    "description": "Keep the state of an Eloquent model consistent with a declared transition graph.",
+    "keywords": [
+        "laravel",
+        "eloquent",
+        "state machine",
+        "interlock"
+    ],
+    "homepage": "https://github.com/robertboes/laravel-interlock",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Robert Boes",
+            "email": "robert@hihaho.com"
+        }
+    ],
+    "require": {
+        "php": "^8.4",
+        "illuminate/contracts": "^12.0|^13.0",
+        "spatie/laravel-package-tools": "^1.92"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.9",
+        "laravel/pint": "^1.25",
+        "orchestra/testbench": "^10.0|^11.0",
+        "pestphp/pest": "^4.4|^5.0",
+        "pestphp/pest-plugin-laravel": "^4.0|^5.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "RobertBoes\\Interlock\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "RobertBoes\\Interlock\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "analyse": "vendor/bin/phpstan analyse",
+        "format": "vendor/bin/pint",
+        "test": "vendor/bin/pest"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "RobertBoes\\Interlock\\InterlockServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
