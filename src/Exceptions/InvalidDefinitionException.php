@@ -47,4 +47,15 @@ final class InvalidDefinitionException extends LogicException implements Interlo
             $state::class,
         ));
     }
+
+    /**
+     * @param  class-string<Model>  $model
+     */
+    public static function registeredModelWithoutStateMachine(string $model): self
+    {
+        return new self(sprintf(
+            '%s is registered with Interlock, but has no #[UseStateMachine] attribute.',
+            $model,
+        ));
+    }
 }
