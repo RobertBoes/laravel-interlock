@@ -21,6 +21,29 @@ final class DirectWriteException extends LogicException implements InterlockExce
         ));
     }
 
+    public static function toParentState(Model $model, CompiledMachine $machine, BackedEnum $state): self
+    {
+        return new self(sprintf(
+            'Cannot save %s [%s]: its [%s] was set to parent state [%s], and a model is always in a leaf state. Its leaf states are [%s].',
+            $model::class,
+            $model->getKey(),
+            $machine->stateAttribute,
+            $state->value,
+            self::leafStatesWithin($machine, $state),
+        ));
+    }
+
+    public static function createdInParentState(Model $model, CompiledMachine $machine, BackedEnum $state): self
+    {
+        return new self(sprintf(
+            'Cannot create %s with [%s] [%s]: it is a parent state, and a model is always in a leaf state. Its leaf states are [%s].',
+            $model::class,
+            $machine->stateAttribute,
+            $state->value,
+            self::leafStatesWithin($machine, $state),
+        ));
+    }
+
     public static function notAnInitialState(Model $model, CompiledMachine $machine, BackedEnum $state): self
     {
         return new self(sprintf(
@@ -31,5 +54,10 @@ final class DirectWriteException extends LogicException implements InterlockExce
             $machine->machine,
             implode(', ', array_map(fn(BackedEnum $initialState) => $initialState->value, $machine->initialStates)),
         ));
+    }
+
+    private static function leafStatesWithin(CompiledMachine $machine, BackedEnum $parentState): string
+    {
+        return implode(', ', array_map(fn(BackedEnum $leafState) => $leafState->value, $machine->states->leavesWithin($parentState)));
     }
 }

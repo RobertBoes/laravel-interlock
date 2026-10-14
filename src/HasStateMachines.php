@@ -108,6 +108,8 @@ trait HasStateMachines
 
             if ($state === null) {
                 $this->setAttribute($machine->stateAttribute, $this->onlyInitialState($machine));
+            } elseif ($machine->states->isParent($state)) {
+                throw DirectWriteException::createdInParentState($this, $machine, $state);
             } elseif (! $machine->isInitialState($state)) {
                 $this->bypassOrReject($machine->stateAttribute, null, $state, DirectWriteException::notAnInitialState($this, $machine, $state));
             }
@@ -128,12 +130,21 @@ trait HasStateMachines
         foreach ($this->interlockGraph()->machines as $machine) {
             $stateAttribute = $machine->stateAttribute;
 
-            if (! $this->isDirty($stateAttribute) || $this->runningTransitionWrote($stateAttribute)) {
+            if (! $this->isDirty($stateAttribute)) {
+                continue;
+            }
+
+            $newState = $this->getAttribute($stateAttribute);
+
+            if ($newState !== null && $machine->states->isParent($newState)) {
+                throw DirectWriteException::toParentState($this, $machine, $newState);
+            }
+
+            if ($this->runningTransitionWrote($stateAttribute)) {
                 continue;
             }
 
             $oldState = $this->getOriginal($stateAttribute);
-            $newState = $this->getAttribute($stateAttribute);
 
             $this->bypassOrReject($stateAttribute, $oldState, $newState, DirectWriteException::toStateAttribute($this, $stateAttribute, $oldState, $newState));
         }

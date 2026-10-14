@@ -15,6 +15,7 @@ final readonly class CompiledMachine
         public string $machine,
         public string $stateAttribute,
         public array $initialStates,
+        public StateTree $states,
     ) {}
 
     public function isInitialState(BackedEnum $state): bool

@@ -2,6 +2,7 @@
 
 namespace RobertBoes\Interlock;
 
+use BackedEnum;
 use Closure;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Foundation\Application;
@@ -9,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use RobertBoes\Interlock\Bypass\BypassScope;
 use RobertBoes\Interlock\Discovery\ModelRegistry;
 use RobertBoes\Interlock\Exceptions\InvalidBypassException;
+use RobertBoes\Interlock\Graph\GraphRepository;
 
 final class Interlock
 {
@@ -48,6 +50,15 @@ final class Interlock
         }
 
         $app->make(BypassScope::class)->bypassUntilAppEnds($reason);
+    }
+
+    /**
+     * Whether a state is the given state, or nested within it: `Interlock::isWithin($order->status, OrderStatus::Preparing)`.
+     */
+    public static function isWithin(BackedEnum $state, BackedEnum $other): bool
+    {
+        return $state::class === $other::class
+            && Container::getInstance()->make(GraphRepository::class)->stateTree($state::class)->isWithin($state, $other);
     }
 
     /**

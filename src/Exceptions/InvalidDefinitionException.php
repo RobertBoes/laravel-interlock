@@ -35,6 +35,21 @@ final class InvalidDefinitionException extends LogicException implements Interlo
 
     /**
      * @param  class-string<StateMachine>  $machine
+     * @param  list<BackedEnum>  $leafStates
+     */
+    public static function targetStateIsParentState(string $machine, string $transition, BackedEnum $state, array $leafStates): self
+    {
+        return new self(sprintf(
+            'Transition [%s] in %s targets parent state [%s]. A model is always in a leaf state, so target one of [%s] instead.',
+            $transition,
+            $machine,
+            $state->value,
+            implode(', ', array_map(fn(BackedEnum $leafState) => $leafState->value, $leafStates)),
+        ));
+    }
+
+    /**
+     * @param  class-string<StateMachine>  $machine
      */
     public static function missingInitialStates(string $machine): self
     {
@@ -62,6 +77,20 @@ final class InvalidDefinitionException extends LogicException implements Interlo
 
     /**
      * @param  class-string<StateMachine>  $machine
+     * @param  list<BackedEnum>  $leafStates
+     */
+    public static function initialStateIsParentState(string $machine, BackedEnum $state, array $leafStates): self
+    {
+        return new self(sprintf(
+            '%s declares parent state [%s] as an initial state. A model is always in a leaf state, so declare one of [%s] instead.',
+            $machine,
+            $state->value,
+            implode(', ', array_map(fn(BackedEnum $leafState) => $leafState->value, $leafStates)),
+        ));
+    }
+
+    /**
+     * @param  class-string<StateMachine>  $machine
      */
     public static function stateAttributeNotCast(string $machine, Model $model, string $stateAttribute, BackedEnum $state): self
     {
@@ -72,6 +101,33 @@ final class InvalidDefinitionException extends LogicException implements Interlo
             $model::class,
             $stateAttribute,
             $state::class,
+        ));
+    }
+
+    /**
+     * @param  class-string<BackedEnum>  $enum
+     */
+    public static function parentStateOfAnotherEnum(string $enum, string $case, BackedEnum $parentState): self
+    {
+        return new self(sprintf(
+            '%s::%s declares parent state [%s] of %s. A parent state must be a case of the same enum.',
+            $enum,
+            $case,
+            $parentState->value,
+            $parentState::class,
+        ));
+    }
+
+    /**
+     * @param  list<BackedEnum>  $path  from the state, through its parent states, back to itself
+     */
+    public static function stateNestedWithinItself(BackedEnum $state, array $path): self
+    {
+        return new self(sprintf(
+            '%s::%s is nested within itself: [%s]. Remove one of these #[ParentState] attributes.',
+            $state::class,
+            $state->name,
+            implode(', ', array_map(fn(BackedEnum $pathState) => $pathState->value, $path)),
         ));
     }
 
