@@ -4,6 +4,7 @@ namespace RobertBoes\Interlock\Exceptions;
 
 use BackedEnum;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 use LogicException;
 use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\Graph\CompiledTransition;
@@ -52,6 +53,25 @@ final class DirectWriteException extends LogicException implements InterlockExce
         ));
     }
 
+    /**
+     * @param  list<string>  $stateAttributes
+     * @param  list<string>  $guardedAttributes
+     */
+    public static function throughBuilder(Model $model, string $method, array $stateAttributes, array $guardedAttributes): self
+    {
+        $attributes = array_filter([
+            self::attributeList('state attribute', $stateAttributes),
+            self::attributeList('guarded attribute', $guardedAttributes),
+        ]);
+
+        return new self(sprintf(
+            'Cannot %s() %s through its query builder: it writes %s, which may only change in a transition. Apply a transition to each model instead.',
+            $method,
+            $model::class,
+            implode(' and ', $attributes),
+        ));
+    }
+
     public static function toParentState(Model $model, CompiledMachine $machine, BackedEnum $state): self
     {
         return new self(sprintf(
@@ -95,6 +115,18 @@ final class DirectWriteException extends LogicException implements InterlockExce
         return $writers === []
             ? 'No transition may write it.'
             : sprintf('Only [%s] may write it.', implode(', ', $writers));
+    }
+
+    /**
+     * @param  list<string>  $attributes
+     */
+    private static function attributeList(string $kind, array $attributes): ?string
+    {
+        if ($attributes === []) {
+            return null;
+        }
+
+        return sprintf('the %s [%s]', Str::plural($kind, count($attributes)), implode(', ', $attributes));
     }
 
     private static function leafStatesWithin(CompiledMachine $machine, BackedEnum $parentState): string

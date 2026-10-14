@@ -8,6 +8,7 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Auth\Factory as AuthFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\Event;
 use RobertBoes\Interlock\Bypass\BypassScope;
 use RobertBoes\Interlock\Events\BypassedWrite;
@@ -16,6 +17,7 @@ use RobertBoes\Interlock\Events\Transitioning;
 use RobertBoes\Interlock\Exceptions\AmbiguousInitialStateException;
 use RobertBoes\Interlock\Exceptions\DirectWriteException;
 use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
+use RobertBoes\Interlock\Exceptions\MissingBuilderTraitException;
 use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\Graph\CompiledTransition;
 use RobertBoes\Interlock\Graph\GraphRepository;
@@ -36,6 +38,27 @@ trait HasStateMachines
 
     /** @var list<BypassedWrite> dispatched once the save that writes them finishes */
     private array $interlockBypassedWrites = [];
+
+    /** @var array<class-string<Model>, true> the models whose builder was found to use RejectsDirectWrites */
+    private static array $interlockCheckedBuilders = [];
+
+    /**
+     * Fails as soon as a model with a custom builder that lacks RejectsDirectWrites is used, every time it is used (ADR 0009).
+     */
+    public function initializeHasStateMachines(): void
+    {
+        if (isset(self::$interlockCheckedBuilders[static::class])) {
+            return;
+        }
+
+        $builder = $this->newEloquentBuilder($this->newBaseQueryBuilder());
+
+        if (! in_array(RejectsDirectWrites::class, class_uses_recursive($builder), true)) {
+            throw MissingBuilderTraitException::on($this, $builder);
+        }
+
+        self::$interlockCheckedBuilders[static::class] = true;
+    }
 
     /**
      * Apply a transition by name, `transition('publish')`, or as an instance of its class, `transition(new Ship($trackingCode))`.
@@ -171,12 +194,44 @@ trait HasStateMachines
     protected function performUpdate(Builder $query): bool
     {
         if ($this->interlockRunningTransition === null || $this->interlockLoadedState === null) {
-            return parent::performUpdate($query);
+            return parent::performUpdate($this->interlockModelSaveQuery($query));
         }
 
         return parent::performUpdate(
             CompareAndSwapBuilder::replacing($query, $this->interlockRunningTransition, $this->interlockLoadedState),
         );
+    }
+
+    /**
+     * @param  Builder<static>  $query
+     */
+    protected function performInsert(Builder $query): bool
+    {
+        return parent::performInsert($this->interlockModelSaveQuery($query));
+    }
+
+    /**
+     * Interlocked models get Interlock's builder unless they set a custom builder, which must use RejectsDirectWrites (ADR 0009).
+     *
+     * @param  QueryBuilder  $query
+     * @return Builder<*>
+     */
+    public function newEloquentBuilder($query)
+    {
+        $builder = parent::newEloquentBuilder($query);
+
+        return $builder::class === Builder::class ? new InterlockBuilder($query) : $builder;
+    }
+
+    /**
+     * The model's save checks its own direct writes, so its builder lets the write through.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    private function interlockModelSaveQuery(Builder $query): Builder
+    {
+        return method_exists($query, 'interlockSavesModel') ? $query->interlockSavesModel() : $query;
     }
 
     /**
