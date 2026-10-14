@@ -19,6 +19,7 @@ use RobertBoes\Interlock\Tests\Fixtures\Expenses\ExpenseStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Order;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderShipped;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatus;
+use RobertBoes\Interlock\Tests\Fixtures\Orders\PaymentCaptured;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\PaymentStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Ship;
 
@@ -271,3 +272,43 @@ it('writes nothing when a staged transition fails on save, and does not carry it
         $expense->forceFill(['rejection_reason' => 'Duplicate'])->stageTransition('reject', Employee::manager());
     }, StaleStateException::class],
 ]);
+
+/**
+ * Stages a ship whose after-commit step fails, and a capture_payment on the other machine, to save together.
+ *
+ * @return ArrayObject<int, string> the after-commit and Transitioned events, in the order they are dispatched
+ */
+function stageShipThatFailsAfterCommitAndCapturePayment(Order $order): ArrayObject
+{
+    $dispatched = new ArrayObject();
+    Event::listen(OrderShipped::class, fn() => throw new RuntimeException('The mail server is down.'));
+    Event::listen(PaymentCaptured::class, fn() => $dispatched->append('payment captured'));
+    Event::listen(Transitioned::class, fn(Transitioned $event) => $dispatched->append("transitioned: {$event->transition}"));
+
+    $order->stageTransition(new Ship('TRACK-1'))->stageTransition('capture_payment');
+
+    return $dispatched;
+}
+
+it('runs every after-commit step and dispatches every Transitioned before rethrowing the first failure', function (Closure $save) {
+    $order = orderReadyToShip()->transition('authorise_payment');
+    $dispatched = stageShipThatFailsAfterCommitAndCapturePayment($order);
+
+    expect(fn() => $save($order))->toThrow(RuntimeException::class, 'The mail server is down.')
+        ->and($dispatched->getArrayCopy())->toBe(['transitioned: ship', 'payment captured', 'transitioned: capture_payment'])
+        ->and($order->fresh())
+        ->status->toBe(OrderStatus::Shipped)
+        ->payment_status->toBe(PaymentStatus::Paid);
+})->with([
+    'outside a transaction' => [fn(Order $order) => $order->save()],
+    'deferred to an outer transaction\'s commit' => [fn(Order $order) => DB::transaction(fn() => $order->save())],
+]);
+
+it('rethrows the first after-commit failure when several fail', function () {
+    $order = orderReadyToShip()->transition('authorise_payment');
+    $dispatched = stageShipThatFailsAfterCommitAndCapturePayment($order);
+    Event::listen(PaymentCaptured::class, fn() => throw new RuntimeException('The receipt printer is jammed.'));
+
+    expect(fn() => $order->save())->toThrow(RuntimeException::class, 'The mail server is down.')
+        ->and($dispatched->getArrayCopy())->toBe(['transitioned: ship', 'payment captured', 'transitioned: capture_payment']);
+});

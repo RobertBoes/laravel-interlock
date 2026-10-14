@@ -204,18 +204,51 @@ trait HasStateMachines
             return false;
         }
 
-        $this->getConnection()->afterCommit(function () use ($stagedTransitions) {
-            $log = Container::getInstance()->make(TransitionLog::class);
-
-            foreach ($stagedTransitions as $staged) {
-                $log->record($this, $staged->compiled->name);
-                $staged->steps->afterCommit($this);
-
-                Event::dispatch(new Transitioned($this, $staged->compiled->name, $staged->fromState, $staged->compiled->targetState));
-            }
-        });
+        $this->getConnection()->afterCommit(fn() => $this->interlockFinishCommittedTransitions($stagedTransitions));
 
         return true;
+    }
+
+    /**
+     * Runs each committed transition's after-commit step and dispatches its Transitioned event. One that throws, or
+     * whose listener throws, keeps neither its own event nor the later transitions from running: the transitions have
+     * committed, so each one finishes, and the first failure is rethrown once they all have.
+     *
+     * @param  array<string, StagedTransition>  $stagedTransitions
+     */
+    private function interlockFinishCommittedTransitions(array $stagedTransitions): void
+    {
+        $log = Container::getInstance()->make(TransitionLog::class);
+        $failures = [];
+
+        foreach ($stagedTransitions as $staged) {
+            $log->record($this, $staged->compiled->name);
+
+            $failures[] = $this->interlockFailureOf(fn() => $staged->steps->afterCommit($this));
+            $failures[] = $this->interlockFailureOf(fn() => Event::dispatch(
+                new Transitioned($this, $staged->compiled->name, $staged->fromState, $staged->compiled->targetState),
+            ));
+        }
+
+        $firstFailure = array_find($failures, fn(?Throwable $failure) => $failure !== null);
+
+        if ($firstFailure !== null) {
+            throw $firstFailure;
+        }
+    }
+
+    /**
+     * @param  Closure(): mixed  $callback
+     */
+    private function interlockFailureOf(Closure $callback): ?Throwable
+    {
+        try {
+            $callback();
+        } catch (Throwable $failure) {
+            return $failure;
+        }
+
+        return null;
     }
 
     /**

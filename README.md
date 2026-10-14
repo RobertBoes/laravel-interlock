@@ -133,7 +133,7 @@ $this->transition('deliver')
 ```
 
 - `apply` runs inside the transition's transaction, after the state attribute is set to the target state and before the write. Attributes it sets are saved in the same update, and rows it writes are rolled back when the transition fails for any reason, stale state included.
-- `afterCommit` runs once the transition has committed. Send mail, make HTTP calls and dispatch queued work here, so they never run for a transition that didn't happen.
+- `afterCommit` runs once the transition has committed. Send mail, make HTTP calls and dispatch queued work here, so they never run for a transition that didn't happen. Inside an outer transaction, it waits for that transaction to commit. When it throws, the transition stays applied: its `Transitioned` event is still dispatched, and so are the `afterCommit` steps and events of the other transitions saved with it. The first exception is rethrown once they all have run.
 
 A transition that needs input is a class with a typed constructor. Its from-states and target state are attributes, so exports and checks can read them without input values:
 
