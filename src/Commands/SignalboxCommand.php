@@ -3,6 +3,8 @@
 namespace RobertBoes\Interlock\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Collection;
+use RobertBoes\Interlock\Export\ExportFormat;
 use RobertBoes\Interlock\Discovery\ModelRegistry;
 use RobertBoes\Interlock\Export\MermaidDiagram;
 use RobertBoes\Interlock\Export\XStateConfig;
@@ -14,8 +16,6 @@ use RobertBoes\Interlock\StateMachine;
 
 final class SignalboxCommand extends Command
 {
-    private const array FORMATS = ['mermaid', 'xstate', 'xstate-ts'];
-
     protected $signature = 'interlock:signalbox
         {machine? : The state machine class to export; every registered machine when none is given}
         {--format=mermaid : The format to export in: mermaid, xstate (JSON) or xstate-ts (TypeScript)}
@@ -25,18 +25,20 @@ final class SignalboxCommand extends Command
 
     public function handle(ModelRegistry $registry, GraphRepository $graphs): int
     {
-        /** @var string $format */
-        $format = $this->option('format');
+        /** @var string $formatOption */
+        $formatOption = $this->option('format');
         /** @var string|null $machineClass */
         $machineClass = $this->argument('machine');
         /** @var string|null $path */
         $path = $this->option('output');
 
-        if (! in_array($format, self::FORMATS, true)) {
+        $format = ExportFormat::tryFrom($formatOption);
+
+        if ($format === null) {
             $this->components->error(sprintf(
                 'Interlock cannot export the format [%s]. The formats are: %s.',
-                $format,
-                implode(', ', self::FORMATS),
+                $formatOption,
+                implode(', ', array_map(fn(ExportFormat $format) => $format->value, ExportFormat::cases())),
             ));
 
             return self::FAILURE;
@@ -54,12 +56,12 @@ final class SignalboxCommand extends Command
             return self::FAILURE;
         }
 
-        $sharedIds = $machineClass === null && $format !== 'mermaid' ? $this->machinesSharingAnId($machines) : [];
+        $sharedIds = $machineClass === null && $format !== ExportFormat::Mermaid ? $this->machinesSharingAnId($machines) : new Collection();
 
-        if ($sharedIds !== []) {
+        if ($sharedIds->isNotEmpty()) {
             $this->components->error(sprintf(
                 'Interlock cannot export every machine as XState: machine IDs are class names without their namespace, and %s share one. Rename one of the machines, or export them one at a time.',
-                implode('; ', array_map(fn(array $classes) => implode(' and ', $classes), $sharedIds)),
+                $sharedIds->map(fn(Collection $machineClasses) => $machineClasses->implode(' and '))->implode('; '),
             ));
 
             return self::FAILURE;
@@ -109,12 +111,12 @@ final class SignalboxCommand extends Command
     /**
      * @param  list<CompiledTransition>  $transitions
      */
-    private function export(string $format, CompiledMachine $machine, array $transitions): string
+    private function export(ExportFormat $format, CompiledMachine $machine, array $transitions): string
     {
         return match ($format) {
-            'xstate' => XStateConfig::json(XStateConfig::of($machine, $transitions)),
-            'xstate-ts' => XStateTypeScript::of($machine, $transitions),
-            default => MermaidDiagram::of($machine, $transitions),
+            ExportFormat::XState => XStateConfig::json(XStateConfig::of($machine, $transitions)),
+            ExportFormat::XStateTypeScript => XStateTypeScript::of($machine, $transitions),
+            ExportFormat::Mermaid => MermaidDiagram::of($machine, $transitions),
         };
     }
 
@@ -124,12 +126,12 @@ final class SignalboxCommand extends Command
      *
      * @param  array<class-string<StateMachine>, array{CompiledMachine, list<CompiledTransition>}>  $machines
      */
-    private function exportAll(string $format, array $machines): string
+    private function exportAll(ExportFormat $format, array $machines): string
     {
         return match ($format) {
-            'xstate' => XStateConfig::json((object) $this->xstateConfigs($machines)),
-            'xstate-ts' => implode(PHP_EOL, array_map(fn(array $machine) => XStateTypeScript::of(...$machine), $machines)),
-            default => $this->markdown($machines),
+            ExportFormat::XState => XStateConfig::json((object) $this->xstateConfigs($machines)),
+            ExportFormat::XStateTypeScript => implode(PHP_EOL, array_map(fn(array $machine) => XStateTypeScript::of(...$machine), $machines)),
+            ExportFormat::Mermaid => $this->markdown($machines),
         };
     }
 
@@ -137,17 +139,14 @@ final class SignalboxCommand extends Command
      * The machines whose XState IDs are the same, so that one would overwrite the other in an export of every machine.
      *
      * @param  array<class-string<StateMachine>, array{CompiledMachine, list<CompiledTransition>}>  $machines
-     * @return list<list<class-string<StateMachine>>>
+     * @return Collection<int, Collection<int, class-string<StateMachine>>>
      */
-    private function machinesSharingAnId(array $machines): array
+    private function machinesSharingAnId(array $machines): Collection
     {
-        $byId = [];
-
-        foreach ($machines as $machineClass => [$compiled]) {
-            $byId[XStateConfig::id($compiled)][] = $machineClass;
-        }
-
-        return array_values(array_filter($byId, fn(array $classes) => count($classes) > 1));
+        return new Collection($machines)
+            ->mapToGroups(fn(array $machine, string $machineClass) => [XStateConfig::id($machine[0]) => $machineClass])
+            ->filter(fn(Collection $machineClasses) => $machineClasses->count() > 1)
+            ->values();
     }
 
     /**
@@ -156,13 +155,9 @@ final class SignalboxCommand extends Command
      */
     private function xstateConfigs(array $machines): array
     {
-        $configs = [];
-
-        foreach ($machines as [$compiled, $transitions]) {
-            $configs[XStateConfig::id($compiled)] = XStateConfig::of($compiled, $transitions);
-        }
-
-        return $configs;
+        return new Collection($machines)
+            ->mapWithKeys(fn(array $machine) => [XStateConfig::id($machine[0]) => XStateConfig::of(...$machine)])
+            ->all();
     }
 
     /**
@@ -172,12 +167,17 @@ final class SignalboxCommand extends Command
      */
     private function markdown(array $machines): string
     {
-        $sections = [];
+        return new Collection($machines)
+            ->map(fn(array $machine, string $machineClass) => $this->markdownSection($machineClass, ...$machine))
+            ->implode(PHP_EOL);
+    }
 
-        foreach ($machines as $machineClass => [$compiled, $transitions]) {
-            $sections[] = '## ' . class_basename($machineClass) . PHP_EOL . PHP_EOL . '```mermaid' . PHP_EOL . MermaidDiagram::of($compiled, $transitions) . '```' . PHP_EOL;
-        }
-
-        return implode(PHP_EOL, $sections);
+    /**
+     * @param  class-string<StateMachine>  $machineClass
+     * @param  list<CompiledTransition>  $transitions
+     */
+    private function markdownSection(string $machineClass, CompiledMachine $machine, array $transitions): string
+    {
+        return '## ' . class_basename($machineClass) . PHP_EOL . PHP_EOL . '```mermaid' . PHP_EOL . MermaidDiagram::of($machine, $transitions) . '```' . PHP_EOL;
     }
 }
