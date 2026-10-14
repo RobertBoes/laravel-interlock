@@ -365,7 +365,7 @@ Order::query()->tap(new NotInState([OrderStatus::Delivered, OrderStatus::Cancell
 Order::query()->tap(new CanTransition('ship'))->get();
 ```
 
-`InState` and `NotInState` expand a parent state to its children, so "all preparing orders" includes the packing ones. They find the state attribute from the enum; pass it as `attribute` when one enum backs several machines on the model: `new InState(Approval::Approved, attribute: 'legal_status')`.
+`InState` and `NotInState` expand a parent state to its children, so "all preparing orders" includes the packing ones. They find the state attribute from the enum; pass it as `stateAttribute` when one enum backs several machines on the model: `new InState(Approval::Approved, stateAttribute: 'legal_status')`.
 
 `CanTransition` checks from-states only. It does not evaluate guards or authorisation, so applying the transition to a model it finds can still fail. Ask the model for its [available transitions](#available-transitions) when that matters.
 

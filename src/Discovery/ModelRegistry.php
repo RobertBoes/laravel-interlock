@@ -165,7 +165,7 @@ final class ModelRegistry
 
         foreach ($model->getAttributes(UseStateMachine::class) as $attribute) {
             $declaration = $attribute->newInstance();
-            $machines[$declaration->attribute] = $declaration->machine;
+            $machines[$declaration->stateAttribute] = $declaration->machine;
         }
 
         if ($machines !== [] && ! in_array(HasStateMachines::class, class_uses_recursive($model->getName()), true)) {

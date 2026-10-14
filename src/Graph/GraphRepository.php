@@ -55,11 +55,11 @@ final class GraphRepository
         foreach ((new ReflectionClass($model))->getAttributes(UseStateMachine::class) as $attribute) {
             $declaration = $attribute->newInstance();
 
-            if (isset($machines[$declaration->attribute])) {
-                throw InvalidDefinitionException::twoMachinesForOneStateAttribute($model, $declaration->attribute, $machines[$declaration->attribute]->class, $declaration->machine);
+            if (isset($machines[$declaration->stateAttribute])) {
+                throw InvalidDefinitionException::twoMachinesForOneStateAttribute($model, $declaration->stateAttribute, $machines[$declaration->stateAttribute]->class, $declaration->machine);
             }
 
-            $machine = $machines[$declaration->attribute] = $this->compileMachine($model, $declaration);
+            $machine = $machines[$declaration->stateAttribute] = $this->compileMachine($model, $declaration);
             $machineTransitions = [];
 
             foreach ((new $declaration->machine())->transitions() as $definition) {
@@ -92,12 +92,12 @@ final class GraphRepository
             throw InvalidDefinitionException::missingInitialStates($declaration->machine);
         }
 
-        $castEnum = $model->getCasts()[$declaration->attribute]
-            ?? throw InvalidDefinitionException::stateAttributeNotCast($declaration->machine, $model, $declaration->attribute, $initialStates[0]);
+        $castEnum = $model->getCasts()[$declaration->stateAttribute]
+            ?? throw InvalidDefinitionException::stateAttributeNotCast($declaration->machine, $model, $declaration->stateAttribute, $initialStates[0]);
         $initialStateOfAnotherEnum = self::stateNotOf($castEnum, $initialStates);
 
         if ($initialStateOfAnotherEnum !== null) {
-            throw InvalidDefinitionException::initialStateNotOfCastEnum($declaration->machine, $model, $declaration->attribute, $initialStateOfAnotherEnum, $castEnum);
+            throw InvalidDefinitionException::initialStateNotOfCastEnum($declaration->machine, $model, $declaration->stateAttribute, $initialStateOfAnotherEnum, $castEnum);
         }
 
         $states = $this->stateTree($initialStates[0]::class);
@@ -111,12 +111,12 @@ final class GraphRepository
         $finalStateOfAnotherEnum = self::stateNotOf($castEnum, $finalStates);
 
         if ($finalStateOfAnotherEnum !== null) {
-            throw InvalidDefinitionException::finalStateNotOfCastEnum($declaration->machine, $model, $declaration->attribute, $finalStateOfAnotherEnum, $castEnum);
+            throw InvalidDefinitionException::finalStateNotOfCastEnum($declaration->machine, $model, $declaration->stateAttribute, $finalStateOfAnotherEnum, $castEnum);
         }
 
         $recordsHistory = $reflection->getAttributes(RecordsHistory::class) !== [];
 
-        return new CompiledMachine($declaration->machine, $declaration->attribute, $initialStates, $states, $finalStates, $recordsHistory);
+        return new CompiledMachine($declaration->machine, $declaration->stateAttribute, $initialStates, $states, $finalStates, $recordsHistory);
     }
 
     /**

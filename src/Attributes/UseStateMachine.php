@@ -12,7 +12,7 @@ final readonly class UseStateMachine
      * @param  class-string<StateMachine>  $machine
      */
     public function __construct(
-        public string $attribute,
+        public string $stateAttribute,
         public string $machine,
     ) {}
 }

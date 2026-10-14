@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
  * Limits a query to the models in none of the given states: `Order::query()->tap(new NotInState(OrderStatus::Preparing))`.
  *
  * A parent state stands for every state nested within it. The state attribute is found from the states' enum; pass it
- * as `attribute` when the model has several machines with states of that enum.
+ * as `stateAttribute` when the model has several machines with states of that enum.
  */
 final readonly class NotInState
 {
@@ -20,9 +20,9 @@ final readonly class NotInState
     /**
      * @param  BackedEnum|list<BackedEnum>  $states
      */
-    public function __construct(BackedEnum|array $states, ?string $attribute = null)
+    public function __construct(BackedEnum|array $states, ?string $stateAttribute = null)
     {
-        $this->inState = new InState($states, $attribute);
+        $this->inState = new InState($states, $stateAttribute);
     }
 
     /**

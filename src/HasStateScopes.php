@@ -19,18 +19,18 @@ trait HasStateScopes
      * @param  Builder<static>  $query
      * @param  BackedEnum|list<BackedEnum>  $states
      */
-    public function scopeWhereInState(Builder $query, BackedEnum|array $states, ?string $attribute = null): void
+    public function scopeWhereInState(Builder $query, BackedEnum|array $states, ?string $stateAttribute = null): void
     {
-        $query->tap(new InState($states, $attribute));
+        $query->tap(new InState($states, $stateAttribute));
     }
 
     /**
      * @param  Builder<static>  $query
      * @param  BackedEnum|list<BackedEnum>  $states
      */
-    public function scopeWhereNotInState(Builder $query, BackedEnum|array $states, ?string $attribute = null): void
+    public function scopeWhereNotInState(Builder $query, BackedEnum|array $states, ?string $stateAttribute = null): void
     {
-        $query->tap(new NotInState($states, $attribute));
+        $query->tap(new NotInState($states, $stateAttribute));
     }
 
     /**

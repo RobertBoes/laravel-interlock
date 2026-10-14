@@ -15,7 +15,7 @@ use RobertBoes\Interlock\Graph\GraphRepository;
  * Limits a query to the models in one of the given states: `Order::query()->tap(new InState(OrderStatus::Preparing))`.
  *
  * A parent state stands for every state nested within it. The state attribute is found from the states' enum; pass it
- * as `attribute` when the model has several machines with states of that enum.
+ * as `stateAttribute` when the model has several machines with states of that enum.
  */
 final readonly class InState
 {
@@ -25,7 +25,7 @@ final readonly class InState
     /**
      * @param  BackedEnum|list<BackedEnum>  $states
      */
-    public function __construct(BackedEnum|array $states, private ?string $attribute = null)
+    public function __construct(BackedEnum|array $states, private ?string $stateAttribute = null)
     {
         $states = is_array($states) ? $states : [$states];
 
@@ -73,9 +73,9 @@ final readonly class InState
             throw InvalidStateQueryException::noStateMachines($model);
         }
 
-        if ($this->attribute !== null) {
-            return $machines[$this->attribute]
-                ?? throw InvalidStateQueryException::noStateMachineOn($model, $this->attribute, $stateAttributes);
+        if ($this->stateAttribute !== null) {
+            return $machines[$this->stateAttribute]
+                ?? throw InvalidStateQueryException::noStateMachineOn($model, $this->stateAttribute, $stateAttributes);
         }
 
         $enum = $this->states[0]::class;

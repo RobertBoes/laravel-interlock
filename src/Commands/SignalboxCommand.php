@@ -92,13 +92,13 @@ final class SignalboxCommand extends Command
         $machines = [];
 
         foreach ($registry->models() as $model => $declarations) {
-            foreach ($declarations as $attribute => $machineClass) {
+            foreach ($declarations as $stateAttribute => $machineClass) {
                 if (isset($machines[$machineClass]) || ($only !== null && $machineClass !== $only)) {
                     continue;
                 }
 
                 $graph = $graphs->for(new $model());
-                $compiled = $graph->machines[$attribute];
+                $compiled = $graph->machines[$stateAttribute];
                 $machines[$machineClass] = [$compiled, $graph->transitionsOf($compiled)];
             }
         }

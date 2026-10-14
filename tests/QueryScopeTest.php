@@ -77,9 +77,9 @@ it('queries the given state attribute', function () {
     $ready = Post::create(['status' => PostStatus::Ready]);
     $draft = Post::create(['status' => PostStatus::Draft]);
 
-    expect(Post::query()->tap(new InState(PostStatus::Ready, attribute: 'status'))->pluck('id')->all())
+    expect(Post::query()->tap(new InState(PostStatus::Ready, stateAttribute: 'status'))->pluck('id')->all())
         ->toBe([$ready->getKey()])
-        ->and(Post::query()->tap(new NotInState(PostStatus::Ready, attribute: 'status'))->pluck('id')->all())
+        ->and(Post::query()->tap(new NotInState(PostStatus::Ready, stateAttribute: 'status'))->pluck('id')->all())
         ->toBe([$draft->getKey()]);
 });
 
@@ -91,7 +91,7 @@ it('throws when the model has no state machine with states of the enum', functio
 });
 
 it('throws when the model has no state machine on the given attribute', function () {
-    expect(fn() => Post::query()->tap(new InState(PostStatus::Ready, attribute: 'title'))->get())->toThrow(
+    expect(fn() => Post::query()->tap(new InState(PostStatus::Ready, stateAttribute: 'title'))->get())->toThrow(
         InvalidStateQueryException::class,
         Post::class . ' has no state machine on [title]. Its state attributes are [status].',
     );
