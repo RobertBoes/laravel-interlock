@@ -275,7 +275,7 @@ final class InvalidDefinitionException extends LogicException implements Interlo
     public static function registeredModelWithoutStateMachine(string $model): self
     {
         return new self(sprintf(
-            '%s is registered with Interlock, but has no #[UseStateMachine] attribute.',
+            '%s is registered with Interlock, but has no #[UseStateMachine] attribute. Add #[UseStateMachine(...)] to it, or remove it from `interlock.models` in config/interlock.php or the `Interlock::registerModels()` call that adds it.',
             $model,
         ));
     }

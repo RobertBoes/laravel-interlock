@@ -73,7 +73,7 @@ it('rejects a registered model without a state machine', function () {
 
     expect(fn() => Interlock::models())->toThrow(
         InvalidDefinitionException::class,
-        Comment::class . ' is registered with Interlock, but has no #[UseStateMachine] attribute.',
+        Comment::class . ' is registered with Interlock, but has no #[UseStateMachine] attribute. Add #[UseStateMachine(...)] to it, or remove it from `interlock.models` in config/interlock.php or the `Interlock::registerModels()` call that adds it.',
     );
 });
 
