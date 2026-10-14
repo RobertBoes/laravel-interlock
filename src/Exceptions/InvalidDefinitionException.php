@@ -137,13 +137,15 @@ final class InvalidDefinitionException extends LogicException implements Interlo
     public static function initialStateNotOfCastEnum(string $machine, Model $model, string $stateAttribute, BackedEnum $state, string $castEnum): self
     {
         return new self(sprintf(
-            '%s declares initial state [%s] of %s, but %s casts [%s] to %s.',
+            '%s declares initial state [%s] of %s, but %s casts [%s] to %s. Use a case of %s in #[InitialStates], or change the cast of [%s].',
             $machine,
             $state->value,
             $state::class,
             $model::class,
             $stateAttribute,
             $castEnum,
+            $castEnum,
+            $stateAttribute,
         ));
     }
 
@@ -153,13 +155,15 @@ final class InvalidDefinitionException extends LogicException implements Interlo
     public static function finalStateNotOfCastEnum(string $machine, Model $model, string $stateAttribute, BackedEnum $state, string $castEnum): self
     {
         return new self(sprintf(
-            '%s declares final state [%s] of %s, but %s casts [%s] to %s.',
+            '%s declares final state [%s] of %s, but %s casts [%s] to %s. Use a case of %s in #[FinalStates], or change the cast of [%s].',
             $machine,
             $state->value,
             $state::class,
             $model::class,
             $stateAttribute,
             $castEnum,
+            $castEnum,
+            $stateAttribute,
         ));
     }
 

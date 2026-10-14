@@ -37,14 +37,14 @@ it('rejects a machine without initial states', function () {
 it('rejects an initial state of an enum the state attribute is not cast to', function () {
     expect(fn() => PostWithInitialStateOfAnotherEnum::create(['status' => PostStatus::Draft]))->toThrow(
         InvalidDefinitionException::class,
-        MachineWithInitialStateOfAnotherEnum::class . ' declares initial state [open] of ' . OtherStatus::class . ', but ' . PostWithInitialStateOfAnotherEnum::class . ' casts [status] to ' . PostStatus::class . '.',
+        MachineWithInitialStateOfAnotherEnum::class . ' declares initial state [open] of ' . OtherStatus::class . ', but ' . PostWithInitialStateOfAnotherEnum::class . ' casts [status] to ' . PostStatus::class . '. Use a case of ' . PostStatus::class . ' in #[InitialStates], or change the cast of [status].',
     );
 });
 
 it('rejects a final state of an enum the state attribute is not cast to', function () {
     expect(fn() => (new PostWithFinalStateOfAnotherEnum())->transition('submit'))->toThrow(
         InvalidDefinitionException::class,
-        MachineWithFinalStateOfAnotherEnum::class . ' declares final state [open] of ' . OtherStatus::class . ', but ' . PostWithFinalStateOfAnotherEnum::class . ' casts [status] to ' . PostStatus::class . '.',
+        MachineWithFinalStateOfAnotherEnum::class . ' declares final state [open] of ' . OtherStatus::class . ', but ' . PostWithFinalStateOfAnotherEnum::class . ' casts [status] to ' . PostStatus::class . '. Use a case of ' . PostStatus::class . ' in #[FinalStates], or change the cast of [status].',
     );
 });
 
