@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use LogicException;
 use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\StateMachine;
+use RobertBoes\Interlock\Transition;
 
 final class InvalidDefinitionException extends LogicException implements InterlockException
 {
@@ -31,6 +32,41 @@ final class InvalidDefinitionException extends LogicException implements Interlo
             'Transition [%s] in %s has no from-states. Call ->from() with the states it may start from.',
             $transition,
             $machine,
+        ));
+    }
+
+    /**
+     * @param  class-string<StateMachine>  $machine
+     */
+    public static function notATransitionClass(string $machine, string $class): self
+    {
+        return new self(sprintf(
+            '%s lists [%s] in its transitions, but it is not a class extending %s. List fluent transitions and transition classes.',
+            $machine,
+            $class,
+            Transition::class,
+        ));
+    }
+
+    /**
+     * @param  class-string<Transition>  $transition
+     */
+    public static function missingTargetStateAttribute(string $transition): self
+    {
+        return new self(sprintf(
+            'Transition %s has no target state. Add #[TargetState(...)] to it with the one state it leads to.',
+            $transition,
+        ));
+    }
+
+    /**
+     * @param  class-string<Transition>  $transition
+     */
+    public static function missingFromStatesAttribute(string $transition): self
+    {
+        return new self(sprintf(
+            'Transition %s has no from-states. Add #[FromStates(...)] to it with the states it may start from.',
+            $transition,
         ));
     }
 

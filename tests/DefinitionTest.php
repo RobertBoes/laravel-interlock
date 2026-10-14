@@ -2,9 +2,17 @@
 
 use RobertBoes\Interlock\Exceptions\InterlockException;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
+use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineForUncastAttribute;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineWithFinalStateOfAnotherEnum;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineListingANonTransitionClass;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithNonTransitionClass;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithTransitionClassWithoutFromStates;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithTransitionClassWithoutTargetState;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\TransitionWithoutFromStates;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\TransitionWithoutTargetState;
+use RobertBoes\Interlock\Transition;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineWithInitialStateOfAnotherEnum;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineWithoutFromStates;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineWithoutInitialStates;
@@ -65,6 +73,27 @@ it('rejects a state attribute that is not cast to the enum of its states', funct
     expect(fn() => (new PostWithUncastStateAttribute())->transition('submit'))->toThrow(
         InvalidDefinitionException::class,
         MachineForUncastAttribute::class . ' uses states of ' . PostStatus::class . ', so ' . PostWithUncastStateAttribute::class . ' must cast [status] to ' . PostStatus::class . ' in its casts.',
+    );
+});
+
+it('rejects a transition class without a target state attribute', function () {
+    expect(fn() => (new PostWithTransitionClassWithoutTargetState())->transition('submit'))->toThrow(
+        InvalidDefinitionException::class,
+        'Transition ' . TransitionWithoutTargetState::class . ' has no target state. Add #[TargetState(...)] to it with the one state it leads to.',
+    );
+});
+
+it('rejects a transition class without a from-states attribute', function () {
+    expect(fn() => (new PostWithTransitionClassWithoutFromStates())->transition('submit'))->toThrow(
+        InvalidDefinitionException::class,
+        'Transition ' . TransitionWithoutFromStates::class . ' has no from-states. Add #[FromStates(...)] to it with the states it may start from.',
+    );
+});
+
+it('rejects a listed class that does not extend the transition base class', function () {
+    expect(fn() => (new PostWithNonTransitionClass())->transition('submit'))->toThrow(
+        InvalidDefinitionException::class,
+        MachineListingANonTransitionClass::class . ' lists [' . Post::class . '] in its transitions, but it is not a class extending ' . Transition::class . '. List fluent transitions and transition classes.',
     );
 });
 

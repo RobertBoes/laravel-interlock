@@ -12,6 +12,8 @@ return new class extends Migration {
             $table->string('status');
             // Nullable because the InvalidDefinitions and Discovery models share this table without a payment machine.
             $table->string('payment_status')->nullable();
+            $table->string('tracking_code')->nullable();
+            $table->timestamp('delivered_at')->nullable();
             $table->timestamps();
         });
     }

@@ -15,9 +15,13 @@ class OrderStatusMachine extends StateMachine
         return [
             $this->transition('prepare')->from(OrderStatus::Pending)->to(OrderStatus::Packing),
             $this->transition('create_label')->from(OrderStatus::Packing)->to(OrderStatus::LabelCreated),
-            $this->transition('ship')->from(OrderStatus::LabelCreated)->to(OrderStatus::Shipped),
-            $this->transition('deliver')->from(OrderStatus::Shipped)->to(OrderStatus::Delivered),
-            $this->transition('cancel')->from(OrderStatus::Pending, OrderStatus::Preparing)->to(OrderStatus::Cancelled),
+            Ship::class,
+            $this->transition('deliver')
+                ->from(OrderStatus::Shipped)
+                ->to(OrderStatus::Delivered)
+                ->apply(fn(Order $order) => $order->delivered_at = now())
+                ->afterCommit(fn(Order $order) => event(new OrderDelivered($order))),
+            CancelOrder::class,
         ];
     }
 }

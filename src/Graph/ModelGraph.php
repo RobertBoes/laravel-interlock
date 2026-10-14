@@ -4,6 +4,7 @@ namespace RobertBoes\Interlock\Graph;
 
 use Illuminate\Database\Eloquent\Model;
 use RobertBoes\Interlock\Exceptions\UnknownTransitionException;
+use RobertBoes\Interlock\Transition;
 
 final readonly class ModelGraph
 {
@@ -33,5 +34,16 @@ final readonly class ModelGraph
             $this->transitions,
             fn(CompiledTransition $transition) => $transition->stateAttribute === $machine->stateAttribute,
         ));
+    }
+
+    public function transitionOfClass(Transition $transition): CompiledTransition
+    {
+        $compiled = $this->transitions[$transition::name()] ?? null;
+
+        if ($compiled?->class !== $transition::class) {
+            throw UnknownTransitionException::ofClass($this->modelClass, $transition::class, array_keys($this->transitions));
+        }
+
+        return $compiled;
     }
 }

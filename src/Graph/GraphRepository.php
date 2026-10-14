@@ -6,10 +6,13 @@ use BackedEnum;
 use Illuminate\Database\Eloquent\Model;
 use ReflectionClass;
 use RobertBoes\Interlock\Attributes\FinalStates;
+use RobertBoes\Interlock\Attributes\FromStates;
 use RobertBoes\Interlock\Attributes\InitialStates;
+use RobertBoes\Interlock\Attributes\TargetState;
 use RobertBoes\Interlock\Attributes\UseStateMachine;
 use RobertBoes\Interlock\Definition\FluentTransition;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
+use RobertBoes\Interlock\Transition;
 
 /**
  * Compiles each interlocked model's machines into one immutable graph, once per model class, and each state enum's nesting once per enum.
@@ -50,11 +53,15 @@ final class GraphRepository
             $machine = $machines[$declaration->attribute] = $this->compileMachine($model, $declaration);
 
             foreach ((new $declaration->machine())->transitions() as $definition) {
-                if (isset($transitions[$definition->name])) {
-                    throw InvalidDefinitionException::duplicateTransitionName($model, $definition->name, $machines[$transitions[$definition->name]->stateAttribute], $machine);
+                $transition = is_string($definition)
+                    ? $this->compileTransitionClass($model, $machine, $definition)
+                    : $this->compileFluentTransition($model, $machine, $definition);
+
+                if (isset($transitions[$transition->name])) {
+                    throw InvalidDefinitionException::duplicateTransitionName($model, $transition->name, $machines[$transitions[$transition->name]->stateAttribute], $machine);
                 }
 
-                $transitions[$definition->name] = $this->compileTransition($model, $machine, $definition);
+                $transitions[$transition->name] = $transition;
             }
         }
 
@@ -102,7 +109,7 @@ final class GraphRepository
         return new CompiledMachine($declaration->machine, $declaration->attribute, $initialStates, $states, $finalStates);
     }
 
-    private function compileTransition(Model $model, CompiledMachine $machine, FluentTransition $definition): CompiledTransition
+    private function compileFluentTransition(Model $model, CompiledMachine $machine, FluentTransition $definition): CompiledTransition
     {
         if ($definition->targetState === null) {
             throw InvalidDefinitionException::missingTargetState($machine->machine, $definition->name);
@@ -112,32 +119,89 @@ final class GraphRepository
             throw InvalidDefinitionException::missingFromStates($machine->machine, $definition->name);
         }
 
+        return $this->compileEdge(
+            $model,
+            $machine,
+            $definition->name,
+            $definition->fromStates,
+            $definition->targetState,
+            null,
+            TransitionSteps::closures($definition->applyStep, $definition->afterCommitStep),
+        );
+    }
+
+    /**
+     * Reads the from-states and target state from the class's attributes, so the class is never instantiated.
+     *
+     * @param  class-string<Transition>  $class
+     */
+    private function compileTransitionClass(Model $model, CompiledMachine $machine, string $class): CompiledTransition
+    {
+        if (! is_subclass_of($class, Transition::class)) {
+            throw InvalidDefinitionException::notATransitionClass($machine->machine, $class);
+        }
+
+        $reflection = new ReflectionClass($class);
+        $fromStates = ($reflection->getAttributes(FromStates::class)[0] ?? null)?->newInstance()->states ?? [];
+        $targetState = ($reflection->getAttributes(TargetState::class)[0] ?? null)?->newInstance()->state
+            ?? throw InvalidDefinitionException::missingTargetStateAttribute($class);
+
+        if ($fromStates === []) {
+            throw InvalidDefinitionException::missingFromStatesAttribute($class);
+        }
+
+        return $this->compileEdge(
+            $model,
+            $machine,
+            $class::name(),
+            $fromStates,
+            $targetState,
+            $class,
+            TransitionSteps::closures(null, null),
+        );
+    }
+
+    /**
+     * @param  non-empty-list<BackedEnum>  $fromStates
+     * @param  class-string<Transition>|null  $class
+     */
+    private function compileEdge(
+        Model $model,
+        CompiledMachine $machine,
+        string $name,
+        array $fromStates,
+        BackedEnum $targetState,
+        ?string $class,
+        TransitionSteps $fluentSteps,
+    ): CompiledTransition {
         $castEnum = $model->getCasts()[$machine->stateAttribute] ?? null;
 
-        foreach ([...$definition->fromStates, $definition->targetState] as $state) {
+        foreach ([...$fromStates, $targetState] as $state) {
             if ($state::class !== $castEnum) {
                 throw InvalidDefinitionException::stateAttributeNotCast($machine->machine, $model, $machine->stateAttribute, $state);
             }
         }
 
-        if ($machine->states->isParent($definition->targetState)) {
+        if ($machine->states->isParent($targetState)) {
             throw InvalidDefinitionException::targetStateIsParentState(
                 $machine->machine,
-                $definition->name,
-                $definition->targetState,
-                $machine->states->leavesWithin($definition->targetState),
+                $name,
+                $targetState,
+                $machine->states->leavesWithin($targetState),
             );
         }
 
         return new CompiledTransition(
-            $definition->name,
+            $name,
             $machine->stateAttribute,
-            $definition->fromStates,
-            $definition->targetState,
+            $fromStates,
+            $targetState,
             array_values(array_unique(
-                array_merge(...array_map($machine->states->leavesWithin(...), $definition->fromStates)),
+                array_merge(...array_map($machine->states->leavesWithin(...), $fromStates)),
                 SORT_REGULAR,
             )),
+            $class,
+            $fluentSteps,
         );
     }
 }

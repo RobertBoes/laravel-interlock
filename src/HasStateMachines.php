@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Event;
 use RobertBoes\Interlock\Bypass\BypassScope;
 use RobertBoes\Interlock\Events\BypassedWrite;
 use RobertBoes\Interlock\Events\Transitioned;
+use RobertBoes\Interlock\Events\Transitioning;
 use RobertBoes\Interlock\Exceptions\AmbiguousInitialStateException;
 use RobertBoes\Interlock\Exceptions\DirectWriteException;
 use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
@@ -17,6 +18,7 @@ use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\Graph\CompiledTransition;
 use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Graph\ModelGraph;
+use RobertBoes\Interlock\Graph\TransitionSteps;
 use RobertBoes\Interlock\Persistence\CompareAndSwapBuilder;
 use Throwable;
 
@@ -32,25 +34,66 @@ trait HasStateMachines
     /** @var list<BypassedWrite> dispatched once the save that writes them finishes */
     private array $interlockBypassedWrites = [];
 
-    public function transition(string $name): static
+    /**
+     * Apply a transition by name, `transition('publish')`, or as an instance of its class, `transition(new Ship($trackingCode))`.
+     */
+    public function transition(string|Transition $transition): static
     {
-        $transition = $this->interlockGraph()->transition($name);
-        $fromState = $this->getOriginal($transition->stateAttribute);
+        $graph = $this->interlockGraph();
+        $compiled = is_string($transition) ? $graph->transition($transition) : $graph->transitionOfClass($transition);
+        $fromState = $this->getOriginal($compiled->stateAttribute);
 
-        if (! $transition->startsFrom($fromState)) {
-            throw IllegalTransitionException::currentStateNotAFromState($this, $transition, $fromState);
+        if (! $compiled->startsFrom($fromState)) {
+            throw IllegalTransitionException::currentStateNotAFromState($this, $compiled, $fromState);
         }
 
-        $unsavedState = $this->getAttribute($transition->stateAttribute);
-        $this->setAttribute($transition->stateAttribute, $transition->targetState);
+        $steps = $compiled->steps($transition instanceof Transition ? $transition : null);
+        $unsavedAttributes = $this->getAttributes();
+
+        try {
+            $committed = $this->writeTransition($compiled, $steps, $fromState);
+        } catch (Throwable $exception) {
+            $this->setRawAttributes($unsavedAttributes);
+
+            throw $exception;
+        }
+
+        if (! $committed) {
+            $this->setRawAttributes($unsavedAttributes);
+
+            return $this;
+        }
+
+        $this->getConnection()->afterCommit(function () use ($compiled, $steps, $fromState) {
+            $steps->afterCommit($this);
+
+            Event::dispatch(new Transitioned($this, $compiled->name, $fromState, $compiled->targetState));
+        });
+
+        return $this;
+    }
+
+    /**
+     * Runs the apply step and the compare-and-swap save in one transaction, which rolls back when the save fails or is cancelled.
+     */
+    private function writeTransition(CompiledTransition $transition, TransitionSteps $steps, BackedEnum $fromState): bool
+    {
+        $connection = $this->getConnection();
+        $connection->beginTransaction();
 
         $this->interlockRunningTransition = $transition;
         $this->interlockLoadedState = $fromState;
 
         try {
+            $this->setAttribute($transition->stateAttribute, $transition->targetState);
+            $steps->apply($this);
+
+            Event::dispatch(new Transitioning($this, $transition->name, $fromState, $transition->targetState));
+
             $saved = $this->save();
+            $saved ? $connection->commit() : $connection->rollBack();
         } catch (Throwable $exception) {
-            $this->setAttribute($transition->stateAttribute, $unsavedState);
+            $connection->rollBack();
 
             throw $exception;
         } finally {
@@ -58,15 +101,7 @@ trait HasStateMachines
             $this->interlockLoadedState = null;
         }
 
-        if (! $saved) {
-            $this->setAttribute($transition->stateAttribute, $unsavedState);
-
-            return $this;
-        }
-
-        Event::dispatch(new Transitioned($this, $transition->name, $fromState, $transition->targetState));
-
-        return $this;
+        return $saved;
     }
 
     /**

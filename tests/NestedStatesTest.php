@@ -15,6 +15,7 @@ use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\StatusWithCyclicParen
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\StatusWithParentOfAnotherEnum;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Order;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatus;
+use RobertBoes\Interlock\Tests\Fixtures\Orders\Ship;
 
 function orderIn(OrderStatus $status): Order
 {
@@ -24,7 +25,7 @@ function orderIn(OrderStatus $status): Order
         OrderStatus::Pending => $order,
         OrderStatus::Packing => $order->transition('prepare'),
         OrderStatus::LabelCreated => $order->transition('prepare')->transition('create_label'),
-        OrderStatus::Shipped => $order->transition('prepare')->transition('create_label')->transition('ship'),
+        OrderStatus::Shipped => $order->transition('prepare')->transition('create_label')->transition(new Ship('TRACK-1')),
         default => throw new LogicException("No fixture path to [{$status->value}]."),
     };
 }
