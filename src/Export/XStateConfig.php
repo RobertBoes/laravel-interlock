@@ -35,7 +35,7 @@ final class XStateConfig
 
     public static function id(CompiledMachine $machine): string
     {
-        return class_basename($machine->machine);
+        return class_basename($machine->class);
     }
 
     /**

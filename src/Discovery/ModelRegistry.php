@@ -144,13 +144,13 @@ final class ModelRegistry
 
     private function classDeclaredIn(string $code): ?string
     {
-        if (! preg_match('/^\s*(?:(?:abstract|final|readonly)\s+)*class\s+(\w+)/m', $code, $class)) {
+        if (! preg_match('/^\s*(?:(?:abstract|final|readonly)\s+)*class\s+(\w+)/m', $code, $classMatch)) {
             return null;
         }
 
-        $namespace = preg_match('/^\s*namespace\s+([\w\\\\]+)\s*;/m', $code, $match) ? $match[1] . '\\' : '';
+        $namespace = preg_match('/^\s*namespace\s+([\w\\\\]+)\s*;/m', $code, $namespaceMatch) ? $namespaceMatch[1] . '\\' : '';
 
-        return $namespace . $class[1];
+        return $namespace . $classMatch[1];
     }
 
     /**

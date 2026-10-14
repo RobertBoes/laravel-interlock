@@ -27,10 +27,10 @@ final readonly class AppliedTransition
     {
         return new HistoryRecord(
             model: $model,
-            stateAttribute: $this->staged->transition->stateAttribute,
-            transition: $this->staged->transition->name,
+            stateAttribute: $this->staged->compiled->stateAttribute,
+            transition: $this->staged->compiled->name,
             fromState: $this->staged->fromState,
-            targetState: $this->staged->transition->targetState,
+            targetState: $this->staged->compiled->targetState,
             actor: $this->staged->actor,
             oldAttributes: $this->oldAttributes,
             newAttributes: array_map(fn(string $attribute) => $model->getAttributes()[$attribute] ?? null, $this->attributes),

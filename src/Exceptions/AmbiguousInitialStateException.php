@@ -15,7 +15,7 @@ final class AmbiguousInitialStateException extends LogicException implements Int
             'Cannot create %s without a [%s]: %s has several initial states [%s]. Set the one it starts in.',
             $model::class,
             $machine->stateAttribute,
-            $machine->machine,
+            $machine->class,
             implode(', ', array_map(fn(BackedEnum $state) => $state->value, $machine->initialStates)),
         ));
     }

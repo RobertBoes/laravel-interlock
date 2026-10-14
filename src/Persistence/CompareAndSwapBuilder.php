@@ -20,10 +20,10 @@ use RobertBoes\Interlock\Exceptions\StaleStateException;
 final class CompareAndSwapBuilder extends Builder
 {
     /**
-     * @param  non-empty-array<string, StagedTransition>  $transitions  keyed by state attribute
+     * @param  non-empty-array<string, StagedTransition>  $stagedTransitions  keyed by state attribute
      * @param  Closure(): void  $written  called once the update wrote the target states
      */
-    private function __construct(QueryBuilder $query, private readonly array $transitions, private readonly Closure $written)
+    private function __construct(QueryBuilder $query, private readonly array $stagedTransitions, private readonly Closure $written)
     {
         parent::__construct($query);
     }
@@ -32,13 +32,13 @@ final class CompareAndSwapBuilder extends Builder
      * @template TSavedModel of Model
      *
      * @param  Builder<TSavedModel>  $saveQuery
-     * @param  non-empty-array<string, StagedTransition>  $transitions  keyed by state attribute
+     * @param  non-empty-array<string, StagedTransition>  $stagedTransitions  keyed by state attribute
      * @param  Closure(): void  $written  called once the update wrote the target states, before Eloquent's updated event
      * @return self<TSavedModel>
      */
-    public static function replacing(Builder $saveQuery, array $transitions, Closure $written): self
+    public static function replacing(Builder $saveQuery, array $stagedTransitions, Closure $written): self
     {
-        return (new self($saveQuery->getQuery(), $transitions, $written))->setModel($saveQuery->getModel());
+        return (new self($saveQuery->getQuery(), $stagedTransitions, $written))->setModel($saveQuery->getModel());
     }
 
     /**
@@ -48,8 +48,8 @@ final class CompareAndSwapBuilder extends Builder
     {
         $storedStateQuery = clone $this;
 
-        foreach ($this->transitions as $stateAttribute => $transition) {
-            $this->where($stateAttribute, $transition->fromState->value);
+        foreach ($this->stagedTransitions as $stateAttribute => $staged) {
+            $this->where($stateAttribute, $staged->fromState->value);
         }
 
         $affectedRows = parent::update($values);
@@ -75,25 +75,25 @@ final class CompareAndSwapBuilder extends Builder
      */
     private function ensureTheUpdateMatchedTheRow(Builder $storedStateQuery): void
     {
-        $stored = $storedStateQuery->toBase()->useWritePdo()->lockForUpdate()->first(array_keys($this->transitions));
+        $stored = $storedStateQuery->toBase()->useWritePdo()->lockForUpdate()->first(array_keys($this->stagedTransitions));
 
         if ($stored === null) {
-            $transition = array_values($this->transitions)[0];
+            $staged = array_values($this->stagedTransitions)[0];
 
-            throw StaleStateException::rowDeleted($this->model, $transition->transition, $transition->fromState);
+            throw StaleStateException::rowDeleted($this->model, $staged->compiled, $staged->fromState);
         }
 
-        foreach ($this->transitions as $stateAttribute => $transition) {
+        foreach ($this->stagedTransitions as $stateAttribute => $staged) {
             $storedState = $stored->{$stateAttribute};
 
-            if ((string) $storedState !== (string) $transition->fromState->value) {
-                throw StaleStateException::storedStateChanged($this->model, $transition->transition, $transition->fromState, $storedState);
+            if ((string) $storedState !== (string) $staged->fromState->value) {
+                throw StaleStateException::storedStateChanged($this->model, $staged->compiled, $staged->fromState, $storedState);
             }
         }
 
-        foreach ($this->transitions as $stateAttribute => $transition) {
-            if ($transition->fromState !== $transition->transition->targetState) {
-                throw StaleStateException::storedStateChanged($this->model, $transition->transition, $transition->fromState, $stored->{$stateAttribute});
+        foreach ($this->stagedTransitions as $stateAttribute => $staged) {
+            if ($staged->fromState !== $staged->compiled->targetState) {
+                throw StaleStateException::storedStateChanged($this->model, $staged->compiled, $staged->fromState, $stored->{$stateAttribute});
             }
         }
     }

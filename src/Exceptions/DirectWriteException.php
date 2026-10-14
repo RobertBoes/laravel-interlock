@@ -118,7 +118,7 @@ final class DirectWriteException extends LogicException implements InterlockExce
             $model::class,
             $machine->stateAttribute,
             $state->value,
-            $machine->machine,
+            $machine->class,
             implode(', ', array_map(fn(BackedEnum $initialState) => $initialState->value, $machine->initialStates)),
         ));
     }
@@ -136,10 +136,10 @@ final class DirectWriteException extends LogicException implements InterlockExce
     /**
      * @param  list<string>  $attributes
      */
-    private static function attributeList(string $kind, array $attributes): ?string
+    private static function attributeList(string $kind, array $attributes): string
     {
         if ($attributes === []) {
-            return null;
+            return '';
         }
 
         return sprintf('the %s [%s]', Str::plural($kind, count($attributes)), implode(', ', $attributes));

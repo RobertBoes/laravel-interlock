@@ -55,7 +55,7 @@ final class GraphRepository
             $declaration = $attribute->newInstance();
 
             if (isset($machines[$declaration->attribute])) {
-                throw InvalidDefinitionException::twoMachinesForOneStateAttribute($model, $declaration->attribute, $machines[$declaration->attribute]->machine, $declaration->machine);
+                throw InvalidDefinitionException::twoMachinesForOneStateAttribute($model, $declaration->attribute, $machines[$declaration->attribute]->class, $declaration->machine);
             }
 
             $machine = $machines[$declaration->attribute] = $this->compileMachine($model, $declaration);
@@ -133,7 +133,7 @@ final class GraphRepository
     {
         $guardedAttributes = [];
 
-        foreach ((new ReflectionClass($machine->machine))->getAttributes(GuardedAttribute::class) as $attribute) {
+        foreach ((new ReflectionClass($machine->class))->getAttributes(GuardedAttribute::class) as $attribute) {
             $declaration = $attribute->newInstance();
 
             $guardedAttributes[$declaration->attribute] = array_map(
@@ -158,7 +158,7 @@ final class GraphRepository
         }
 
         throw InvalidDefinitionException::guardedAttributeWrittenByUnknownTransition(
-            $machine->machine,
+            $machine->class,
             $guardedAttribute,
             $nameOrClass,
             array_map(fn(CompiledTransition $transition) => $transition->name, $transitions),
@@ -168,14 +168,14 @@ final class GraphRepository
     private function compileFluentTransition(Model $model, CompiledMachine $machine, FluentTransition $definition): CompiledTransition
     {
         if ($definition->targetState === null) {
-            throw InvalidDefinitionException::missingTargetState($machine->machine, $definition->name);
+            throw InvalidDefinitionException::missingTargetState($machine->class, $definition->name);
         }
 
         if ($definition->fromStates === []) {
-            throw InvalidDefinitionException::missingFromStates($machine->machine, $definition->name);
+            throw InvalidDefinitionException::missingFromStates($machine->class, $definition->name);
         }
 
-        return $this->compileEdge(
+        return $this->compileTransition(
             $model,
             $machine,
             $definition->name,
@@ -196,7 +196,7 @@ final class GraphRepository
     private function compileTransitionClass(Model $model, CompiledMachine $machine, string $class): CompiledTransition
     {
         if (! is_subclass_of($class, Transition::class)) {
-            throw InvalidDefinitionException::notATransitionClass($machine->machine, $class);
+            throw InvalidDefinitionException::notATransitionClass($machine->class, $class);
         }
 
         $reflection = new ReflectionClass($class);
@@ -214,7 +214,7 @@ final class GraphRepository
             throw InvalidDefinitionException::authorisedTwice($class, $ability);
         }
 
-        return $this->compileEdge(
+        return $this->compileTransition(
             $model,
             $machine,
             $class::name(),
@@ -266,7 +266,7 @@ final class GraphRepository
      * @param  class-string<Transition>|null  $class
      * @param  (Closure(Builder<Model>): mixed)|null  $trigger
      */
-    private function compileEdge(
+    private function compileTransition(
         Model $model,
         CompiledMachine $machine,
         string $name,
@@ -281,13 +281,13 @@ final class GraphRepository
 
         foreach ([...$fromStates, $targetState] as $state) {
             if ($state::class !== $castEnum) {
-                throw InvalidDefinitionException::stateAttributeNotCast($machine->machine, $model, $machine->stateAttribute, $state);
+                throw InvalidDefinitionException::stateAttributeNotCast($machine->class, $model, $machine->stateAttribute, $state);
             }
         }
 
         if ($machine->states->isParent($targetState)) {
             throw InvalidDefinitionException::targetStateIsParentState(
-                $machine->machine,
+                $machine->class,
                 $name,
                 $targetState,
                 $machine->states->leavesWithin($targetState),

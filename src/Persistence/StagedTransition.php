@@ -14,7 +14,7 @@ use RobertBoes\Interlock\Graph\TransitionSteps;
 final readonly class StagedTransition
 {
     public function __construct(
-        public CompiledTransition $transition,
+        public CompiledTransition $compiled,
         public TransitionSteps $steps,
         public BackedEnum $fromState,
         public ?Authenticatable $actor,

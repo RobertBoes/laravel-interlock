@@ -8,12 +8,12 @@ use RobertBoes\Interlock\StateMachine;
 final readonly class CompiledMachine
 {
     /**
-     * @param  class-string<StateMachine>  $machine
+     * @param  class-string<StateMachine>  $class
      * @param  non-empty-list<BackedEnum>  $initialStates
      * @param  list<BackedEnum>  $finalStates  as declared, parent states included
      */
     public function __construct(
-        public string $machine,
+        public string $class,
         public string $stateAttribute,
         public array $initialStates,
         public StateTree $states,

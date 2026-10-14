@@ -45,7 +45,7 @@ final readonly class SoundnessCheck
      */
     private function problemsOf(string $model, CompiledMachine $machine, array $transitions): array
     {
-        $prefix = sprintf('%s on %s [%s]: ', $machine->machine, $model, $machine->stateAttribute);
+        $prefix = sprintf('%s on %s [%s]: ', $machine->class, $model, $machine->stateAttribute);
         $reachable = $this->reachableStates($machine, $transitions);
         $problems = [];
 

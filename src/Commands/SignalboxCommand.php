@@ -27,8 +27,8 @@ final class SignalboxCommand extends Command
     {
         /** @var string $format */
         $format = $this->option('format');
-        /** @var string|null $machine */
-        $machine = $this->argument('machine');
+        /** @var string|null $machineClass */
+        $machineClass = $this->argument('machine');
         /** @var string|null $path */
         $path = $this->option('output');
 
@@ -42,19 +42,19 @@ final class SignalboxCommand extends Command
             return self::FAILURE;
         }
 
-        $machine = $machine === null ? null : ltrim($machine, '\\');
-        $machines = $this->machines($registry, $graphs, $machine);
+        $machineClass = $machineClass === null ? null : ltrim($machineClass, '\\');
+        $machines = $this->machines($registry, $graphs, $machineClass);
 
-        if ($machine !== null && $machines === []) {
+        if ($machineClass !== null && $machines === []) {
             $this->components->error(sprintf(
                 'No registered model uses the state machine [%s]. Discovery scans the paths in interlock.discovery.paths for models with #[UseStateMachine]; register models outside them in interlock.models.',
-                $machine,
+                $machineClass,
             ));
 
             return self::FAILURE;
         }
 
-        $sharedIds = $machine === null && $format !== 'mermaid' ? $this->machinesSharingAnId($machines) : [];
+        $sharedIds = $machineClass === null && $format !== 'mermaid' ? $this->machinesSharingAnId($machines) : [];
 
         if ($sharedIds !== []) {
             $this->components->error(sprintf(
@@ -65,7 +65,7 @@ final class SignalboxCommand extends Command
             return self::FAILURE;
         }
 
-        $export = $machine === null ? $this->exportAll($format, $machines) : $this->export($format, ...reset($machines));
+        $export = $machineClass === null ? $this->exportAll($format, $machines) : $this->export($format, ...reset($machines));
 
         if ($path === null) {
             $this->output->write($export);
@@ -90,14 +90,14 @@ final class SignalboxCommand extends Command
         $machines = [];
 
         foreach ($registry->models() as $model => $declarations) {
-            foreach ($declarations as $attribute => $machine) {
-                if (isset($machines[$machine]) || ($only !== null && $machine !== $only)) {
+            foreach ($declarations as $attribute => $machineClass) {
+                if (isset($machines[$machineClass]) || ($only !== null && $machineClass !== $only)) {
                     continue;
                 }
 
                 $graph = $graphs->for(new $model());
                 $compiled = $graph->machines[$attribute];
-                $machines[$machine] = [$compiled, $graph->transitionsOf($compiled)];
+                $machines[$machineClass] = [$compiled, $graph->transitionsOf($compiled)];
             }
         }
 
@@ -143,8 +143,8 @@ final class SignalboxCommand extends Command
     {
         $byId = [];
 
-        foreach ($machines as $machine => [$compiled]) {
-            $byId[XStateConfig::id($compiled)][] = $machine;
+        foreach ($machines as $machineClass => [$compiled]) {
+            $byId[XStateConfig::id($compiled)][] = $machineClass;
         }
 
         return array_values(array_filter($byId, fn(array $classes) => count($classes) > 1));
@@ -174,8 +174,8 @@ final class SignalboxCommand extends Command
     {
         $sections = [];
 
-        foreach ($machines as $machine => [$compiled, $transitions]) {
-            $sections[] = '## ' . class_basename($machine) . PHP_EOL . PHP_EOL . '```mermaid' . PHP_EOL . MermaidDiagram::of($compiled, $transitions) . '```' . PHP_EOL;
+        foreach ($machines as $machineClass => [$compiled, $transitions]) {
+            $sections[] = '## ' . class_basename($machineClass) . PHP_EOL . PHP_EOL . '```mermaid' . PHP_EOL . MermaidDiagram::of($compiled, $transitions) . '```' . PHP_EOL;
         }
 
         return implode(PHP_EOL, $sections);

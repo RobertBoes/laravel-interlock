@@ -135,7 +135,7 @@ trait HasStateMachines
         $alreadyStaged = $this->interlockStagedTransitions[$compiled->stateAttribute] ?? null;
 
         if ($alreadyStaged !== null) {
-            throw IllegalTransitionException::anotherTransitionStaged($this, $compiled, $alreadyStaged->transition);
+            throw IllegalTransitionException::anotherTransitionStaged($this, $compiled, $alreadyStaged->compiled);
         }
 
         // Built while faked too, so a transition that cannot be built from its name still throws.
@@ -192,10 +192,10 @@ trait HasStateMachines
             $log = Container::getInstance()->make(TransitionLog::class);
 
             foreach ($stagedTransitions as $staged) {
-                $log->record($this, $staged->transition->name);
+                $log->record($this, $staged->compiled->name);
                 $staged->steps->afterCommit($this);
 
-                Event::dispatch(new Transitioned($this, $staged->transition->name, $staged->fromState, $staged->transition->targetState));
+                Event::dispatch(new Transitioned($this, $staged->compiled->name, $staged->fromState, $staged->compiled->targetState));
             }
         });
 
@@ -290,15 +290,15 @@ trait HasStateMachines
     private function interlockWriteTransitions(array $stagedTransitions, array $options): bool
     {
         foreach ($stagedTransitions as $stateAttribute => $staged) {
-            if ($this->getAttribute($stateAttribute) !== $staged->transition->targetState) {
-                throw DirectWriteException::toStagedStateAttribute($this, $staged->transition, $this->getAttribute($stateAttribute));
+            if ($this->getAttribute($stateAttribute) !== $staged->compiled->targetState) {
+                throw DirectWriteException::toStagedStateAttribute($this, $staged->compiled, $this->getAttribute($stateAttribute));
             }
         }
 
         $this->interlockRevertToFromStates($stagedTransitions);
 
         foreach ($stagedTransitions as $staged) {
-            $staged->steps->authorise($this, $staged->actor, $staged->transition);
+            $staged->steps->authorise($this, $staged->actor, $staged->compiled);
         }
 
         $connection = $this->getConnection();
@@ -337,7 +337,7 @@ trait HasStateMachines
      */
     private function interlockApplyTransition(StagedTransition $staged): AppliedTransition
     {
-        $compiled = $staged->transition;
+        $compiled = $staged->compiled;
 
         $staged->steps->checkGuards($this, $compiled);
         $this->setAttribute($compiled->stateAttribute, $compiled->targetState);
@@ -652,7 +652,7 @@ trait HasStateMachines
      */
     private function interlockRejectDirectWritesToGuardedAttributes(): void
     {
-        $running = array_values(array_map(fn(StagedTransition $staged) => $staged->transition->name, $this->interlockRunningTransitions));
+        $running = array_values(array_map(fn(StagedTransition $staged) => $staged->compiled->name, $this->interlockRunningTransitions));
 
         foreach ($this->interlockGraph()->guardedAttributes as $guardedAttribute => $writers) {
             if (! $this->isDirty($guardedAttribute) || array_intersect($running, $writers) !== []) {
@@ -700,7 +700,7 @@ trait HasStateMachines
     {
         $running = $this->interlockRunningTransitions[$stateAttribute] ?? null;
 
-        return $running !== null && $this->getAttribute($stateAttribute) === $running->transition->targetState;
+        return $running !== null && $this->getAttribute($stateAttribute) === $running->compiled->targetState;
     }
 
     private function interlockAuthenticatedActor(): ?Authenticatable

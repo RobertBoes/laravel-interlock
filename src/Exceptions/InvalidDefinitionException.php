@@ -241,12 +241,12 @@ final class InvalidDefinitionException extends LogicException implements Interlo
     public static function duplicateTransitionName(Model $model, string $transition, CompiledMachine $first, CompiledMachine $second): self
     {
         $declaredBy = $first->stateAttribute === $second->stateAttribute
-            ? sprintf('twice in %s', $first->machine)
+            ? sprintf('twice in %s', $first->class)
             : sprintf(
                 'by both %s for [%s] and %s for [%s] on %s',
-                $first->machine,
+                $first->class,
                 $first->stateAttribute,
-                $second->machine,
+                $second->class,
                 $second->stateAttribute,
                 $model::class,
             );
