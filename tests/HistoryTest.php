@@ -83,6 +83,34 @@ it('records history in the transition\'s transaction, so a failing recorder writ
     expect($order->fresh()->status)->toBe(OrderStatus::Pending);
 });
 
+it('leaves the model as it was loaded when a failing recorder rolls the transition back', function () {
+    $order = Order::create()->transition('prepare');
+    app()->instance(HistoryRecorder::class, new class implements HistoryRecorder {
+        public function record(HistoryRecord $record): void
+        {
+            throw new RuntimeException('History store unavailable');
+        }
+    });
+    $order->delivered_at = now();
+
+    rescue(fn() => $order->transition('create_label'), report: false);
+
+    expect($order)
+        ->status->toBe(OrderStatus::Packing)
+        ->getRawOriginal('status')->toBe('packing')
+        ->getRawOriginal('delivered_at')->toBeNull()
+        ->getDirty()->toHaveKeys(['delivered_at'])->not->toHaveKey('status')
+        ->wasChanged('status')->toBeTrue()
+        ->and($order->getChanges())->toHaveKey('status');
+
+    app()->forgetInstance(HistoryRecorder::class);
+    $order->transition('create_label');
+
+    expect($order->fresh())
+        ->status->toBe(OrderStatus::LabelCreated)
+        ->delivered_at->not->toBeNull();
+});
+
 it('records a bypassed write with its reason and no transition name', function () {
     $post = Post::create();
 

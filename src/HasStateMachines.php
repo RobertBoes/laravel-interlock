@@ -161,18 +161,18 @@ trait HasStateMachines
 
         $staged = $this->interlockStagedTransitions;
         $this->interlockStagedTransitions = [];
-        $unsavedAttributes = $this->getAttributes();
+        $unsaved = [$this->getAttributes(), $this->getRawOriginal(), $this->getChanges(), $this->wasRecentlyCreated];
 
         try {
             $committed = $this->writeTransitions($staged, $options);
         } catch (Throwable $exception) {
-            $this->restoreUnsavedAttributes($unsavedAttributes, $staged);
+            $this->restoreUnsavedModel($unsaved, $staged);
 
             throw $exception;
         }
 
         if (! $committed) {
-            $this->restoreUnsavedAttributes($unsavedAttributes, $staged);
+            $this->restoreUnsavedModel($unsaved, $staged);
 
             return false;
         }
@@ -369,14 +369,20 @@ trait HasStateMachines
     }
 
     /**
-     * Puts the model back as it was before a failed save, without the transitions it tried to write.
+     * Puts the model back as it was before a failed save, without the transitions it tried to write. The save may
+     * have synced the original attributes before it failed, while the database rolled back, so they are put back too.
      *
-     * @param  array<string, mixed>  $unsavedAttributes
+     * @param  array{array<string, mixed>, array<string, mixed>, array<string, mixed>, bool}  $unsaved  the attributes, original attributes, changes and whether the model was recently created
      * @param  array<string, StagedTransition>  $staged
      */
-    private function restoreUnsavedAttributes(array $unsavedAttributes, array $staged): void
+    private function restoreUnsavedModel(array $unsaved, array $staged): void
     {
-        $this->setRawAttributes($unsavedAttributes);
+        [$attributes, $original, $changes, $wasRecentlyCreated] = $unsaved;
+
+        $this->setRawAttributes($attributes);
+        $this->original = $original;
+        $this->changes = $changes;
+        $this->wasRecentlyCreated = $wasRecentlyCreated;
 
         foreach ($staged as $stateAttribute => $transition) {
             $this->setAttribute($stateAttribute, $transition->fromState);
