@@ -11,6 +11,7 @@ use RobertBoes\Interlock\Commands\SignalboxCommand;
 use RobertBoes\Interlock\Discovery\ModelRegistry;
 use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Testing\PestExpectations;
+use RobertBoes\Interlock\Testing\TransitionLog;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -28,6 +29,7 @@ class InterlockServiceProvider extends PackageServiceProvider
     {
         $this->app->singleton(GraphRepository::class);
         $this->app->singleton(BypassScope::class);
+        $this->app->singleton(TransitionLog::class, fn(Application $app) => new TransitionLog(recording: $app->runningUnitTests()));
         $this->app->singleton(ModelRegistry::class, fn(Application $app) => new ModelRegistry(
             $app->make('config'),
             $app->bootstrapPath('cache/interlock.php'),

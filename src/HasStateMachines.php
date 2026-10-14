@@ -20,6 +20,7 @@ use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Graph\ModelGraph;
 use RobertBoes\Interlock\Graph\TransitionSteps;
 use RobertBoes\Interlock\Persistence\CompareAndSwapBuilder;
+use RobertBoes\Interlock\Testing\TransitionLog;
 use Throwable;
 
 /**
@@ -47,7 +48,10 @@ trait HasStateMachines
             throw IllegalTransitionException::currentStateNotAFromState($this, $compiled, $fromState);
         }
 
+        $log = Container::getInstance()->make(TransitionLog::class);
+        // Built while faked too, so a transition that cannot be built from its name still throws.
         $steps = $compiled->steps($transition instanceof Transition ? $transition : null);
+        $steps = $log->faking() ? TransitionSteps::none() : $steps;
         $unsavedAttributes = $this->getAttributes();
 
         try {
@@ -64,7 +68,8 @@ trait HasStateMachines
             return $this;
         }
 
-        $this->getConnection()->afterCommit(function () use ($compiled, $steps, $fromState) {
+        $this->getConnection()->afterCommit(function () use ($compiled, $steps, $fromState, $log) {
+            $log->record($this, $compiled->name);
             $steps->afterCommit($this);
 
             Event::dispatch(new Transitioned($this, $compiled->name, $fromState, $compiled->targetState));

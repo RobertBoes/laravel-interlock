@@ -21,6 +21,11 @@ final readonly class TransitionSteps
         return new self($apply, $afterCommit);
     }
 
+    public static function none(): self
+    {
+        return new self(null, null);
+    }
+
     public static function of(Transition $transition): self
     {
         return new self(
