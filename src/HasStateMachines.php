@@ -60,24 +60,6 @@ trait HasStateMachines
     private static array $interlockCheckedBuilders = [];
 
     /**
-     * Fails as soon as a model with a custom builder that lacks RejectsDirectWrites is used, every time it is used (ADR 0009).
-     */
-    public function initializeHasStateMachines(): void
-    {
-        if (isset(self::$interlockCheckedBuilders[static::class])) {
-            return;
-        }
-
-        $builder = $this->newEloquentBuilder($this->newBaseQueryBuilder());
-
-        if (! in_array(RejectsDirectWrites::class, class_uses_recursive($builder), true)) {
-            throw MissingBuilderTraitException::on($this, $builder);
-        }
-
-        self::$interlockCheckedBuilders[static::class] = true;
-    }
-
-    /**
      * Apply a transition by name, `transition('publish')`, or as an instance of its class, `transition(new Ship($trackingCode))`.
      *
      * The actor is the authenticated user, unless one is given: `transition('approve', $manager)`. Pass null to apply
@@ -589,6 +571,38 @@ trait HasStateMachines
         $builder = parent::newEloquentBuilder($query);
 
         return $builder::class === Builder::class ? new InterlockBuilder($query) : $builder;
+    }
+
+    /**
+     * Every query the model builds starts here, so a custom builder that lacks RejectsDirectWrites fails as soon as one
+     * is built, every time, before it can make a mass write (ADR 0009). Checked here rather than in newEloquentBuilder(),
+     * which a model may override, and not on instantiation, so making a model needs no database connection.
+     *
+     * @return Builder<static>
+     */
+    public function newModelQuery()
+    {
+        /** @var Builder<static> $builder */
+        $builder = parent::newModelQuery();
+        $this->interlockRejectBuilderWithoutTrait($builder);
+
+        return $builder;
+    }
+
+    /**
+     * @param  Builder<*>  $builder
+     */
+    private function interlockRejectBuilderWithoutTrait(Builder $builder): void
+    {
+        if (isset(self::$interlockCheckedBuilders[static::class])) {
+            return;
+        }
+
+        if (! in_array(RejectsDirectWrites::class, class_uses_recursive($builder), true)) {
+            throw MissingBuilderTraitException::on($this, $builder);
+        }
+
+        self::$interlockCheckedBuilders[static::class] = true;
     }
 
     /**

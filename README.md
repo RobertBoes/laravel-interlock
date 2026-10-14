@@ -430,7 +430,7 @@ class OrderBuilder extends Builder
 }
 ```
 
-An interlocked model whose custom builder lacks the trait throws `MissingBuilderTraitException` as soon as it is used, so enforcement is never lost silently.
+An interlocked model whose custom builder lacks the trait throws `MissingBuilderTraitException` as soon as it builds a query, to read, save or mass write, so enforcement is never lost silently. Making an instance doesn't check it, so `new Order()` needs no database connection.
 
 ### `replicate()` starts the lifecycle over
 

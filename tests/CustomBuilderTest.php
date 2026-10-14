@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Event;
 use RobertBoes\Interlock\Events\BypassedMassWrite;
 use RobertBoes\Interlock\Exceptions\DirectWriteException;
@@ -12,6 +13,7 @@ use RobertBoes\Interlock\Tests\Fixtures\CustomBuilders\OrderWithBuilderAttribute
 use RobertBoes\Interlock\Tests\Fixtures\CustomBuilders\OrderWithBuilderAttributeWithoutTrait;
 use RobertBoes\Interlock\Tests\Fixtures\CustomBuilders\OrderWithBuilderMethod;
 use RobertBoes\Interlock\Tests\Fixtures\CustomBuilders\OrderWithBuilderMethodWithoutTrait;
+use RobertBoes\Interlock\Tests\Fixtures\Orders\Order;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatus;
 
 dataset('models with a custom builder using the trait', [
@@ -62,7 +64,7 @@ it('saves and transitions a model with a custom builder as usual', function (str
 })->with('models with a custom builder using the trait');
 
 it('raises a configuration error saying how to fix it when a custom builder lacks the trait', function (string $model) {
-    expect(fn() => new $model())->toThrow(
+    expect(fn() => $model::query())->toThrow(
         MissingBuilderTraitException::class,
         sprintf(
             '%s is interlocked, but its Eloquent builder %s does not use %s, so mass writes through it would skip Interlock. Add `use \\%s;` to %s.',
@@ -76,7 +78,24 @@ it('raises a configuration error saying how to fix it when a custom builder lack
 })->with('models with a custom builder without the trait');
 
 it('raises the configuration error every time such a model is used, not only the first time', function (string $model) {
-    rescue(fn() => new $model(), report: false);
+    rescue(fn() => $model::query(), report: false);
 
-    expect(fn() => $model::query())->toThrow(MissingBuilderTraitException::class);
+    expect(fn() => $model::query())->toThrow(MissingBuilderTraitException::class)
+        ->and(fn() => $model::create())->toThrow(MissingBuilderTraitException::class)
+        ->and(fn() => (new $model())->newQueryWithoutScopes())->toThrow(MissingBuilderTraitException::class);
 })->with('models with a custom builder without the trait');
+
+it('instantiates an interlocked model without a database connection', function (string $model) {
+    $resolver = Model::getConnectionResolver();
+    Model::unsetConnectionResolver();
+
+    try {
+        expect(new $model())->toBeInstanceOf($model);
+    } finally {
+        Model::setConnectionResolver($resolver);
+    }
+})->with([
+    'with Interlock\'s builder' => Order::class,
+    'with a custom builder using the trait' => OrderWithBuilderMethod::class,
+    'with a custom builder without the trait' => OrderWithBuilderMethodWithoutTrait::class,
+]);
