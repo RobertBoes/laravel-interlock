@@ -507,6 +507,8 @@ A busy trigger can fan out into one job per chunk, so it can use several queue w
 ->trigger(fn(Builder $query) => $query->where('publish_at', '<=', now()), fanOut: true),
 ```
 
+Each chunk job carries its chunk's keys in its payload. With UUID or ULID keys, an `interlock.triggers.chunk_size` of around 5,000 exceeds the 256 KB message limit of SQS, so keep chunks of fanned-out triggers in the hundreds there.
+
 A model whose state changed since it was loaded, or whose guard fails, is skipped quietly. Any other exception is reported and the run carries on with the rest; that includes authorisation that denies the null actor, so a triggered transition's authorisation must allow it. Either way the model still matches the condition, so the next run picks it up again. There are no retries, and nothing to clean up.
 
 ### The "scheduled and locked" pattern

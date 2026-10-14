@@ -27,7 +27,9 @@ return [
 
     'triggers' => [
 
-        // How many matching models a trigger loads at a time, in key order, to apply its transition to.
+        // How many matching models a trigger loads at a time, in key order, to apply its transition to. A trigger that
+        // fans out puts each chunk's keys in its job's payload: with UUID or ULID keys, a chunk of around 5,000
+        // exceeds the 256 KB message limit of SQS.
         'chunk_size' => 100,
 
         // The most matching models one run of a trigger applies its transition to. A bigger backlog drains over the
