@@ -661,12 +661,14 @@ use RobertBoes\Interlock\Exceptions\FailedGuardException;
 
 ->withExceptions(function (Exceptions $exceptions) {
     $exceptions->render(fn(FailedGuardException $e) => response()->json([
+        'message' => $e->getMessage(),
         'errors' => ['transition' => [$e->getMessage()]],
+        'guard' => $e->guard,
     ], 422));
 })
 ```
 
-`FailedGuardException` also carries the `model`, the `transition` name and the `guard` name.
+This keeps Laravel's 422 validation shape and adds the guard's name. Clients should match on the guard name, which stays the same, not on the message text, which you may reword or translate. `FailedGuardException` also carries the `model` and the `transition` name.
 
 ## Discovery
 
