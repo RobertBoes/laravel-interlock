@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use RobertBoes\Interlock\Events\Transitioned;
 use RobertBoes\Interlock\Events\Transitioning;
+use RobertBoes\Interlock\Exceptions\CancelledTransitionException;
 use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
 use RobertBoes\Interlock\Exceptions\InterlockException;
 use RobertBoes\Interlock\Exceptions\UnknownTransitionException;
@@ -115,16 +116,27 @@ it('checks the from-states against the stored state, not an unsaved assignment',
     expect($post->fresh()->status)->toBe(PostStatus::Draft);
 });
 
-it('leaves the state unchanged and dispatches nothing when a saving listener cancels the save', function () {
+it('throws, leaves the state unchanged and dispatches nothing when a saving listener cancels the save', function (string $event) {
     $post = Post::create(['status' => PostStatus::Draft]);
-    Post::saving(fn() => false);
+    Post::{$event}(fn() => false);
     Event::fake([Transitioned::class]);
 
-    $post->transition('submit');
+    expect(fn() => $post->transition('submit'))->toThrow(
+        CancelledTransitionException::class,
+        'Cannot apply transition [submit] to ' . Post::class . ' [' . $post->getKey() . ']: a saving or updating listener cancelled the save, so nothing was written and its [status] is still [draft].',
+    );
 
     expect($post->status)->toBe(PostStatus::Draft)
         ->and($post->fresh()->status)->toBe(PostStatus::Draft);
     Event::assertNotDispatched(Transitioned::class);
+})->with(['saving', 'updating']);
+
+it('returns false from save() when a saving listener cancels the save of a staged transition', function () {
+    $post = Post::create(['status' => PostStatus::Draft]);
+    Post::saving(fn() => false);
+
+    expect($post->stageTransition('submit')->save())->toBeFalse()
+        ->and($post->status)->toBe(PostStatus::Draft);
 });
 
 it('lets an updated observer save the model again during the transition', function () {

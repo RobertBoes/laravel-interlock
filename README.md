@@ -239,7 +239,7 @@ $post->fill($request->validated())->transition('publish');
 
 History and events still record only what the transition itself wrote. Eloquent's own model events (`saving`, `updating`, `updated`, `saved`) and timestamps fire as usual, so observers and search indexing keep working. A declared self-transition, from a state to itself, is applied like any other.
 
-Applying a transition the model doesn't have throws `UnknownTransitionException`. Applying one whose from-states don't include the current state throws `IllegalTransitionException`. Applying a class-based transition that takes input by name throws `MissingTransitionInputException`.
+Applying a transition the model doesn't have throws `UnknownTransitionException`. Applying one whose from-states don't include the current state throws `IllegalTransitionException`. Applying a class-based transition that takes input by name throws `MissingTransitionInputException`. When a `saving` or `updating` listener cancels the save, `transition()` writes nothing and throws `CancelledTransitionException`; a `save()` that writes staged transitions returns `false` instead, as Eloquent's does.
 
 ### Stale state
 

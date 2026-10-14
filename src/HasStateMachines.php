@@ -19,10 +19,12 @@ use RobertBoes\Interlock\Events\BypassedWrite;
 use RobertBoes\Interlock\Events\Transitioned;
 use RobertBoes\Interlock\Events\Transitioning;
 use RobertBoes\Interlock\Exceptions\AmbiguousInitialStateException;
+use RobertBoes\Interlock\Exceptions\CancelledTransitionException;
 use RobertBoes\Interlock\Exceptions\DirectWriteException;
 use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
 use RobertBoes\Interlock\Exceptions\MissingBuilderTraitException;
 use RobertBoes\Interlock\Graph\CompiledMachine;
+use RobertBoes\Interlock\Graph\CompiledTransition;
 use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Graph\ModelGraph;
 use RobertBoes\Interlock\Graph\TransitionSteps;
@@ -77,11 +79,12 @@ trait HasStateMachines
      *
      * The actor is the authenticated user, unless one is given: `transition('approve', $manager)`. Pass null to apply
      * it on behalf of no one, as a trigger does. Transitions staged on the model's other machines are written with it.
+     * When a saving or updating listener cancels the save, nothing is written and it throws.
      */
     public function transition(string|Transition $transition, ?Authenticatable $actor = null): static
     {
-        $this->stageTransition($transition, func_num_args() > 1 ? $actor : $this->authenticatedActor());
-        $this->save();
+        $compiled = $this->interlockStageTransition($transition, func_num_args() > 1 ? $actor : $this->authenticatedActor(), null);
+        $this->saveOrThrowWhenCancelled($compiled);
 
         return $this;
     }
@@ -107,11 +110,17 @@ trait HasStateMachines
      */
     public function interlockApplyTrigger(string $transition): void
     {
-        $this->interlockStageTransition($transition, null, $transition);
-        $this->save();
+        $this->saveOrThrowWhenCancelled($this->interlockStageTransition($transition, null, $transition));
     }
 
-    private function interlockStageTransition(string|Transition $transition, ?Authenticatable $actor, ?string $trigger): void
+    private function saveOrThrowWhenCancelled(CompiledTransition $transition): void
+    {
+        if (! $this->save()) {
+            throw CancelledTransitionException::saveCancelled($this, $transition);
+        }
+    }
+
+    private function interlockStageTransition(string|Transition $transition, ?Authenticatable $actor, ?string $trigger): CompiledTransition
     {
         $graph = $this->interlockGraph();
         $compiled = is_string($transition) ? $graph->transition($transition) : $graph->transitionOfClass($transition);
@@ -133,6 +142,8 @@ trait HasStateMachines
 
         $this->interlockStagedTransitions[$compiled->stateAttribute] = new StagedTransition($compiled, $steps, $fromState, $actor, $trigger);
         $this->setAttribute($compiled->stateAttribute, $compiled->targetState);
+
+        return $compiled;
     }
 
     /**
