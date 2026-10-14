@@ -249,7 +249,7 @@ it('dispatches Transitioning for fluent transitions too', function () {
 });
 
 it('throws exceptions that share the Interlock base exception', function (Closure $apply) {
-    expect(rescue(fn() => $apply(orderWithLabel()), fn(Throwable $e) => $e, report: false))
+    expect(thrownBy(fn() => $apply(orderWithLabel())))
         ->toBeInstanceOf(InterlockException::class);
 })->with([
     'missing input' => fn(Order $order) => $order->transition('ship'),

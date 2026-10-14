@@ -49,7 +49,7 @@ it('throws when the closure denies the actor, and writes nothing', function (?Em
 it('throws an exception that extends Laravel\'s authorisation exception', function () {
     $expense = submittedExpense(['rejection_reason' => 'No receipt']);
 
-    expect(rescue(fn() => $expense->transition('reject', Employee::staff()), fn(Throwable $e) => $e, report: false))
+    expect(thrownBy(fn() => $expense->transition('reject', Employee::staff())))
         ->toBeInstanceOf(AuthorizationException::class)
         ->toBeInstanceOf(InterlockException::class);
 });
@@ -83,7 +83,7 @@ it('keeps the status a denying Gate response gives', function () {
     Gate::define('withdraw-expense', fn(Employee $employee, Expense $expense) => Response::denyAsNotFound());
     $expense = submittedExpense();
 
-    expect(rescue(fn() => $expense->transition('withdraw', Employee::staff()), fn(Throwable $e) => $e, report: false))
+    expect(thrownBy(fn() => $expense->transition('withdraw', Employee::staff())))
         ->toBeInstanceOf(UnauthorisedTransitionException::class)
         ->status()->toBe(404);
 });
@@ -91,7 +91,7 @@ it('keeps the status a denying Gate response gives', function () {
 it('authorises a class-based transition with its authorise method', function (Closure $actor, bool $allowed) {
     $expense = submittedExpense(['claimant_id' => 1]);
 
-    $thrown = rescue(fn() => $expense->transition(new Approve(), $actor()), fn(Throwable $e) => $e, report: false);
+    $thrown = thrownBy(fn() => $expense->transition(new Approve(), $actor()));
 
     expect($thrown instanceof UnauthorisedTransitionException)->toBe(! $allowed)
         ->and($expense->fresh()->status)->toBe($allowed ? ExpenseStatus::Approved : ExpenseStatus::Submitted);

@@ -152,7 +152,7 @@ it('compares and swaps every staged state attribute, so one stale machine fails 
 
     $stale->stageTransition('prepare')->stageTransition('authorise_payment');
 
-    expect(rescue(fn() => $stale->save(), fn(Throwable $e) => $e, report: false))
+    expect(thrownBy(fn() => $stale->save()))
         ->toBeInstanceOf(StaleStateException::class)
         ->context()->toBe([
             'model' => Order::class,

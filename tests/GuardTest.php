@@ -47,7 +47,7 @@ it('keeps the model\'s unsaved changes in memory when a guard fails', function (
 it('throws the guard\'s message when a class-based transition\'s guard method fails, naming the guard after the method', function () {
     $expense = Expense::create(['amount' => 250_000])->transition('submit');
 
-    $exception = rescue(fn() => $expense->transition(new Approve(), Employee::manager()), fn(Throwable $e) => $e, report: false);
+    $exception = thrownBy(fn() => $expense->transition(new Approve(), Employee::manager()));
 
     expect($exception)
         ->toBeInstanceOf(FailedGuardException::class)

@@ -100,7 +100,7 @@ it('fires Eloquent\'s save events and touches updated_at', function () {
 it('throws exceptions that share the Interlock base exception', function (string $transition) {
     $post = Post::create(['status' => PostStatus::Draft]);
 
-    expect(rescue(fn() => $post->transition($transition), fn(Throwable $e) => $e, report: false))
+    expect(thrownBy(fn() => $post->transition($transition)))
         ->toBeInstanceOf(InterlockException::class);
 })->with([
     'illegal transition' => 'publish',

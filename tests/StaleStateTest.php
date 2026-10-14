@@ -17,7 +17,7 @@ it('throws stale state when another instance transitioned the same row first', f
 
     $first->transition('publish');
 
-    expect(rescue(fn() => $second->transition('retract'), fn(Throwable $e) => $e, report: false))
+    expect(thrownBy(fn() => $second->transition('retract')))
         ->toBeInstanceOf(StaleStateException::class)
         ->getMessage()->toBe('This record changed since it was loaded. Reload it and try again.')
         ->model->toBe($second)
@@ -35,7 +35,7 @@ it('keeps the model, its key and the states out of the stale state message and i
     $second = Post::find($post->getKey());
     Post::find($post->getKey())->transition('publish');
 
-    $exception = rescue(fn() => $second->transition('retract'), fn(Throwable $e) => $e, report: false);
+    $exception = thrownBy(fn() => $second->transition('retract'));
 
     expect($exception->getMessage())->not->toContain(Post::class)->not->toContain('status')->not->toContain('published')
         ->and($exception->context())->toBe([
@@ -102,7 +102,7 @@ it('throws stale state when the row was deleted after the model was loaded', fun
     $post = Post::create()->transition('submit');
     Post::find($post->getKey())->delete();
 
-    expect(rescue(fn() => $post->transition('publish'), fn(Throwable $e) => $e, report: false))
+    expect(thrownBy(fn() => $post->transition('publish')))
         ->toBeInstanceOf(StaleStateException::class)
         ->getMessage()->toBe('This record changed since it was loaded. Reload it and try again.')
         ->context()->toBe([
@@ -120,7 +120,7 @@ it('throws stale state that shares the Interlock base exception', function () {
     $post = Post::create()->transition('submit');
     Post::find($post->getKey())->transition('publish');
 
-    expect(rescue(fn() => $post->transition('retract'), fn(Throwable $e) => $e, report: false))
+    expect(thrownBy(fn() => $post->transition('retract')))
         ->toBeInstanceOf(InterlockException::class);
 });
 

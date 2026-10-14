@@ -72,7 +72,7 @@ it('throws when a post with several initial states is created without a status, 
 });
 
 it('throws exceptions that share the Interlock base exception', function (Closure $create) {
-    expect(rescue($create, fn(Throwable $e) => $e, report: false))
+    expect(thrownBy($create))
         ->toBeInstanceOf(InterlockException::class);
 })->with([
     'not an initial state' => fn() => Post::create(['status' => PostStatus::Published]),

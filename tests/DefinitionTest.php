@@ -98,6 +98,6 @@ it('rejects a listed class that does not extend the transition base class', func
 });
 
 it('is an Interlock exception', function () {
-    expect(rescue(fn() => (new PostWithoutTargetState())->transition('submit'), fn(Throwable $e) => $e, report: false))
+    expect(thrownBy(fn() => (new PostWithoutTargetState())->transition('submit')))
         ->toBeInstanceOf(InterlockException::class);
 });

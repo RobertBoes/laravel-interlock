@@ -112,7 +112,7 @@ it('throws stale state when another instance transitioned the same machine first
     $first->transition('prepare');
     $second->transition('authorise_payment');
 
-    expect(rescue(fn() => $second->transition('cancel'), fn(Throwable $e) => $e, report: false))
+    expect(thrownBy(fn() => $second->transition('cancel')))
         ->toBeInstanceOf(StaleStateException::class)
         ->context()->toBe([
             'model' => Order::class,

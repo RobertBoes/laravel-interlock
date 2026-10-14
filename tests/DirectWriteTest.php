@@ -91,6 +91,6 @@ it('is an Interlock exception', function () {
     $post = Post::create(['status' => PostStatus::Draft]);
     $post->status = PostStatus::Published;
 
-    expect(rescue(fn() => $post->save(), fn(Throwable $e) => $e, report: false))
+    expect(thrownBy(fn() => $post->save()))
         ->toBeInstanceOf(InterlockException::class);
 });
