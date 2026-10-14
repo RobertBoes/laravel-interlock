@@ -279,3 +279,36 @@ it('writes nothing when a bypassed write cannot be recorded', function () {
 
     expect($post->fresh()->status)->toBe(PostStatus::Draft);
 });
+
+it('writes nothing when an updating listener makes a bypassed write that cannot be recorded', function () {
+    $post = Post::create();
+    Post::updating(fn(Post $post) => $post->status = PostStatus::Published);
+    app()->instance(HistoryRecorder::class, new class implements HistoryRecorder {
+        public function record(HistoryRecord $record): void
+        {
+            throw new RuntimeException('History store unavailable');
+        }
+    });
+
+    expect(fn() => Interlock::bypass('Publish on every edit', fn() => $post->update(['title' => 'Edited title'])))
+        ->toThrow(RuntimeException::class, 'History store unavailable');
+
+    expect($post->fresh())
+        ->status->toBe(PostStatus::Draft)
+        ->title->toBeNull();
+});
+
+it('writes nothing when a creating listener makes a bypassed write that cannot be recorded', function () {
+    Post::creating(fn(Post $post) => $post->status = PostStatus::Published);
+    app()->instance(HistoryRecorder::class, new class implements HistoryRecorder {
+        public function record(HistoryRecord $record): void
+        {
+            throw new RuntimeException('History store unavailable');
+        }
+    });
+
+    expect(fn() => Interlock::bypass('Import published posts', fn() => Post::create(['title' => 'Imported'])))
+        ->toThrow(RuntimeException::class, 'History store unavailable');
+
+    expect(Post::query()->exists())->toBeFalse();
+});

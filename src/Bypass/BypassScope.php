@@ -41,7 +41,8 @@ final class BypassScope
     }
 
     /**
-     * Why a direct write about to be rejected is allowed after all, or null when it is not. Call it only on that path: it may walk the call stack.
+     * Why a direct write about to be rejected is allowed after all, or null when it is not. Call it only when a write
+     * is, or may turn out to be, a direct write: it may walk the call stack.
      */
     public function reason(): ?string
     {

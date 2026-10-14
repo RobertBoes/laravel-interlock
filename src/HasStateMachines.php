@@ -511,24 +511,15 @@ trait HasStateMachines
     }
 
     /**
-     * Whether a state attribute or guarded attribute of a machine that records history is about to be written, so the
-     * write may be a bypassed write to record.
+     * Whether the write may be a bypassed write to record: a bypass is active and one of the model's machines records
+     * history. Not what is dirty now: this is decided before the updating or creating event, whose listeners may still
+     * set a state or guarded attribute.
      */
     private function mayMakeABypassedWriteThatRecordsHistory(): bool
     {
-        $graph = $this->interlockGraph();
-
-        foreach ($graph->machines as $machine) {
-            if ($machine->recordsHistory && $this->isDirty($machine->stateAttribute)) {
-                return true;
-            }
-        }
-
-        foreach ($graph->guardedAttributeMachines as $guardedAttribute => $stateAttributes) {
-            foreach ($stateAttributes as $stateAttribute) {
-                if ($graph->machines[$stateAttribute]->recordsHistory && $this->isDirty($guardedAttribute)) {
-                    return true;
-                }
+        foreach ($this->interlockGraph()->machines as $machine) {
+            if ($machine->recordsHistory) {
+                return Container::getInstance()->make(BypassScope::class)->reason() !== null;
             }
         }
 
