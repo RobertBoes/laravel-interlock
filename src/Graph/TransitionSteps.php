@@ -131,7 +131,11 @@ final readonly class TransitionSteps
 
         $result = ($this->authorisation)($actor, $model);
 
-        return $result instanceof Response ? $result : ($result ? Response::allow() : Response::deny());
+        if ($result instanceof Response) {
+            return $result;
+        }
+
+        return $result ? Response::allow() : Response::deny();
     }
 
     /**

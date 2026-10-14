@@ -14,7 +14,6 @@ use Illuminate\Support\Str;
 use RobertBoes\Interlock\Bypass\BypassScope;
 use RobertBoes\Interlock\Events\BypassedMassWrite;
 use RobertBoes\Interlock\Exceptions\DirectWriteException;
-use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Graph\ModelGraph;
 
@@ -257,9 +256,8 @@ trait RejectsDirectWrites
                 }
 
                 $attribute = self::interlockAttributeOf($column);
-                $machine = $graph->machines[$attribute] ?? null;
 
-                if ($machine !== null ? ! self::interlockIsInitialState($machine, $value) : $value !== null) {
+                if (self::interlockInsertsDirectly($graph, $attribute, $value)) {
                     $written[] = $attribute;
                 }
             }
@@ -268,15 +266,34 @@ trait RejectsDirectWrites
         return $written;
     }
 
-    private static function interlockIsInitialState(CompiledMachine $machine, mixed $value): bool
+    private static function interlockInsertsDirectly(ModelGraph $graph, string $attribute, mixed $value): bool
     {
-        foreach ($machine->initialStates as $initialState) {
-            if ($value instanceof BackedEnum ? $value === $initialState : (is_string($value) || is_int($value)) && (string) $value === (string) $initialState->value) {
-                return true;
-            }
+        $machine = $graph->machines[$attribute] ?? null;
+
+        if ($machine === null) {
+            return $value !== null;
         }
 
-        return false;
+        return ! array_any(
+            $machine->initialStates,
+            fn(BackedEnum $initialState) => self::interlockIsState($value, $initialState),
+        );
+    }
+
+    /**
+     * Whether the value is the state, as a case or as its stored value.
+     */
+    private static function interlockIsState(mixed $value, BackedEnum $state): bool
+    {
+        if ($value instanceof BackedEnum) {
+            return $value === $state;
+        }
+
+        if (! is_string($value) && ! is_int($value)) {
+            return false;
+        }
+
+        return (string) $value === (string) $state->value;
     }
 
     /**

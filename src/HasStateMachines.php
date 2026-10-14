@@ -138,14 +138,27 @@ trait HasStateMachines
             throw IllegalTransitionException::anotherTransitionStaged($this, $compiled, $alreadyStaged->compiled);
         }
 
-        // Built while faked too, so a transition that cannot be built from its name still throws.
-        $steps = $compiled->steps($transition instanceof Transition ? $transition : null);
-        $steps = Container::getInstance()->make(TransitionLog::class)->faking() ? TransitionSteps::none() : $steps;
+        $steps = $this->interlockStepsToRun($compiled, $transition);
 
         $this->interlockStagedTransitions[$compiled->stateAttribute] = new StagedTransition($compiled, $steps, $fromState, $actor, $trigger);
         $this->setAttribute($compiled->stateAttribute, $compiled->targetState);
 
         return $compiled;
+    }
+
+    /**
+     * The transition's steps, or none while transitions are faked. They are built while faked too, so a transition
+     * that cannot be built from its name still throws.
+     */
+    private function interlockStepsToRun(CompiledTransition $compiled, string|Transition $transition): TransitionSteps
+    {
+        $steps = $compiled->steps($transition instanceof Transition ? $transition : null);
+
+        if (Container::getInstance()->make(TransitionLog::class)->faking()) {
+            return TransitionSteps::none();
+        }
+
+        return $steps;
     }
 
     /**

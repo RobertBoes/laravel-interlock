@@ -89,11 +89,15 @@ final readonly class CompiledTransition
      */
     public function steps(?Transition $transition): TransitionSteps
     {
-        if ($transition === null && $this->class !== null) {
-            $transition = $this->build($this->class);
+        if ($transition !== null) {
+            return TransitionSteps::of($transition);
         }
 
-        return $transition === null ? $this->fluentSteps : TransitionSteps::of($transition);
+        if ($this->class === null) {
+            return $this->fluentSteps;
+        }
+
+        return TransitionSteps::of($this->build($this->class));
     }
 
     /**
