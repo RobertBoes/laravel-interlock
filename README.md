@@ -598,6 +598,8 @@ Interlock dispatches ordinary Laravel events, not model events, so muting Eloque
 
 `Transitioning` and `Transitioned` carry the model, the transition's name, the from-state and the target state.
 
+The events that carry a model serialise it the way Laravel's queued jobs do, by its key. A queued listener gets the model as it is stored when the listener runs, fetched fresh from the database, not a snapshot of the instance that dispatched the event. If the model was deleted in the meantime, the listener's job fails with a `ModelNotFoundException`.
+
 ## Exporting machines
 
 The `interlock:signalbox` command exports your machines, every registered one or a single one, as Mermaid or XState:

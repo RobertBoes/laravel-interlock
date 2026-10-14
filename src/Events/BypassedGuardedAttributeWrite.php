@@ -3,6 +3,7 @@
 namespace RobertBoes\Interlock\Events;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\SerializesModels;
 
 /**
  * A direct write to a guarded attribute that was saved because a bypass was active, such as a backfilled tracking
@@ -10,6 +11,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 final readonly class BypassedGuardedAttributeWrite
 {
+    use SerializesModels;
+
     public function __construct(
         public string $reason,
         public Model $model,
