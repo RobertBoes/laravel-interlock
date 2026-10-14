@@ -444,7 +444,7 @@ Interlock::bypass('Import orders from the old shop', function () use ($rows) {
 
 The reason is required, so the audit trail says why and not just that something changed. The bypass covers model saves and mass writes through the Eloquent builder, and it ends when the callback returns or throws, so it can never stay on by accident. `bypass()` returns whatever the callback returns.
 
-Each bypassed write to a state attribute dispatches a `BypassedWrite` event with the reason and is recorded in [history](#history) when the machine records it. A bypassed mass write dispatches `BypassedMassWrite` instead; it names the model class and the attributes written, but not the rows, because the query decides those.
+Each bypassed write to a state attribute dispatches a `BypassedWrite` event with the reason, and each bypassed write to a guarded attribute a `BypassedGuardedAttributeWrite` event with the reason and the attribute's old and new value. Both are recorded in [history](#history) when the machine they belong to records it. A bypassed mass write dispatches `BypassedMassWrite` instead; it names the model class and the attributes written, but not the rows, because the query decides those, and so it is not recorded in history.
 
 ## Triggers
 
@@ -533,13 +533,13 @@ use RobertBoes\Interlock\Attributes\RecordsHistory;
 class OrderStatusMachine extends StateMachine
 ```
 
-Every transition and every bypassed write on that machine's state attribute is then recorded in the `interlock_history` table, inside the same transaction as the write, so history can never disagree with the stored state. Quiet saves are recorded too. Each entry holds:
+Every transition and every bypassed write on that machine's state attribute or guarded attributes is then recorded in the `interlock_history` table, inside the same transaction as the write, so history can never disagree with the stored state. Quiet saves are recorded too. Each entry holds:
 
 - the model's type and key, and the state attribute;
 - the transition's name, null for a bypassed write;
 - the from-state and target state, as their backing values;
 - the actor's type and key, null when there was none;
-- the attributes the transition wrote, old and new, and not the model's other changes;
+- the attributes the transition or bypassed write wrote, old and new, and not the model's other changes;
 - the bypass reason, the trigger that applied it, and a timestamp.
 
 Read a model's history through its relationship, optionally for one state attribute. Entries in the same second share a timestamp, so order a timeline by key:
@@ -568,6 +568,7 @@ Interlock dispatches ordinary Laravel events, not model events, so muting Eloque
 | `RobertBoes\Interlock\Events\Transitioning` | Inside the transaction, after the `apply` step and before the write |
 | `RobertBoes\Interlock\Events\Transitioned` | After the transaction commits, once the `afterCommit` step has run |
 | `RobertBoes\Interlock\Events\BypassedWrite` | After a direct write to a state attribute that a bypass allowed |
+| `RobertBoes\Interlock\Events\BypassedGuardedAttributeWrite` | After a direct write to a guarded attribute that a bypass allowed |
 | `RobertBoes\Interlock\Events\BypassedMassWrite` | After a mass write through the builder that a bypass allowed |
 
 `Transitioning` and `Transitioned` carry the model, the transition's name, the from-state and the target state.

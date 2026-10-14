@@ -1,5 +1,8 @@
 <?php
 
+use Illuminate\Support\Facades\Event;
+use RobertBoes\Interlock\Events\BypassedGuardedAttributeWrite;
+use RobertBoes\Interlock\Events\BypassedWrite;
 use RobertBoes\Interlock\Exceptions\DirectWriteException;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Interlock;
@@ -110,6 +113,59 @@ it('creates an order with a tracking code inside a bypass', function () {
     $order = Interlock::bypass('Import shipped orders', fn() => Order::create(['tracking_code' => 'TRACK-1']));
 
     expect($order->fresh()->tracking_code)->toBe('TRACK-1');
+});
+
+it('dispatches an event and records history for each bypassed write to the tracking code', function () {
+    Event::fake([BypassedGuardedAttributeWrite::class, BypassedWrite::class]);
+    $order = Interlock::bypass('Import shipped orders', fn() => Order::create(['tracking_code' => 'TRACK-1']));
+
+    Interlock::bypass('Backfill tracking codes', fn() => $order->update(['tracking_code' => 'TRACK-2', 'delivered_at' => now()]));
+
+    Event::assertDispatchedTimes(BypassedGuardedAttributeWrite::class, 2);
+    Event::assertDispatched(fn(BypassedGuardedAttributeWrite $event) => $event->reason === 'Import shipped orders'
+        && $event->model === $order
+        && $event->attribute === 'tracking_code'
+        && $event->oldValue === null
+        && $event->newValue === 'TRACK-1');
+    Event::assertDispatched(fn(BypassedGuardedAttributeWrite $event) => $event->reason === 'Backfill tracking codes'
+        && $event->oldValue === 'TRACK-1'
+        && $event->newValue === 'TRACK-2');
+    Event::assertNotDispatched(BypassedWrite::class);
+
+    expect($order->history('status')->oldest('id')->get()->map->only([
+        'state_attribute', 'transition_name', 'from_state', 'target_state', 'old_attributes', 'new_attributes', 'bypass_reason',
+    ])->all())->toBe([
+        [
+            'state_attribute' => 'status',
+            'transition_name' => null,
+            'from_state' => null,
+            'target_state' => 'pending',
+            'old_attributes' => ['tracking_code' => null],
+            'new_attributes' => ['tracking_code' => 'TRACK-1'],
+            'bypass_reason' => 'Import shipped orders',
+        ],
+        [
+            'state_attribute' => 'status',
+            'transition_name' => null,
+            'from_state' => 'pending',
+            'target_state' => 'pending',
+            'old_attributes' => ['tracking_code' => 'TRACK-1'],
+            'new_attributes' => ['tracking_code' => 'TRACK-2'],
+            'bypass_reason' => 'Backfill tracking codes',
+        ],
+    ]);
+});
+
+it('records a bypassed write to a state attribute and a guarded attribute of one machine as one history entry', function () {
+    $order = Order::create();
+
+    Interlock::bypass('Mark a lost parcel as shipped', fn() => $order->update(['status' => OrderStatus::Shipped, 'tracking_code' => 'LOST']));
+
+    expect($order->history('status')->sole())
+        ->from_state->toBe('pending')
+        ->target_state->toBe('shipped')
+        ->old_attributes->toBe(['status' => 'pending', 'tracking_code' => null])
+        ->new_attributes->toBe(['status' => 'shipped', 'tracking_code' => 'LOST']);
 });
 
 it('saves a direct write to the tracking code in a test that opts into the bypass', function () {

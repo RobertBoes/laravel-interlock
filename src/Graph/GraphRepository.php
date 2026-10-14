@@ -49,6 +49,7 @@ final class GraphRepository
         $machines = [];
         $transitions = [];
         $guardedAttributes = [];
+        $guardedAttributeMachines = [];
 
         foreach ((new ReflectionClass($model))->getAttributes(UseStateMachine::class) as $attribute) {
             $declaration = $attribute->newInstance();
@@ -74,10 +75,11 @@ final class GraphRepository
 
             foreach ($this->compileGuardedAttributes($machine, $machineTransitions) as $attribute => $writers) {
                 $guardedAttributes[$attribute] = [...$guardedAttributes[$attribute] ?? [], ...$writers];
+                $guardedAttributeMachines[$attribute][] = $machine->stateAttribute;
             }
         }
 
-        return new ModelGraph($model::class, $machines, $transitions, $guardedAttributes);
+        return new ModelGraph($model::class, $machines, $transitions, $guardedAttributes, $guardedAttributeMachines);
     }
 
     private function compileMachine(Model $model, UseStateMachine $declaration): CompiledMachine

@@ -14,6 +14,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Event;
 use RobertBoes\Interlock\Bypass\BypassScope;
+use RobertBoes\Interlock\Events\BypassedGuardedAttributeWrite;
 use RobertBoes\Interlock\Events\BypassedWrite;
 use RobertBoes\Interlock\Events\Transitioned;
 use RobertBoes\Interlock\Events\Transitioning;
@@ -47,7 +48,7 @@ trait HasStateMachines
     /** Whether the compare-and-swap update of the running transitions ran, so a nested save writes as usual */
     private bool $interlockRunningTransitionsWritten = false;
 
-    /** @var list<BypassedWrite> dispatched once the save that writes them finishes */
+    /** @var list<BypassedWrite|BypassedGuardedAttributeWrite> dispatched once the save that writes them finishes */
     private array $interlockBypassedWrites = [];
 
     /** @var array<class-string<Model>, true> the models whose builder was found to use RejectsDirectWrites */
@@ -439,8 +440,9 @@ trait HasStateMachines
     }
 
     /**
-     * Records the history of the write's bypassed writes, in one transaction with the write. A running transition's
-     * write is in the transition's transaction already.
+     * Records the history of the write's bypassed writes, in one transaction with the write: one entry for each machine
+     * whose state attribute, or one of whose guarded attributes, the write bypassed. A running transition's write is
+     * in the transition's transaction already.
      *
      * @param  Closure(): bool  $write
      */
@@ -451,17 +453,17 @@ trait HasStateMachines
                 return false;
             }
 
-            foreach ($this->interlockBypassedWrites as $bypassedWrite) {
+            foreach ($this->bypassedWritesByStateAttribute() as $stateAttribute => [$reason, $attributes]) {
                 $this->recordHistory(new HistoryRecord(
                     $this,
-                    $bypassedWrite->stateAttribute,
+                    $stateAttribute,
                     null,
-                    $bypassedWrite->oldState,
-                    $bypassedWrite->newState,
+                    $this->getOriginal($stateAttribute),
+                    $this->getAttribute($stateAttribute),
                     $this->authenticatedActor(),
-                    [$bypassedWrite->stateAttribute => $bypassedWrite->oldState?->value],
-                    [$bypassedWrite->stateAttribute => $bypassedWrite->newState?->value],
-                    $bypassedWrite->reason,
+                    array_map(fn(string $attribute) => $this->getRawOriginal($attribute), $attributes),
+                    array_map(fn(string $attribute) => $this->getAttributes()[$attribute] ?? null, $attributes),
+                    $reason,
                 ));
             }
 
@@ -474,14 +476,48 @@ trait HasStateMachines
     }
 
     /**
-     * Whether a state attribute whose machine records history is about to be written, so the write may be a bypassed
-     * write to record.
+     * The bypassed writes grouped by the machine they belong to: a state attribute's own, or the machines declaring a
+     * guarded attribute.
+     *
+     * @return array<string, array{string, array<string, string>}> the reason and the attributes written, keyed by state attribute
+     */
+    private function bypassedWritesByStateAttribute(): array
+    {
+        $graph = $this->interlockGraph();
+        $grouped = [];
+
+        foreach ($this->interlockBypassedWrites as $bypassedWrite) {
+            [$attribute, $stateAttributes] = $bypassedWrite instanceof BypassedWrite
+                ? [$bypassedWrite->stateAttribute, [$bypassedWrite->stateAttribute]]
+                : [$bypassedWrite->attribute, $graph->guardedAttributeMachines[$bypassedWrite->attribute] ?? []];
+
+            foreach ($stateAttributes as $stateAttribute) {
+                $grouped[$stateAttribute] = [$bypassedWrite->reason, [...$grouped[$stateAttribute][1] ?? [], $attribute => $attribute]];
+            }
+        }
+
+        return $grouped;
+    }
+
+    /**
+     * Whether a state attribute or guarded attribute of a machine that records history is about to be written, so the
+     * write may be a bypassed write to record.
      */
     private function mayMakeABypassedWriteThatRecordsHistory(): bool
     {
-        foreach ($this->interlockGraph()->machines as $machine) {
+        $graph = $this->interlockGraph();
+
+        foreach ($graph->machines as $machine) {
             if ($machine->recordsHistory && $this->isDirty($machine->stateAttribute)) {
                 return true;
+            }
+        }
+
+        foreach ($graph->guardedAttributeMachines as $guardedAttribute => $stateAttributes) {
+            foreach ($stateAttributes as $stateAttribute) {
+                if ($graph->machines[$stateAttribute]->recordsHistory && $this->isDirty($guardedAttribute)) {
+                    return true;
+                }
             }
         }
 
@@ -574,7 +610,10 @@ trait HasStateMachines
             } elseif ($machine->states->isParent($state)) {
                 throw DirectWriteException::createdInParentState($this, $machine, $state);
             } elseif (! $machine->isInitialState($state)) {
-                $this->bypassOrReject($machine->stateAttribute, null, $state, DirectWriteException::notAnInitialState($this, $machine, $state));
+                $this->bypassOrReject(
+                    DirectWriteException::notAnInitialState($this, $machine, $state),
+                    fn(string $reason) => new BypassedWrite($reason, $this, $machine->stateAttribute, null, $state),
+                );
             }
         }
     }
@@ -609,7 +648,10 @@ trait HasStateMachines
 
             $oldState = $this->getOriginal($stateAttribute);
 
-            $this->bypassOrReject($stateAttribute, $oldState, $newState, DirectWriteException::toStateAttribute($this, $stateAttribute, $oldState, $newState));
+            $this->bypassOrReject(
+                DirectWriteException::toStateAttribute($this, $stateAttribute, $oldState, $newState),
+                fn(string $reason) => new BypassedWrite($reason, $this, $stateAttribute, $oldState, $newState),
+            );
         }
     }
 
@@ -625,7 +667,7 @@ trait HasStateMachines
                 continue;
             }
 
-            $this->bypassReason(DirectWriteException::toGuardedAttribute($this, $guardedAttribute, $writers, $running));
+            $this->bypassGuardedAttributeOrReject($guardedAttribute, DirectWriteException::toGuardedAttribute($this, $guardedAttribute, $writers, $running));
         }
     }
 
@@ -633,22 +675,33 @@ trait HasStateMachines
     {
         foreach ($this->interlockGraph()->guardedAttributes as $guardedAttribute => $writers) {
             if (($this->getAttributes()[$guardedAttribute] ?? null) !== null) {
-                $this->bypassReason(DirectWriteException::createdWithGuardedAttribute($this, $guardedAttribute, $writers));
+                $this->bypassGuardedAttributeOrReject($guardedAttribute, DirectWriteException::createdWithGuardedAttribute($this, $guardedAttribute, $writers));
             }
         }
     }
 
-    private function bypassOrReject(string $stateAttribute, ?BackedEnum $oldState, ?BackedEnum $newState, DirectWriteException $rejection): void
+    private function bypassGuardedAttributeOrReject(string $guardedAttribute, DirectWriteException $rejection): void
     {
-        $this->interlockBypassedWrites[] = new BypassedWrite($this->bypassReason($rejection), $this, $stateAttribute, $oldState, $newState);
+        $this->bypassOrReject($rejection, fn(string $reason) => new BypassedGuardedAttributeWrite(
+            $reason,
+            $this,
+            $guardedAttribute,
+            $this->getOriginal($guardedAttribute),
+            $this->getAttribute($guardedAttribute),
+        ));
     }
 
     /**
-     * Why the direct write is allowed after all; throws the rejection when no bypass is active.
+     * Keeps the direct write as a bypassed write, dispatched and recorded once it is saved; throws the rejection when no
+     * bypass is active.
+     *
+     * @param  Closure(string): (BypassedWrite|BypassedGuardedAttributeWrite)  $bypassedWrite  builds the bypassed write from the bypass reason
      */
-    private function bypassReason(DirectWriteException $rejection): string
+    private function bypassOrReject(DirectWriteException $rejection, Closure $bypassedWrite): void
     {
-        return Container::getInstance()->make(BypassScope::class)->reason() ?? throw $rejection;
+        $reason = Container::getInstance()->make(BypassScope::class)->reason() ?? throw $rejection;
+
+        $this->interlockBypassedWrites[] = $bypassedWrite($reason);
     }
 
     private function runningTransitionWrote(string $stateAttribute): bool

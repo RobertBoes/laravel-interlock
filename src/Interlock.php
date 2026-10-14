@@ -30,7 +30,7 @@ final class Interlock
     }
 
     /**
-     * Allow direct writes to state attributes and guarded attributes while the callback runs, for seeders, imports and data fixes. Each bypassed write to a state attribute dispatches BypassedWrite with the reason.
+     * Allow direct writes to state attributes and guarded attributes while the callback runs, for seeders, imports and data fixes. Each bypassed write to a state attribute dispatches BypassedWrite with the reason, and to a guarded attribute BypassedGuardedAttributeWrite.
      *
      * @template TReturn
      *
