@@ -78,7 +78,9 @@ final class CompareAndSwapBuilder extends Builder
         $stored = $storedStateQuery->toBase()->useWritePdo()->lockForUpdate()->first(array_keys($this->transitions));
 
         if ($stored === null) {
-            throw StaleStateException::rowDeleted($this->model, array_values($this->transitions)[0]->transition);
+            $transition = array_values($this->transitions)[0];
+
+            throw StaleStateException::rowDeleted($this->model, $transition->transition, $transition->fromState);
         }
 
         foreach ($this->transitions as $stateAttribute => $transition) {

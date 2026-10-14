@@ -112,10 +112,17 @@ it('throws stale state when another instance transitioned the same machine first
     $first->transition('prepare');
     $second->transition('authorise_payment');
 
-    expect(fn() => $second->transition('cancel'))->toThrow(
-        StaleStateException::class,
-        'Cannot apply transition [cancel] to ' . Order::class . ' [' . $order->getKey() . ']: its [status] was [pending] when it was loaded, but the stored [status] is now [packing]. Reload the model and try again.',
-    );
+    expect(rescue(fn() => $second->transition('cancel'), fn(Throwable $e) => $e, report: false))
+        ->toBeInstanceOf(StaleStateException::class)
+        ->context()->toBe([
+            'model' => Order::class,
+            'key' => $order->getKey(),
+            'transition' => 'cancel',
+            'state_attribute' => 'status',
+            'loaded_state' => 'pending',
+            'stored_state' => 'packing',
+            'row_deleted' => false,
+        ]);
 
     expect($order->fresh())
         ->status->toBe(OrderStatus::Packing)

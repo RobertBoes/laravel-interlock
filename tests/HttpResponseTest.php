@@ -1,9 +1,11 @@
 <?php
 
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use RobertBoes\Interlock\Events\Transitioning;
 use RobertBoes\Interlock\Exceptions\DirectWriteException;
@@ -71,7 +73,30 @@ it('responds 409 when the state is stale', function () {
 
     $this->actingAs(Employee::manager())
         ->postJson("/expenses/{$expense->getKey()}/reject", ['rejection_reason' => 'No receipt'])
+        ->assertConflict()
+        ->assertExactJson(['message' => 'This record changed since it was loaded. Reload it and try again.']);
+});
+
+it('reports stale state with the model, the transition and the states as its context', function () {
+    $expense = expenseAwaitingReview();
+    rejectElsewhereBeforeTheWrite($expense);
+    Log::spy();
+
+    $this->actingAs(Employee::manager())
+        ->postJson("/expenses/{$expense->getKey()}/reject", ['rejection_reason' => 'No receipt'])
         ->assertConflict();
+
+    $expected = [
+        'model' => Expense::class,
+        'key' => $expense->getKey(),
+        'transition' => 'reject',
+        'state_attribute' => 'status',
+        'loaded_state' => 'submitted',
+        'stored_state' => 'rejected',
+        'row_deleted' => false,
+    ];
+    Log::shouldHaveReceived('error')->withArgs(fn(string $message, array $context) => $context['exception'] instanceof StaleStateException
+        && Arr::only($context, array_keys($expected)) === $expected);
 });
 
 it('responds 200 when the transition applies', function () {

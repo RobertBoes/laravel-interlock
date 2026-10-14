@@ -257,6 +257,8 @@ $a->transition('cancel');
 $b->transition('prepare'); // throws StaleStateException
 ```
 
+Its message only says the record changed and should be reloaded, because Laravel shows it in the 409 response. The details are on its properties (`model`, `transition`, `stateAttribute`, `loadedState`, `storedState`, `rowDeleted`) and in the context Laravel logs when it reports the exception.
+
 Interlock does not take locks itself. Lock the row yourself with `lockForUpdate()` when you would rather wait than fail.
 
 ### Staged transitions

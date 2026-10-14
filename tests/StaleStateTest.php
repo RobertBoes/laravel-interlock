@@ -17,12 +17,36 @@ it('throws stale state when another instance transitioned the same row first', f
 
     $first->transition('publish');
 
-    expect(fn() => $second->transition('retract'))->toThrow(
-        StaleStateException::class,
-        'Cannot apply transition [retract] to ' . Post::class . ' [' . $post->getKey() . ']: its [status] was [ready] when it was loaded, but the stored [status] is now [published]. Reload the model and try again.',
-    );
+    expect(rescue(fn() => $second->transition('retract'), fn(Throwable $e) => $e, report: false))
+        ->toBeInstanceOf(StaleStateException::class)
+        ->getMessage()->toBe('This record changed since it was loaded. Reload it and try again.')
+        ->model->toBe($second)
+        ->transition->toBe('retract')
+        ->stateAttribute->toBe('status')
+        ->loadedState->toBe(PostStatus::Ready)
+        ->storedState->toBe('published')
+        ->rowDeleted->toBeFalse();
 
     expect($post->fresh()->status)->toBe(PostStatus::Published);
+});
+
+it('keeps the model, its key and the states out of the stale state message and in the context Laravel logs', function () {
+    $post = Post::create()->transition('submit');
+    $second = Post::find($post->getKey());
+    Post::find($post->getKey())->transition('publish');
+
+    $exception = rescue(fn() => $second->transition('retract'), fn(Throwable $e) => $e, report: false);
+
+    expect($exception->getMessage())->not->toContain(Post::class)->not->toContain('status')->not->toContain('published')
+        ->and($exception->context())->toBe([
+            'model' => Post::class,
+            'key' => $post->getKey(),
+            'transition' => 'retract',
+            'state_attribute' => 'status',
+            'loaded_state' => 'ready',
+            'stored_state' => 'published',
+            'row_deleted' => false,
+        ]);
 });
 
 it('writes none of the model\'s other unsaved changes when the state is stale', function () {
@@ -78,10 +102,18 @@ it('throws stale state when the row was deleted after the model was loaded', fun
     $post = Post::create()->transition('submit');
     Post::find($post->getKey())->delete();
 
-    expect(fn() => $post->transition('publish'))->toThrow(
-        StaleStateException::class,
-        'Cannot apply transition [publish] to ' . Post::class . ' [' . $post->getKey() . ']: its row no longer exists.',
-    );
+    expect(rescue(fn() => $post->transition('publish'), fn(Throwable $e) => $e, report: false))
+        ->toBeInstanceOf(StaleStateException::class)
+        ->getMessage()->toBe('This record changed since it was loaded. Reload it and try again.')
+        ->context()->toBe([
+            'model' => Post::class,
+            'key' => $post->getKey(),
+            'transition' => 'publish',
+            'state_attribute' => 'status',
+            'loaded_state' => 'ready',
+            'stored_state' => null,
+            'row_deleted' => true,
+        ]);
 });
 
 it('throws stale state that shares the Interlock base exception', function () {

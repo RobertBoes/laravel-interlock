@@ -152,10 +152,17 @@ it('compares and swaps every staged state attribute, so one stale machine fails 
 
     $stale->stageTransition('prepare')->stageTransition('authorise_payment');
 
-    expect(fn() => $stale->save())->toThrow(
-        StaleStateException::class,
-        'Cannot apply transition [authorise_payment] to ' . Order::class . ' [' . $order->getKey() . ']: its [payment_status] was [unpaid] when it was loaded, but the stored [payment_status] is now [authorised]. Reload the model and try again.',
-    );
+    expect(rescue(fn() => $stale->save(), fn(Throwable $e) => $e, report: false))
+        ->toBeInstanceOf(StaleStateException::class)
+        ->context()->toBe([
+            'model' => Order::class,
+            'key' => $order->getKey(),
+            'transition' => 'authorise_payment',
+            'state_attribute' => 'payment_status',
+            'loaded_state' => 'unpaid',
+            'stored_state' => 'authorised',
+            'row_deleted' => false,
+        ]);
 
     expect($order->fresh())
         ->status->toBe(OrderStatus::Pending)
