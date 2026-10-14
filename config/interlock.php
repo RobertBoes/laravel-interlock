@@ -36,6 +36,11 @@ return [
         // next runs, each carrying on where the last one stopped.
         'max_per_run' => 1000,
 
+        // The seconds a trigger job may run. Keep it below the `retry_after` of the queue connection (90 by default),
+        // or the queue starts a slow run again beside the first. A job stops taking on models once three quarters of
+        // it has passed, and the next run carries on from there.
+        'timeout' => 60,
+
         // The queue connection and queue the trigger jobs are pushed to. Null uses the app's default.
         'connection' => null,
         'queue' => null,

@@ -496,10 +496,11 @@ Two config keys change that:
 
 The command does no querying itself. It dispatches one queued job per trigger, so a large backlog never slows the scheduler down, and a queue worker must be running to process them. The jobs go to the app's default queue connection and queue; `interlock.triggers.connection` and `interlock.triggers.queue` send them elsewhere, such as a queue with its own workers so a big backlog doesn't hold up other work. Each job is unique per trigger, so a slow run and the next one never work on the same trigger at once; this needs a cache store that supports locks, as Laravel's unique jobs do. When a job can't be dispatched, say because the queue is down, the command reports it, dispatches the other triggers, and exits with a failure; the next run tries that trigger again.
 
-The job applies the transition on behalf of no one (a null actor) to each matching model, a chunk at a time in key order, and records the trigger's name in history. Two config keys size it:
+The job applies the transition on behalf of no one (a null actor) to each matching model, a chunk at a time in key order, and records the trigger's name in history. Three config keys size it:
 
 - `interlock.triggers.chunk_size` (default 100): how many models it loads at a time.
 - `interlock.triggers.max_per_run` (default 1000): the most models one run handles. A bigger backlog drains over the next runs, each carrying on where the last stopped, even when the last died partway: the run saves its place after every chunk.
+- `interlock.triggers.timeout` (default 60): the seconds one job may run. **Keep it below the `retry_after` of the queue connection** (90 by default), or the queue hands a slow run to a second worker while the first is still working on it. A job stops taking on models once three quarters of its timeout has passed, and the next run carries on from there. A job that runs out of time anyway is failed, not run again.
 
 A busy trigger can fan out into one job per chunk, so it can use several queue workers. Pass `fanOut: true` to the fluent `trigger()`, or mark a class-based transition's `trigger()` method with `#[FanOut]`:
 

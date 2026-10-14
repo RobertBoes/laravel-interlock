@@ -11,7 +11,8 @@ use RobertBoes\Interlock\Graph\GraphRepository;
 
 /**
  * Applies a trigger's transition to one chunk of the models its run found, for a trigger that fans out. The models
- * may have changed while the job waited, so only those that still match are loaded; never retried, like the run.
+ * may have changed while the job waited, so only those that still match are loaded; never retried, like the run. Those
+ * it has no time left for are picked up by a later run, as they still match.
  */
 final class RunTriggerChunk implements ShouldQueue
 {
@@ -19,6 +20,15 @@ final class RunTriggerChunk implements ShouldQueue
     use Queueable;
 
     public int $tries = 1;
+
+    /**
+     * Seconds the job may run, from `interlock.triggers.timeout`. It must stay below the queue connection's
+     * `retry_after`, or the queue hands a slow job to a second worker while the first is still running it. The job
+     * stops itself before then, and is failed rather than run again should it not.
+     */
+    public int $timeout = 60;
+
+    public bool $failOnTimeout = true;
 
     /**
      * @param  class-string<Model>  $model
@@ -35,6 +45,8 @@ final class RunTriggerChunk implements ShouldQueue
 
     public function handle(GraphRepository $graphs, Cache $cache, ExceptionHandler $exceptions): void
     {
+        $deadline = Deadline::within($this->timeout);
+
         try {
             $condition = $this->transition($graphs)?->trigger;
 
@@ -44,9 +56,7 @@ final class RunTriggerChunk implements ShouldQueue
 
             $candidates = $this->candidates($condition)->whereKey($this->keys);
 
-            foreach ($candidates->orderBy($candidates->getModel()->getQualifiedKeyName())->get() as $candidate) {
-                $this->apply($candidate, $exceptions);
-            }
+            $this->applyUntil($deadline, $candidates->orderBy($candidates->getModel()->getQualifiedKeyName())->get(), $exceptions);
         } finally {
             (new PendingChunks($cache, $this->model, $this->trigger))->finishOne();
         }

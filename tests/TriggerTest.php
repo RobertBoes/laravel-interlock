@@ -146,6 +146,24 @@ describe('the triggers command', function () {
         }
     });
 
+    it('gives the jobs the configured timeout, failing them once it passes rather than running them again', function () {
+        config(['interlock.triggers.timeout' => 45]);
+        Queue::fake();
+
+        $this->artisan('interlock:triggers');
+
+        Queue::assertPushed(fn(RunTrigger $job) => $job->timeout === 45 && $job->failOnTimeout === true);
+    });
+
+    it('gives the jobs a timeout of a minute when a published config predates the timeout key', function () {
+        config(['interlock.triggers' => ['chunk_size' => 100, 'max_per_run' => 1000]]);
+        Queue::fake();
+
+        $this->artisan('interlock:triggers');
+
+        Queue::assertPushed(fn(RunTrigger $job) => $job->timeout === 60);
+    });
+
     it('does not dispatch a trigger again while its job has not finished', function () {
         Queue::fake();
 
@@ -246,6 +264,27 @@ describe('a trigger', function () {
         }
 
         expect($published)->toBe([1 => 0, 2 => 2, 3 => 3]);
+    });
+
+    it('stops once three quarters of its timeout has passed, and the next run carries on from there', function () {
+        config(['interlock.triggers.chunk_size' => 2, 'interlock.triggers.timeout' => 60]);
+        $posts = collect(range(1, 5))->map(fn() => scheduledPost('2026-10-14 09:00:00'));
+        $this->travelTo('2026-10-14 09:00:00');
+        Event::listen(Transitioned::class, fn() => $this->travel(20)->seconds());
+
+        $this->artisan('interlock:triggers')->assertSuccessful();
+
+        expect($posts->map(fn(Post $post) => $post->fresh()->status)->all())->toBe([
+            PostStatus::Published,
+            PostStatus::Published,
+            PostStatus::Published,
+            PostStatus::Ready,
+            PostStatus::Ready,
+        ]);
+
+        $this->artisan('interlock:triggers');
+
+        expect(Post::query()->where('status', PostStatus::Published)->count())->toBe(5);
     });
 
     it('drains the backlog past models that are skipped on every run', function () {
@@ -517,6 +556,32 @@ describe('a trigger that fans out', function () {
 
         Queue::assertPushed(RunTriggerChunk::class, 3);
         Queue::assertPushed(fn(RunTriggerChunk $job) => $job->keys === [$late->id]);
+    });
+
+    it('gives the chunk jobs the configured timeout, failing them once it passes rather than running them again', function () {
+        config(['interlock.triggers.timeout' => 45]);
+        Queue::fake([RunTriggerChunk::class]);
+        scheduledFeedPost('2026-10-14 09:00:00');
+
+        $this->travelTo('2026-10-14 09:00:00');
+        $this->artisan('interlock:triggers');
+
+        Queue::assertPushed(fn(RunTriggerChunk $job) => $job->timeout === 45 && $job->failOnTimeout === true);
+    });
+
+    it('stops a chunk job once three quarters of its timeout has passed, leaving the rest for a later run', function () {
+        config(['interlock.triggers.timeout' => 60]);
+        $posts = collect(range(1, 3))->map(fn() => scheduledFeedPost('2026-10-14 09:00:00'));
+        $this->travelTo('2026-10-14 09:00:00');
+        Event::listen(Transitioned::class, fn() => $this->travel(30)->seconds());
+
+        app()->call([new RunTriggerChunk(FeedPost::class, 'publish', $posts->map->id->all()), 'handle']);
+
+        expect($posts->map(fn(FeedPost $post) => $post->fresh()->status)->all())->toBe([
+            PostStatus::Published,
+            PostStatus::Published,
+            PostStatus::Ready,
+        ]);
     });
 
     it('does nothing when a chunk job was queued for a transition that no longer exists', function () {

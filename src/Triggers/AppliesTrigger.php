@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use RobertBoes\Interlock\Exceptions\FailedGuardException;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
@@ -23,11 +24,13 @@ use Throwable;
  *
  * @property-read class-string<Model> $model
  * @property-read string $trigger
+ * @property int $timeout
  */
 trait AppliesTrigger
 {
     /**
-     * Puts the job on the connection and queue `interlock.triggers` names, or the app's defaults when it names none.
+     * Puts the job on the connection and queue `interlock.triggers` names, or the app's defaults when it names none,
+     * with the timeout it sets.
      */
     private function queueAsConfigured(): void
     {
@@ -35,6 +38,7 @@ trait AppliesTrigger
 
         $this->onConnection($config->get('interlock.triggers.connection'));
         $this->onQueue($config->get('interlock.triggers.queue'));
+        $this->timeout = $config->integer('interlock.triggers.timeout', 60);
     }
 
     /**
@@ -59,6 +63,28 @@ trait AppliesTrigger
         return (new $this->model())->newQuery()
             ->tap(new CanTransition($this->trigger))
             ->where(fn(Builder $query) => $condition($query));
+    }
+
+    /**
+     * Applies the transition to the candidates in order, until the deadline passes.
+     *
+     * @param  Collection<int, Model>  $candidates
+     * @return int how many it got to, from the first
+     */
+    private function applyUntil(Deadline $deadline, Collection $candidates, ExceptionHandler $exceptions): int
+    {
+        $applied = 0;
+
+        foreach ($candidates as $candidate) {
+            if ($deadline->passed()) {
+                break;
+            }
+
+            $this->apply($candidate, $exceptions);
+            $applied++;
+        }
+
+        return $applied;
     }
 
     /**
