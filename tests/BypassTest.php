@@ -119,6 +119,21 @@ it('dispatches no event for a bypassed write that fails to save', function () {
     Event::assertNotDispatched(BypassedWrite::class);
 });
 
+it('does not dispatch a bypassed write that failed to save with a later save', function () {
+    Event::fake([BypassedWrite::class]);
+    $post = Post::create(['status' => PostStatus::Draft]);
+
+    rescue(fn() => Interlock::bypass('Fix posts stuck in draft', fn() => $post->update([
+        'status' => PostStatus::Published,
+        'column_that_does_not_exist' => 'fails the update',
+    ])), report: false);
+
+    $post->refresh()->save();
+
+    expect($post->fresh()->status)->toBe(PostStatus::Draft);
+    Event::assertNotDispatched(BypassedWrite::class);
+});
+
 it('keeps the outer bypass active when a nested bypass ends', function () {
     $post = Interlock::bypass('Import published posts', function () {
         Interlock::bypass('Import drafts', fn() => null);

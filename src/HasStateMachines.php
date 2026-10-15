@@ -480,7 +480,8 @@ trait HasStateMachines
     /**
      * Records the history of the write's bypassed writes, in one transaction with the write: one entry for each machine
      * whose state attribute, or one of whose guarded attributes, the write bypassed. A running transition's write is
-     * in the transition's transaction already.
+     * in the transition's transaction already. A write that fails drops its bypassed writes, so a later save that
+     * writes nothing does not dispatch them.
      *
      * @param  Closure(): bool  $write
      */
@@ -508,9 +509,21 @@ trait HasStateMachines
             return true;
         };
 
-        return $this->interlockRunningTransitions === [] && $this->interlockMayMakeABypassedWriteThatRecordsHistory()
-            ? $this->getConnection()->transaction($writeAndRecord)
-            : $writeAndRecord();
+        try {
+            $written = $this->interlockRunningTransitions === [] && $this->interlockMayMakeABypassedWriteThatRecordsHistory()
+                ? $this->getConnection()->transaction($writeAndRecord)
+                : $writeAndRecord();
+        } catch (Throwable $exception) {
+            $this->interlockBypassedWrites = [];
+
+            throw $exception;
+        }
+
+        if (! $written) {
+            $this->interlockBypassedWrites = [];
+        }
+
+        return $written;
     }
 
     /**
