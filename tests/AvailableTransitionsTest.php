@@ -59,7 +59,7 @@ it('evaluates authorization for the authenticated user unless an actor is given,
         ->and(availableNames($expense->availableTransitions(null)))->toBe([]);
 });
 
-it('serialises as a list of name, signal, state attribute and target state, for an API resource or Inertia props', function () {
+it('serializes as a list of name, signal, state attribute and target state, for an API resource or Inertia props', function () {
     $available = orderReadyToShip()->availableTransitions(null);
 
     expect($available->toArray())->toBe([

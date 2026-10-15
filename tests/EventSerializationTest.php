@@ -9,7 +9,7 @@ use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
 
 /**
- * Serialises the event the way the queue does for a queued listener, after the row changed behind the model's back.
+ * Serializes the event the way the queue does for a queued listener, after the row changed behind the model's back.
  *
  * @template TEvent of object
  *
@@ -19,11 +19,11 @@ use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
 function queuedRoundTrip(Closure $event): array
 {
     $post = Post::create(['title' => 'Stale title', 'status' => PostStatus::Draft]);
-    $serialised = serialize($event($post));
+    $serialized = serialize($event($post));
 
     DB::table('posts')->where('id', $post->getKey())->update(['title' => 'Fresh title']);
 
-    return [$post, unserialize($serialised)];
+    return [$post, unserialize($serialized)];
 }
 
 it('re-fetches the model by key when a queued listener receives the event', function (Closure $event) {
@@ -61,7 +61,7 @@ it('keeps the event\'s other properties when a queued listener receives it', fun
         ->newValue->toBe('Stale title');
 });
 
-it('serialises the model by key, not as a snapshot', function () {
+it('serializes the model by key, not as a snapshot', function () {
     $post = Post::create(['title' => 'Stale title', 'status' => PostStatus::Draft]);
 
     expect(serialize(new Transitioned($post, 'publish', PostStatus::Ready, PostStatus::Published)))

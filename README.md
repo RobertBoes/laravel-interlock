@@ -56,7 +56,7 @@ Interlock ships guidelines for [Laravel Boost](https://laravel.com/docs/boost). 
 
 A state machine belongs to one state attribute of a model, such as `status`. Its states are the cases of a backed enum. Its transitions are named changes from one or more from-states to exactly one target state.
 
-Start with the enum. Labels, colours and other behaviour can live on it as usual:
+Start with the enum. Labels, colors and other behavior can live on it as usual:
 
 ```php
 enum OrderStatus: string
@@ -439,7 +439,7 @@ $order->availableTransitions($manager);  // for a given actor
 $order->availableTransitions(null);      // on behalf of no one
 ```
 
-Each one serialises as its name, the [signal](#signals) it answers, the state attribute of the machine it belongs to and its target state, ready for an API resource or Inertia props:
+Each one serializes as its name, the [signal](#signals) it answers, the state attribute of the machine it belongs to and its target state, ready for an API resource or Inertia props:
 
 ```json
 [
@@ -734,7 +734,7 @@ Interlock dispatches ordinary Laravel events, not model events, so muting Eloque
 
 `Transitioning` and `Transitioned` carry the model, the transition's name, the from-state and the target state.
 
-The events that carry a model serialise it the way Laravel's queued jobs do, by its key. A queued listener gets the model as it is stored when the listener runs, fetched fresh from the database, not a snapshot of the instance that dispatched the event. If the model was deleted in the meantime, the listener's job fails with a `ModelNotFoundException`.
+The events that carry a model serialize it the way Laravel's queued jobs do, by its key. A queued listener gets the model as it is stored when the listener runs, fetched fresh from the database, not a snapshot of the instance that dispatched the event. If the model was deleted in the meantime, the listener's job fails with a `ModelNotFoundException`.
 
 ## Exporting machines
 
