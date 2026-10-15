@@ -13,6 +13,7 @@ use RobertBoes\Interlock\Attributes\FinalStates;
 use RobertBoes\Interlock\Attributes\FromStates;
 use RobertBoes\Interlock\Attributes\GuardedAttribute;
 use RobertBoes\Interlock\Attributes\InitialStates;
+use RobertBoes\Interlock\Attributes\OnSignal;
 use RobertBoes\Interlock\Attributes\RecordsHistory;
 use RobertBoes\Interlock\Attributes\TargetState;
 use RobertBoes\Interlock\Attributes\UseStateMachine;
@@ -47,6 +48,7 @@ final class GraphRepository
     {
         $machines = [];
         $transitions = [];
+        $signals = [];
         $guardedAttributes = [];
         $guardedAttributeMachines = [];
 
@@ -72,13 +74,47 @@ final class GraphRepository
                 $transitions[$transition->name] = $machineTransitions[] = $transition;
             }
 
+            self::rejectSignalsAnsweredTwiceFromOneState($machine, $machineTransitions);
+
+            foreach ($machineTransitions as $transition) {
+                $otherMachinesTransition = $signals[$transition->signal][0] ?? null;
+
+                if ($otherMachinesTransition !== null && $otherMachinesTransition->stateAttribute !== $machine->stateAttribute) {
+                    throw InvalidDefinitionException::signalOnTwoMachines($model, $transition->signal, $otherMachinesTransition, $machines[$otherMachinesTransition->stateAttribute], $transition, $machine);
+                }
+
+                $signals[$transition->signal][] = $transition;
+            }
+
             foreach ($this->compileGuardedAttributes($machine, $machineTransitions) as $attribute => $writers) {
                 $guardedAttributes[$attribute] = [...$guardedAttributes[$attribute] ?? [], ...$writers];
                 $guardedAttributeMachines[$attribute][] = $machine->stateAttribute;
             }
         }
 
-        return new ModelGraph($model::class, $machines, $transitions, $guardedAttributes, $guardedAttributeMachines);
+        return new ModelGraph($model::class, $machines, $transitions, $signals, $guardedAttributes, $guardedAttributeMachines);
+    }
+
+    /**
+     * Parent states are expanded, so the state alone decides which transition a signal applies.
+     *
+     * @param  list<CompiledTransition>  $transitions
+     */
+    private static function rejectSignalsAnsweredTwiceFromOneState(CompiledMachine $machine, array $transitions): void
+    {
+        $answering = [];
+
+        foreach ($transitions as $transition) {
+            foreach ($transition->leafFromStates as $state) {
+                $first = $answering[$transition->signal][$state->value] ?? null;
+
+                if ($first !== null) {
+                    throw InvalidDefinitionException::signalAnsweredTwiceFromOneState($machine->class, $transition->signal, $state, $first->name, $transition->name);
+                }
+
+                $answering[$transition->signal][$state->value] = $transition;
+            }
+        }
     }
 
     private function compileMachine(Model $model, UseStateMachine $declaration): CompiledMachine
@@ -186,6 +222,7 @@ final class GraphRepository
             $model,
             $machine,
             $definition->name,
+            $definition->signal,
             $definition->fromStates,
             $definition->targetState,
             null,
@@ -239,6 +276,7 @@ final class GraphRepository
             $model,
             $machine,
             $class::name(),
+            $this->signalOf($reflection),
             $fromStates,
             $targetState,
             $class,
@@ -276,6 +314,26 @@ final class GraphRepository
     }
 
     /**
+     * A signal applies the transition by name, so a class that takes input answers only its own name.
+     *
+     * @param  ReflectionClass<Transition>  $class
+     */
+    private function signalOf(ReflectionClass $class): string
+    {
+        $signal = PhpAttribute::of($class, OnSignal::class)?->signal;
+
+        if ($signal === null) {
+            return $class->getName()::name();
+        }
+
+        if (CompiledTransition::takesInput($class->getName())) {
+            throw InvalidDefinitionException::signalOfTransitionTakingInput($class->getName(), $signal);
+        }
+
+        return $signal;
+    }
+
+    /**
      * @param  ReflectionClass<Transition>  $class
      */
     private function triggerFansOut(ReflectionClass $class): bool
@@ -292,6 +350,7 @@ final class GraphRepository
         Model $model,
         CompiledMachine $machine,
         string $name,
+        string $signal,
         array $fromStates,
         BackedEnum $targetState,
         ?string $class,
@@ -317,6 +376,7 @@ final class GraphRepository
 
         return new CompiledTransition(
             $name,
+            $signal,
             $machine->stateAttribute,
             $fromStates,
             $targetState,

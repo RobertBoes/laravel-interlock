@@ -51,6 +51,8 @@ class Order extends Model
 
 - Never assign the state attribute or a guarded attribute and save, and never pass them to `update()`, `fill()`, `create()` (outside an initial state) or a builder mass write. Use `transition()`, which writes immediately together with the model's other unsaved changes; there is no separate `save()`.
 - To write transitions on several machines in one update, use `stageTransition()` and then `save()`.
+- When one action means a different transition depending on the state, such as a customer's reply that moves an answered ticket back to the queue but reopens a closed one, declare a signal on those transitions with `->onSignal('reply')` (`#[OnSignal('reply')]` on a class) and call `$ticket->signal('reply', $user)`. Do not pick the transition by checking the state in the caller. `signal()` applies it like `transition()` and returns its name, or null when no transition answers the signal from the current state.
+- Every transition answers a signal of its own name unless it declares another. At most one transition answers a signal from each state, signal names are unique per model, and a transition that takes input cannot declare a signal; compiling the graph throws `InvalidDefinitionException` otherwise.
 - Put side effects of a transition in its `afterCommit` step (fluent `->afterCommit()` or an `afterCommit()` method), never directly after `transition()` inside a transaction. Database writes that belong to the transition go in `apply`.
 
 @verbatim
@@ -62,6 +64,11 @@ $post->fill($request->validated())->transition('publish');
 $order->stageTransition(new Ship($trackingCode))
     ->stageTransition('capture_payment')
     ->save();
+
+$this->transition('customer_replied')->onSignal('reply')->from(TicketStatus::Answered)->to(TicketStatus::Open)->authorize('reply-to-ticket'),
+$this->transition('reopen')->onSignal('reply')->from(TicketStatus::Closed)->to(TicketStatus::Open)->authorize('reply-to-ticket'),
+
+$ticket->signal('reply', $user); // 'customer_replied', 'reopen' or null
 </code-snippet>
 @endverbatim
 

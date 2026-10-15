@@ -22,6 +22,7 @@ final readonly class CompiledTransition
      */
     public function __construct(
         public string $name,
+        public string $signal,
         public string $stateAttribute,
         public array $fromStates,
         public BackedEnum $targetState,

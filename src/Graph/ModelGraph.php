@@ -12,6 +12,7 @@ final readonly class ModelGraph
      * @param  class-string<Model>  $modelClass
      * @param  array<string, CompiledMachine>  $machines  keyed by state attribute
      * @param  array<string, CompiledTransition>  $transitions  keyed by transition name
+     * @param  array<string, non-empty-list<CompiledTransition>>  $signals  the transitions answering each signal, all of one machine
      * @param  array<string, list<string>>  $guardedAttributes  the transitions that may write each guarded attribute
      * @param  array<string, list<string>>  $guardedAttributeMachines  the state attributes of the machines declaring each guarded attribute
      */
@@ -19,6 +20,7 @@ final readonly class ModelGraph
         private string $modelClass,
         public array $machines,
         private array $transitions,
+        private array $signals,
         public array $guardedAttributes,
         private array $guardedAttributeMachines = [],
     ) {}
@@ -35,6 +37,15 @@ final readonly class ModelGraph
     {
         return $this->transitions[$name]
             ?? throw UnknownTransitionException::named($this->modelClass, $name, array_keys($this->transitions));
+    }
+
+    /**
+     * @return non-empty-list<CompiledTransition>
+     */
+    public function transitionsAnswering(string $signal): array
+    {
+        return $this->signals[$signal]
+            ?? throw UnknownTransitionException::answeringSignal($this->modelClass, $signal, array_keys($this->signals));
     }
 
     /**

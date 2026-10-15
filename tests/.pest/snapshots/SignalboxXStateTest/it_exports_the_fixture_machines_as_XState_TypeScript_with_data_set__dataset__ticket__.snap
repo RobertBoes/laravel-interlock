@@ -1,0 +1,48 @@
+export const ticketStatusMachine = {
+    "id": "TicketStatusMachine",
+    "initial": "open",
+    "states": {
+        "active": {
+            "initial": "open",
+            "on": {
+                "close": {
+                    "target": "closed"
+                }
+            },
+            "states": {
+                "open": {
+                    "on": {
+                        "answer": {
+                            "target": "answered"
+                        }
+                    }
+                },
+                "answered": {
+                    "on": {
+                        "reply": {
+                            "target": "open",
+                            "guard": "has_message",
+                            "meta": {
+                                "transition": "customer_replied"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "closed": {
+            "on": {
+                "reply": {
+                    "target": "#TicketStatusMachine.active.open",
+                    "meta": {
+                        "transition": "reopen"
+                    }
+                }
+            }
+        }
+    }
+} as const;
+
+export type TicketStatusMachineState = "open" | "answered" | "closed";
+
+export type TicketStatusMachineEvent = { type: "answer" } | { type: "reply" } | { type: "close" };

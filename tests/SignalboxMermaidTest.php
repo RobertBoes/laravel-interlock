@@ -6,6 +6,7 @@ use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Discovery\PackagedPost;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\PaymentStatusMachine;
+use RobertBoes\Interlock\Tests\Fixtures\SupportTickets\TicketStatusMachine;
 
 beforeEach(fn() => config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/BlogPosts', __DIR__ . '/Fixtures/Orders']]));
 
@@ -30,6 +31,15 @@ it('exports only the named machine of a model with several', function () {
 
 it('starts every initial state from the start marker', function () {
     expect(signalbox(['machine' => ImportedPostStatusMachine::class]))->toMatchSnapshot();
+});
+
+it('labels an edge with its signal and, where they differ, the transition\'s name', function () {
+    config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/SupportTickets']]);
+
+    expect(signalbox(['machine' => TicketStatusMachine::class]))
+        ->toContain('    Open --> Answered: answer' . PHP_EOL)
+        ->toContain('    Answered --> Open: reply (customer_replied)' . PHP_EOL)
+        ->toContain('    Closed --> Open: reply (reopen)' . PHP_EOL);
 });
 
 it('exports every registered machine once, as Markdown, when no machine is given', function () {

@@ -28,7 +28,22 @@ final class FluentTransition
 
     public private(set) bool $triggerFansOut = false;
 
-    public function __construct(public readonly string $name) {}
+    public private(set) string $signal;
+
+    public function __construct(public readonly string $name)
+    {
+        $this->signal = $name;
+    }
+
+    /**
+     * The signal it answers instead of its own name, so signal() applies it from its from-states.
+     */
+    public function onSignal(string $signal): self
+    {
+        $this->signal = $signal;
+
+        return $this;
+    }
 
     public function from(BackedEnum ...$states): self
     {

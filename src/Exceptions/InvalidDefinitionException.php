@@ -6,6 +6,7 @@ use BackedEnum;
 use Illuminate\Database\Eloquent\Model;
 use LogicException;
 use RobertBoes\Interlock\Graph\CompiledMachine;
+use RobertBoes\Interlock\Graph\CompiledTransition;
 use RobertBoes\Interlock\HasStateMachines;
 use RobertBoes\Interlock\StateMachine;
 use RobertBoes\Interlock\Support\StateValues;
@@ -138,6 +139,54 @@ final class InvalidDefinitionException extends LogicException implements Interlo
         return new self(sprintf(
             'Transition %s declares a trigger, but its constructor takes input. A trigger applies the transition by name, without input: remove the trigger, or give the constructor parameters defaults.',
             $transition,
+        ));
+    }
+
+    /**
+     * @param  class-string<Transition>  $transition
+     */
+    public static function signalOfTransitionTakingInput(string $transition, string $signal): self
+    {
+        return new self(sprintf(
+            'Transition %s answers signal [%s], but its constructor takes input. A signal applies the transition by name, without input: remove #[OnSignal], or give the constructor parameters defaults.',
+            $transition,
+            $signal,
+        ));
+    }
+
+    /**
+     * @param  class-string<StateMachine>  $machine
+     */
+    public static function signalAnsweredTwiceFromOneState(string $machine, string $signal, BackedEnum $state, string $first, string $second): self
+    {
+        return new self(sprintf(
+            'Signal [%s] is answered from state [%s] by both [%s] and [%s] in %s. A signal applies one transition per state, so give one of them another signal or other from-states.',
+            $signal,
+            $state->value,
+            $first,
+            $second,
+            $machine,
+        ));
+    }
+
+    public static function signalOnTwoMachines(
+        Model $model,
+        string $signal,
+        CompiledTransition $first,
+        CompiledMachine $firstMachine,
+        CompiledTransition $second,
+        CompiledMachine $secondMachine,
+    ): self {
+        return new self(sprintf(
+            'Signal [%s] is answered by both [%s] in %s for [%s] and [%s] in %s for [%s] on %s. Signal names are unique per model, so rename one of them.',
+            $signal,
+            $first->name,
+            $firstMachine->class,
+            $firstMachine->stateAttribute,
+            $second->name,
+            $secondMachine->class,
+            $secondMachine->stateAttribute,
+            $model::class,
         ));
     }
 

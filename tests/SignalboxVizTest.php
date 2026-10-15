@@ -40,6 +40,14 @@ it('exports every machine as a region of one parallel machine when none is given
         ->and($config['states']['OrderStatusMachine']['states']['preparing']['states']['label_created']['on']['ship']['target'])->toBe('#OrderStatusMachine.shipped');
 });
 
+it('keys events by signal', function () {
+    config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/SupportTickets']]);
+
+    expect(vizConfig()['states']['closed']['on'])->toBe([
+        'reply' => ['target' => '#TicketStatusMachine.active.open', 'meta' => ['transition' => 'reopen']],
+    ]);
+});
+
 it('refuses to combine machines that share a class name', function () {
     config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/Orders', __DIR__ . '/Fixtures/LegacyOrders']]);
 

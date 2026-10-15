@@ -105,6 +105,8 @@ final class XStateConfig
     }
 
     /**
+     * A signal is XState's event; the graph allows one transition per signal and state.
+     *
      * @param  list<CompiledTransition>  $transitions
      */
     private static function events(CompiledMachine $machine, array $transitions, BackedEnum $state): stdClass
@@ -123,11 +125,15 @@ final class XStateConfig
                 $event['guard'] = implode(' and ', $guards);
             }
 
-            if ($transition->trigger !== null) {
-                $event['meta'] = ['trigger' => true];
+            if ($transition->signal !== $transition->name) {
+                $event['meta']['transition'] = $transition->name;
             }
 
-            $events->{$transition->name} = $event;
+            if ($transition->trigger !== null) {
+                $event['meta']['trigger'] = true;
+            }
+
+            $events->{$transition->signal} = $event;
         }
 
         return $events;

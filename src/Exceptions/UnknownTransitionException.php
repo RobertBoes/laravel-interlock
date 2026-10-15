@@ -24,6 +24,20 @@ final class UnknownTransitionException extends LogicException implements Interlo
 
     /**
      * @param  class-string<Model>  $modelClass
+     * @param  list<string>  $knownSignals
+     */
+    public static function answeringSignal(string $modelClass, string $signal, array $knownSignals): self
+    {
+        return new self(sprintf(
+            '%s has no transition that answers signal [%s]. Its signals are [%s].',
+            $modelClass,
+            $signal,
+            implode(', ', $knownSignals),
+        ));
+    }
+
+    /**
+     * @param  class-string<Model>  $modelClass
      * @param  class-string<Transition>  $transitionClass
      * @param  list<string>  $knownTransitions
      */

@@ -13,6 +13,7 @@ Enforcement covers everything that goes through Eloquent. The query builder and 
 - [Installation](#installation)
 - [Defining a state machine](#defining-a-state-machine)
 - [Applying transitions](#applying-transitions)
+- [Signals](#signals)
 - [Guards, authorization and actors](#guards-authorization-and-actors)
 - [Available transitions](#available-transitions)
 - [Querying by state](#querying-by-state)
@@ -309,6 +310,43 @@ $order->stageTransition(new Ship($trackingCode))
 
 Staging only checks the graph, so it fails straight away when the current state isn't a from-state, and from then on the state attribute reads the target state. Everything else waits for `save()`: authorization, guards, the `apply` step and the compare-and-swap write, all checked against the data as it will be stored. Each machine holds one staged transition at a time; staging a second on the same machine throws. `discardStagedTransitions()` drops them and puts the state attributes back, and so does `refresh()`.
 
+## Signals
+
+Sometimes one action means a different transition depending on the state. When a customer replies to a support ticket, a ticket awaiting the customer goes back to the support queue, but a closed one is reopened. Rather than have every caller pick between `customer_replied` and `reopen`, let both answer the `reply` signal:
+
+```php
+use RobertBoes\Interlock\Attributes\OnSignal;
+
+$this->transition('customer_replied')
+    ->onSignal('reply')
+    ->from(TicketStatus::AwaitingCustomer)
+    ->to(TicketStatus::Open)
+    ->authorize('reply-to-ticket'),
+
+#[OnSignal('reply')]
+#[FromStates(TicketStatus::Closed)]
+#[TargetState(TicketStatus::Open)]
+#[Authorize('reply-to-ticket')]
+final class Reopen extends Transition
+```
+
+`signal()` applies the transition that answers the signal from the current state and returns its name, or `null` when no transition answers it from that state:
+
+```php
+$ticket->signal('reply');          // "customer_replied", "reopen" or null
+$ticket->signal('reply', $user);   // on behalf of a given actor
+```
+
+It applies the transition exactly as `transition()` does: the same default actor, authorization, guards, compare-and-swap write, steps, events and exceptions. Like `transition()`, it checks the stored state, and it does not retry after a `StaleStateException`. A signal that no transition of the model answers throws `UnknownTransitionException`.
+
+Every transition answers a signal of its own name unless it declares another, so `$ticket->signal('close')` applies `close`. A transition answers one signal. The graph is checked when it is compiled, and throws `InvalidDefinitionException` when:
+
+- two transitions answer one signal from the same state, parent states expanded to their children, so the state alone decides which one applies;
+- transitions on two machines of a model answer one signal: signal names are unique per model, like transition names;
+- a transition that takes input declares a signal, since a signal applies the transition by name. Such a transition answers only its own name, and `signal()` reaching it throws `MissingTransitionInputException`, as `transition()` does.
+
+The transition's name is still what history, guards, triggers, `transition()` and the `Transitioning` and `Transitioned` events use; none of them record the signal.
+
 ## Guards, authorization and actors
 
 A guard says "not now", authorization says "not you". They throw different exceptions, so an API can tell them apart.
@@ -401,13 +439,13 @@ $order->availableTransitions($manager);  // for a given actor
 $order->availableTransitions(null);      // on behalf of no one
 ```
 
-Each one serialises as its name, the state attribute of the machine it belongs to and its target state, ready for an API resource or Inertia props:
+Each one serialises as its name, the [signal](#signals) it answers, the state attribute of the machine it belongs to and its target state, ready for an API resource or Inertia props:
 
 ```json
 [
-    {"name": "ship", "state_attribute": "status", "target_state": "shipped"},
-    {"name": "cancel", "state_attribute": "status", "target_state": "cancelled"},
-    {"name": "authorize_payment", "state_attribute": "payment_status", "target_state": "authorized"}
+    {"name": "ship", "signal": "ship", "state_attribute": "status", "target_state": "shipped"},
+    {"name": "cancel", "signal": "cancel", "state_attribute": "status", "target_state": "cancelled"},
+    {"name": "authorize_payment", "signal": "authorize_payment", "state_attribute": "payment_status", "target_state": "authorized"}
 ]
 ```
 
@@ -728,7 +766,7 @@ php artisan interlock:signalbox --viz | pbcopy
 | `xstate` | XState v5 machine config JSON |
 | `xstate-ts` | The same config as TypeScript, plus state and event types |
 
-In the XState export, transitions are events, parent states are nested states and final states are `type: 'final'`. Guards appear by name only, so no server logic leaks; a transition with several guards gets one guard naming them all, such as `has_assessment and within_policy_limit`. Triggered transitions carry `meta: { trigger: true }`. A machine's XState ID is its class name without the namespace, so exporting every machine as XState fails when two machines share a class name; rename one, or export them one at a time. The Mermaid export of the locked post machine above looks like this:
+In the XState export, signals are events: each state's `on` is keyed by the signal a transition answers, with the transition's name in `meta: { transition: 'reopen' }` where the two differ, and the TypeScript event type is the union of the signals. Parent states are nested states and final states are `type: 'final'`. Guards appear by name only, so no server logic leaks; a transition with several guards gets one guard naming them all, such as `has_assessment and within_policy_limit`. Triggered transitions carry `meta: { trigger: true }`. A machine's XState ID is its class name without the namespace, so exporting every machine as XState fails when two machines share a class name; rename one, or export them one at a time. The Mermaid export labels an edge with its signal, followed by the transition's name where they differ, such as `reply (reopen)`. For the locked post machine above, it looks like this:
 
 ```mermaid
 stateDiagram-v2

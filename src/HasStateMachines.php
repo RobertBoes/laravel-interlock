@@ -92,6 +92,26 @@ trait HasStateMachines
     }
 
     /**
+     * Applies the transition that answers the signal from the stored state, as transition() would, and returns its
+     * name, or null when none answers it from that state. Stale state is not retried.
+     */
+    public function signal(string $signal, ?Authenticatable $actor = null): ?string
+    {
+        $answering = array_find(
+            $this->interlockGraph()->transitionsAnswering($signal),
+            fn(CompiledTransition $transition) => $transition->startsFrom($this->getOriginal($transition->stateAttribute)),
+        );
+
+        if ($answering === null) {
+            return null;
+        }
+
+        $this->transition($answering->name, func_num_args() > 1 ? $actor : $this->interlockAuthenticatedActor());
+
+        return $answering->name;
+    }
+
+    /**
      * Only the graph is checked now; authorization, guards and the write run on the next save().
      */
     public function stageTransition(string|Transition $transition, ?Authenticatable $actor = null): static
@@ -260,7 +280,7 @@ trait HasStateMachines
 
         return new Collection($this->interlockGraph()->transitions())
             ->filter(fn(CompiledTransition $transition) => $transition->isAvailable($this, $actor))
-            ->map(fn(CompiledTransition $transition) => new AvailableTransition($transition->name, $transition->stateAttribute, $transition->targetState))
+            ->map(fn(CompiledTransition $transition) => new AvailableTransition($transition->name, $transition->signal, $transition->stateAttribute, $transition->targetState))
             ->values();
     }
 

@@ -10,6 +10,7 @@ use RobertBoes\Interlock\Tests\Fixtures\Exports\ClaimStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\LegacyOrders\OrderStatusMachine as LegacyOrderStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\PaymentStatusMachine;
+use RobertBoes\Interlock\Tests\Fixtures\SupportTickets\TicketStatusMachine;
 
 beforeEach(fn() => config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/BlogPosts', __DIR__ . '/Fixtures/Orders']]));
 
@@ -133,6 +134,47 @@ it('names several guards of a transition together as one guard', function () {
     ]);
 });
 
+it('keys events by the signal a transition answers, with the transition\'s name in the metadata where they differ', function () {
+    config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/SupportTickets']]);
+
+    expect(json_decode(xstate(['machine' => TicketStatusMachine::class]), true))->toBe([
+        'id' => 'TicketStatusMachine',
+        'initial' => 'open',
+        'states' => [
+            'active' => [
+                'initial' => 'open',
+                'on' => [
+                    'close' => ['target' => 'closed'],
+                ],
+                'states' => [
+                    'open' => [
+                        'on' => [
+                            'answer' => ['target' => 'answered'],
+                        ],
+                    ],
+                    'answered' => [
+                        'on' => [
+                            'reply' => ['target' => 'open', 'guard' => 'has_message', 'meta' => ['transition' => 'customer_replied']],
+                        ],
+                    ],
+                ],
+            ],
+            'closed' => [
+                'on' => [
+                    'reply' => ['target' => '#TicketStatusMachine.active.open', 'meta' => ['transition' => 'reopen']],
+                ],
+            ],
+        ],
+    ]);
+});
+
+it('types the events of the TypeScript export as the signals, each once', function () {
+    config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/SupportTickets']]);
+
+    expect(xstate(['machine' => TicketStatusMachine::class], 'xstate-ts'))
+        ->toContain('export type TicketStatusMachineEvent = { type: "answer" } | { type: "reply" } | { type: "close" };');
+});
+
 it('keys states of an integer-backed enum by their value as a string, in an object', function () {
     config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/Exports']]);
 
@@ -218,6 +260,7 @@ dataset('fixture machines', [
     'contract finance approval' => [FinanceApprovalMachine::class, [__DIR__ . '/Fixtures/Contracts']],
     'expense' => [ExpenseStatusMachine::class, [__DIR__ . '/Fixtures/Expenses']],
     'claim' => [ClaimStatusMachine::class, [__DIR__ . '/Fixtures/Exports']],
+    'ticket' => [TicketStatusMachine::class, [__DIR__ . '/Fixtures/SupportTickets']],
 ]);
 
 it('exports the fixture machines as XState JSON', function (string $machine, array $paths) {

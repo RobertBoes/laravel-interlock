@@ -18,7 +18,8 @@ final class XStateTypeScript
         $config = rtrim(XStateConfig::json(XStateConfig::of($machine, $transitions)));
 
         $states = array_map(fn(BackedEnum $state) => self::literal((string) $state->value), $machine->states->leaves());
-        $events = array_map(fn(CompiledTransition $transition) => '{ type: ' . self::literal($transition->name) . ' }', $transitions);
+        $signals = array_unique(array_map(fn(CompiledTransition $transition) => $transition->signal, $transitions));
+        $events = array_map(fn(string $signal) => '{ type: ' . self::literal($signal) . ' }', $signals);
 
         return implode(PHP_EOL . PHP_EOL, [
             sprintf('export const %s = %s as const;', Str::camel($id), $config),

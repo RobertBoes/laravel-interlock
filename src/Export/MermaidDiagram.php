@@ -23,7 +23,7 @@ final class MermaidDiagram
 
         foreach ($transitions as $transition) {
             foreach ($transition->fromStates as $fromState) {
-                $lines[] = self::INDENT . sprintf('%s --> %s: %s', $fromState->name, $transition->targetState->name, $transition->name);
+                $lines[] = self::INDENT . sprintf('%s --> %s: %s', $fromState->name, $transition->targetState->name, self::label($transition));
             }
         }
 
@@ -32,6 +32,13 @@ final class MermaidDiagram
         }
 
         return implode(PHP_EOL, $lines) . PHP_EOL;
+    }
+
+    private static function label(CompiledTransition $transition): string
+    {
+        return $transition->signal === $transition->name
+            ? $transition->name
+            : sprintf('%s (%s)', $transition->signal, $transition->name);
     }
 
     /**
