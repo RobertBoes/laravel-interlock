@@ -49,6 +49,8 @@ php artisan migrate
 
 The migration uses `morphs()` for the model and the actor. Change them to `uuidMorphs()` or `ulidMorphs()` before migrating if your models use UUID or ULID keys.
 
+Interlock ships guidelines for [Laravel Boost](https://laravel.com/docs/boost). If your app uses Boost, `php artisan boost:install` (or `boost:update`) adds them to your AI assistant's instructions, so it changes state through transitions instead of writing the attribute.
+
 ## Defining a state machine
 
 A state machine belongs to one state attribute of a model, such as `status`. Its states are the cases of a backed enum. Its transitions are named changes from one or more from-states to exactly one target state.
