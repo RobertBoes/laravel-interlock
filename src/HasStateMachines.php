@@ -12,6 +12,9 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Event;
+use ReflectionAttribute;
+use ReflectionClass;
+use RobertBoes\Interlock\Attributes\UseStateMachine;
 use RobertBoes\Interlock\Bypass\BypassScope;
 use RobertBoes\Interlock\Events\BypassedGuardedAttributeWrite;
 use RobertBoes\Interlock\Events\BypassedWrite;
@@ -56,6 +59,26 @@ trait HasStateMachines
 
     /** @var array<class-string<Model>, true> */
     private static array $interlockCheckedBuilders = [];
+
+    /** @var array<class-string<Model>, list<string>> */
+    private static array $interlockEnteredAtColumns = [];
+
+    /**
+     * Read from the attributes rather than the compiled graph, so making a model never compiles its machines.
+     */
+    protected function initializeHasStateMachines(): void
+    {
+        self::$interlockEnteredAtColumns[static::class] ??= array_values(array_filter(array_map(
+            fn(ReflectionAttribute $attribute) => $attribute->newInstance()->enteredAt,
+            (new ReflectionClass(static::class))->getAttributes(UseStateMachine::class),
+        )));
+
+        foreach (self::$interlockEnteredAtColumns[static::class] as $column) {
+            if (! $this->hasCast($column)) {
+                $this->mergeCasts([$column => 'datetime']);
+            }
+        }
+    }
 
     /**
      * The actor defaults to the authenticated user; pass null to apply it on behalf of no one.
@@ -242,15 +265,16 @@ trait HasStateMachines
     }
 
     /**
-     * The copy starts its lifecycle over in an initial state with guarded attributes cleared, unless a replicating
-     * listener sets them.
+     * The copy starts its lifecycle over in an initial state with guarded attributes and entered-at columns cleared,
+     * unless a replicating listener sets them.
      *
      * @param  list<string>|null  $except
      */
     public function replicate(?array $except = null): static
     {
         $graph = $this->interlockGraph();
-        $copy = parent::replicate([...$except ?? [], ...array_keys($graph->machines), ...array_keys($graph->guardedAttributes)]);
+        $cleared = [...array_keys($graph->guardedAttributes), ...array_keys($graph->enteredAtColumns())];
+        $copy = parent::replicate([...$except ?? [], ...array_keys($graph->machines), ...$cleared]);
 
         foreach ($graph->machines as $machine) {
             if (($copy->getAttributes()[$machine->stateAttribute] ?? null) === null) {
@@ -258,9 +282,9 @@ trait HasStateMachines
             }
         }
 
-        foreach (array_keys($graph->guardedAttributes) as $guardedAttribute) {
-            if (! array_key_exists($guardedAttribute, $copy->getAttributes())) {
-                $copy->setAttribute($guardedAttribute, null);
+        foreach ($cleared as $attribute) {
+            if (! array_key_exists($attribute, $copy->getAttributes())) {
+                $copy->setAttribute($attribute, null);
             }
         }
 
@@ -342,6 +366,7 @@ trait HasStateMachines
 
         $staged->steps->checkGuards($this, $compiled);
         $this->setAttribute($compiled->stateAttribute, $compiled->targetState);
+        $this->interlockRecordEnteringTheState($compiled->stateAttribute);
         $attributesBeforeApply = $this->getAttributes();
         $staged->steps->apply($this);
         $attributes = $this->interlockAttributesWrittenSince($attributesBeforeApply, $compiled->stateAttribute);
@@ -352,14 +377,25 @@ trait HasStateMachines
         return $applied;
     }
 
+    private function interlockRecordEnteringTheState(string $stateAttribute): void
+    {
+        $column = $this->interlockGraph()->machines[$stateAttribute]->enteredAt;
+
+        if ($column !== null) {
+            $this->setAttribute($column, $this->freshTimestamp());
+        }
+    }
+
     /**
+     * History leaves out the entered-at columns: its own timestamp says when each change happened.
+     *
      * @param  array<string, mixed>  $attributesBeforeApply
      * @return array<string, string>
      */
     private function interlockAttributesWrittenSince(array $attributesBeforeApply, string $stateAttribute): array
     {
         $changed = array_filter(
-            $this->getAttributes(),
+            array_diff_key($this->getAttributes(), $this->interlockGraph()->enteredAtColumns()),
             fn(mixed $value, string $attribute) => ! array_key_exists($attribute, $attributesBeforeApply) || $attributesBeforeApply[$attribute] !== $value,
             ARRAY_FILTER_USE_BOTH,
         );

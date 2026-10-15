@@ -216,7 +216,7 @@ describe('scope methods', function () {
     })->with([
         'an interlocked model' => Order::class,
         'a model without Interlock' => Comment::class,
-    ])->with(['whereInState', 'whereNotInState', 'whereInFromStateOf']);
+    ])->with(['whereInState', 'whereNotInState', 'whereInStateFor', 'whereInFromStateOf']);
 });
 
 it('throws for a transition the model does not have', function () {

@@ -56,6 +56,22 @@ final readonly class ModelGraph
         return $this->guardedAttributeMachines[$attribute] ?? [];
     }
 
+    /**
+     * @return array<string, string> the state attribute of each entered-at column, keyed by the column
+     */
+    public function enteredAtColumns(): array
+    {
+        $columns = [];
+
+        foreach ($this->machines as $machine) {
+            if ($machine->enteredAt !== null) {
+                $columns[$machine->enteredAt] = $machine->stateAttribute;
+            }
+        }
+
+        return $columns;
+    }
+
     public function recordsHistory(string $stateAttribute): bool
     {
         return $this->machines[$stateAttribute]->recordsHistory;

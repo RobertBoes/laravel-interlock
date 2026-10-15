@@ -70,15 +70,38 @@ final class DirectWriteException extends LogicException implements InterlockExce
         ));
     }
 
+    public static function toEnteredAtColumn(Model $model, string $column, string $stateAttribute): self
+    {
+        return new self(sprintf(
+            'Cannot save %s [%s]: its [%s] records when its [%s] entered its state, and was changed outside a transition. Only Interlock may write it, unless a bypass is active.',
+            $model::class,
+            $model->getKey(),
+            $column,
+            $stateAttribute,
+        ));
+    }
+
+    public static function createdWithEnteredAtColumn(Model $model, string $column, string $stateAttribute): self
+    {
+        return new self(sprintf(
+            'Cannot create %s with [%s] set: it records when its [%s] entered its state, and only Interlock may write it, unless a bypass is active.',
+            $model::class,
+            $column,
+            $stateAttribute,
+        ));
+    }
+
     /**
      * @param  list<string>  $stateAttributes
      * @param  list<string>  $guardedAttributes
+     * @param  list<string>  $enteredAtColumns
      */
-    public static function throughBuilder(Model $model, string $method, array $stateAttributes, array $guardedAttributes): self
+    public static function throughBuilder(Model $model, string $method, array $stateAttributes, array $guardedAttributes, array $enteredAtColumns = []): self
     {
         $attributes = array_filter([
             self::attributeList('state attribute', $stateAttributes),
             self::attributeList('guarded attribute', $guardedAttributes),
+            self::attributeList('entered-at column', $enteredAtColumns),
         ]);
 
         return new self(sprintf(

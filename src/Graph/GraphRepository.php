@@ -114,7 +114,7 @@ final class GraphRepository
 
         $recordsHistory = $reflection->getAttributes(RecordsHistory::class) !== [];
 
-        return new CompiledMachine($declaration->machine, $declaration->stateAttribute, $initialStates, $states, $finalStates, $recordsHistory);
+        return new CompiledMachine($declaration->machine, $declaration->stateAttribute, $initialStates, $states, $finalStates, $recordsHistory, $declaration->enteredAt);
     }
 
     /**

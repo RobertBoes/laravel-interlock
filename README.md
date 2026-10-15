@@ -228,6 +228,34 @@ class Order extends Model
 
 Transition names must be unique per model across all its machines, so applying a transition never needs to say which machine it belongs to. One enum may back several machines with different graphs, such as an `Approval` enum behind both `legal_status` and `finance_status`.
 
+### Recording when a state was entered
+
+To know how long a model has been in its state, such as "resolved for 7 days", give the machine a column for Interlock to keep up to date. Declare it with `enteredAt:`:
+
+```php
+#[UseStateMachine('status', TicketStatusMachine::class, enteredAt: 'status_changed_at')]
+class Ticket extends Model
+```
+
+Without `enteredAt:` nothing changes. With it, Interlock sets the column to now (Laravel's fresh timestamp, so `Carbon::setTestNow()` applies):
+
+- when the model is created;
+- on every transition, in the same write as the state. A self-transition resets it too;
+- for each machine a [staged](#staged-transitions) save transitions, and under `Interlock::fake()`;
+- on a bypassed write, or a bypassed mass write through the builder, that changes the state, unless the write sets the column itself. That lets imports and factories keep a historical time: `Ticket::factory()->create(['status' => TicketStatus::Resolved, 'status_changed_at' => now()->subDays(8)])`. A mass write can't tell which rows change state, so one that writes the state attribute sets the column on every row it writes. Inserted rows that leave the column out get it too, except through `insertUsing` and `insertOrIgnoreUsing`, whose subquery has to select it.
+
+It follows the leaf state: moving between two children of one parent state resets it, so the time spent within the parent is not tracked. Outside a bypass, writing the column yourself throws `DirectWriteException`, through the model and through the builder, like a guarded attribute. `replicate()` clears it, so the copy records when it was created. History does not record it; each entry has its own timestamp.
+
+The column is cast to `datetime` unless the model casts it already. Index it, since a trigger queries it every minute. Adding it to an existing table leaves it null, and a null column never matches [`InStateFor`](#querying-by-state), so backfill existing rows. `updated_at` is the best estimate:
+
+```php
+Schema::table('tickets', function (Blueprint $table) {
+    $table->timestamp('status_changed_at')->nullable()->index();
+});
+
+DB::table('tickets')->whereNull('status_changed_at')->update(['status_changed_at' => DB::raw('updated_at')]);
+```
+
 ## Applying transitions
 
 Apply a transition by name, or pass an instance of its class when it takes input:
@@ -403,6 +431,19 @@ Order::query()->tap(new InFromStateOf('ship'))->get();
 
 `InFromStateOf` finds the models in a from-state of the transition. It does not evaluate guards or authorization; ask the model for its [available transitions](#available-transitions) when those matter.
 
+`InStateFor` finds the models that have been in a state for at least a duration, by the machine's [entered-at column](#recording-when-a-state-was-entered):
+
+```php
+use Carbon\CarbonInterval;
+use RobertBoes\Interlock\Scopes\InStateFor;
+
+Ticket::query()->tap(new InStateFor(TicketStatus::Resolved, days: 7))->get();
+Ticket::query()->tap(new InStateFor([TicketStatus::Open, TicketStatus::Waiting], hours: 4))->get();
+Ticket::query()->tap(new InStateFor(TicketStatus::Resolved, CarbonInterval::minutes(90)))->get();
+```
+
+It matches the models whose column is at or before now minus the duration, worked out each time the query runs. Pass `minutes:`, `hours:`, `days:` or a `CarbonInterval`; they add up. Parent states expand to their children, as with `InState`. Without states it constrains only the time, and pass `stateAttribute:` on a model with several machines. It throws `InvalidStateQueryException` when the machine declares no `enteredAt` column. A null column never matches.
+
 The scopes also work as eager-load constraints, with `with()` and `load()`:
 
 ```php
@@ -418,6 +459,7 @@ use RobertBoes\Interlock\HasStateScopes;
 Order::whereInState(OrderStatus::Preparing)->get();
 Order::whereNotInState(OrderStatus::Cancelled)->get();
 Order::whereInFromStateOf('ship')->get();
+Ticket::whereInStateFor(TicketStatus::Resolved, days: 7)->get();
 ```
 
 ## Enforcement
@@ -427,6 +469,7 @@ A direct write is any change to a state attribute or guarded attribute that does
 - assigning the attribute and calling `save()`, or passing it to `update()` or `fill()` and saving;
 - `create()` and `insert` in a state that is not an initial state, or with a guarded attribute set;
 - `saveQuietly()`, `updateQuietly()`, `createQuietly()` and `Model::withoutEvents()`, because enforcement does not depend on model events;
+- writing an [entered-at column](#recording-when-a-state-was-entered) yourself, through the model or the builder;
 - mass writes through the Eloquent builder: `update`, `updateFrom`, `updateOrInsert`, `upsert`, `increment`, `decrement`, `incrementEach`, `decrementEach`, `insert`, `insertOrIgnore`, `insertOrIgnoreReturning` and `insertGetId`, whenever they touch a state attribute or guarded attribute, and `insertUsing` and `insertOrIgnoreUsing` whenever their columns include one, since the values a subquery selects are not known up front.
 
 There is no setting that turns enforcement off. The only way past it is a [bypass](#bypass), which needs a reason. Deletes, force deletes and restores are not governed; that is what policies are for.
@@ -461,7 +504,7 @@ An interlocked model whose custom builder lacks the trait throws `MissingBuilder
 
 ### `replicate()` starts the lifecycle over
 
-**This differs from Laravel's default.** Laravel's `replicate()` copies every attribute. On an interlocked model, the copy instead starts its lifecycle over: each state attribute is reset to its machine's initial state, or left null when the machine has several, and every guarded attribute is cleared. Without that, saving a copy of a shipped order would be a direct write to `shipped` and would throw.
+**This differs from Laravel's default.** Laravel's `replicate()` copies every attribute. On an interlocked model, the copy instead starts its lifecycle over: each state attribute is reset to its machine's initial state, or left null when the machine has several, and every guarded attribute and entered-at column is cleared. Without that, saving a copy of a shipped order would be a direct write to `shipped` and would throw.
 
 ```php
 $copy = $shippedOrder->replicate();
@@ -470,7 +513,7 @@ $copy->status;        // OrderStatus::Pending
 $copy->tracking_code; // null
 ```
 
-A `replicating` listener may still set a state attribute on the copy; it is only reset when the listener leaves it unset.
+A `replicating` listener may still set a state attribute, guarded attribute or entered-at column on the copy; each is only reset when the listener leaves it unset. Saving a copy with a guarded attribute or entered-at column set takes a [bypass](#bypass), as creating any model with one does.
 
 ## Bypass
 
@@ -491,7 +534,7 @@ Interlock::bypass('Import orders from the old shop', function () use ($rows) {
 
 The reason is required, so the audit trail says why and not just that something changed. The bypass covers model saves and mass writes through the Eloquent builder, and it ends when the callback returns or throws, so it can never stay on by accident. `bypass()` returns whatever the callback returns.
 
-A bypassed write to a state attribute dispatches `BypassedWrite` with the reason. A bypassed write to a guarded attribute dispatches `BypassedGuardedAttributeWrite`, which also carries the attribute's old and new value. If the machine records [history](#history), both end up there. A bypassed mass write dispatches `BypassedMassWrite` instead. It names the model class and the attributes written, but not the rows (the query picks those), so it isn't recorded in history.
+A bypassed write to a state attribute dispatches `BypassedWrite` with the reason. A bypassed write to a guarded attribute dispatches `BypassedGuardedAttributeWrite`, which also carries the attribute's old and new value. If the machine records [history](#history), both end up there. A bypassed mass write dispatches `BypassedMassWrite` instead. It names the model class and the attributes written, entered-at columns included, but not the rows (the query picks those), so it isn't recorded in history.
 
 ## Triggers
 
@@ -512,7 +555,18 @@ The condition can be any callable that takes the query, so a tappable scope clas
 ->trigger(new PublishAtHasPassed()),
 ```
 
-The transition's from-states are added to the condition, so it only says what is specific to the trigger. A class-based transition declares a static `trigger()` method instead:
+The transition's from-states are added to the condition, so it only says what is specific to the trigger. For "in this state for N days", use [`InStateFor`](#querying-by-state) without states; the trigger's from-states supply them:
+
+```php
+$this->transition('close')
+    ->from(TicketStatus::Resolved)
+    ->to(TicketStatus::Closed)
+    ->trigger(new InStateFor(days: 7)),
+```
+
+It works out the cutoff on every run, so the compiled and cached machine never freezes a date. A duration that comes from config has to be read on every run too, so wrap it in a closure: `->trigger(fn(Builder $query) => $query->tap(new InStateFor(days: config('tickets.close_after_days'))))`.
+
+A class-based transition declares a static `trigger()` method instead:
 
 ```php
 public static function trigger(Builder $query): void
@@ -608,7 +662,7 @@ Every transition and every bypassed write on that machine's state attribute or g
 - the transition's name, null for a bypassed write;
 - the from-state and target state, as their backing values;
 - the actor's type and key, null when there was none;
-- the attributes the transition or bypassed write wrote, old and new, and not the model's other changes;
+- the attributes the transition or bypassed write wrote, old and new, and not the model's other changes or its entered-at columns;
 - the bypass reason, the trigger that applied it, and a timestamp.
 
 Read a model's history through its relationship, optionally for one state attribute. Entries in the same second share a timestamp, so order a timeline by key:

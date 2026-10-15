@@ -40,7 +40,7 @@ trait RejectsDirectWrites
      */
     public function update(array $values)
     {
-        return $this->interlockWrite('update', fn() => parent::update($values), updated: array_keys($values));
+        return $this->interlockWrite('update', fn() => parent::update([...$values, ...$this->interlockEnteredAtFor(array_keys($values))]), updated: array_keys($values));
     }
 
     /**
@@ -55,7 +55,12 @@ trait RejectsDirectWrites
         $update ??= array_keys($rows[0] ?? []);
         $updated = array_map(fn(mixed $key, mixed $value) => is_int($key) ? $value : $key, array_keys($update), $update);
 
-        return $this->interlockWrite('upsert', fn() => parent::upsert($values, $uniqueBy, $update), $updated, $rows);
+        return $this->interlockWrite(
+            'upsert',
+            fn() => parent::upsert($this->interlockWithEnteredAt($values), $uniqueBy, [...$update, ...array_keys($this->interlockEnteredAtFor($updated))]),
+            $updated,
+            $rows,
+        );
     }
 
     /**
@@ -66,7 +71,9 @@ trait RejectsDirectWrites
      */
     public function increment($column, $amount = 1, array $extra = [])
     {
-        return $this->interlockWrite('increment', fn() => parent::increment($column, $amount, $extra), [$column, ...array_keys($extra)]);
+        $updated = [$column, ...array_keys($extra)];
+
+        return $this->interlockWrite('increment', fn() => parent::increment($column, $amount, [...$extra, ...$this->interlockEnteredAtFor($updated)]), $updated);
     }
 
     /**
@@ -77,7 +84,9 @@ trait RejectsDirectWrites
      */
     public function decrement($column, $amount = 1, array $extra = [])
     {
-        return $this->interlockWrite('decrement', fn() => parent::decrement($column, $amount, $extra), [$column, ...array_keys($extra)]);
+        $updated = [$column, ...array_keys($extra)];
+
+        return $this->interlockWrite('decrement', fn() => parent::decrement($column, $amount, [...$extra, ...$this->interlockEnteredAtFor($updated)]), $updated);
     }
 
     /**
@@ -87,7 +96,9 @@ trait RejectsDirectWrites
      */
     public function incrementEach(array $columns, array $extra = [])
     {
-        return $this->interlockWrite('incrementEach', fn() => parent::incrementEach($columns, $extra), [...array_keys($columns), ...array_keys($extra)]);
+        $updated = [...array_keys($columns), ...array_keys($extra)];
+
+        return $this->interlockWrite('incrementEach', fn() => parent::incrementEach($columns, [...$extra, ...$this->interlockEnteredAtFor($updated)]), $updated);
     }
 
     /**
@@ -97,7 +108,9 @@ trait RejectsDirectWrites
      */
     public function decrementEach(array $columns, array $extra = [])
     {
-        return $this->interlockWrite('decrementEach', fn() => parent::decrementEach($columns, $extra), [...array_keys($columns), ...array_keys($extra)]);
+        $updated = [...array_keys($columns), ...array_keys($extra)];
+
+        return $this->interlockWrite('decrementEach', fn() => parent::decrementEach($columns, [...$extra, ...$this->interlockEnteredAtFor($updated)]), $updated);
     }
 
     /**
@@ -106,7 +119,7 @@ trait RejectsDirectWrites
      */
     public function insert(array $values)
     {
-        return $this->interlockWrite('insert', fn() => $this->toBase()->insert($values), inserted: self::interlockRowsOf($values));
+        return $this->interlockWrite('insert', fn() => $this->toBase()->insert($this->interlockWithEnteredAt($values)), inserted: self::interlockRowsOf($values));
     }
 
     /**
@@ -115,7 +128,7 @@ trait RejectsDirectWrites
      */
     public function insertOrIgnore(array $values)
     {
-        return $this->interlockWrite('insertOrIgnore', fn() => $this->toBase()->insertOrIgnore($values), inserted: self::interlockRowsOf($values));
+        return $this->interlockWrite('insertOrIgnore', fn() => $this->toBase()->insertOrIgnore($this->interlockWithEnteredAt($values)), inserted: self::interlockRowsOf($values));
     }
 
     /**
@@ -125,7 +138,7 @@ trait RejectsDirectWrites
      */
     public function insertGetId(array $values, $sequence = null)
     {
-        return $this->interlockWrite('insertGetId', fn() => $this->toBase()->insertGetId($values, $sequence), inserted: [$values]);
+        return $this->interlockWrite('insertGetId', fn() => $this->toBase()->insertGetId($this->interlockWithEnteredAt($values), $sequence), inserted: [$values]);
     }
 
     /**
@@ -136,11 +149,12 @@ trait RejectsDirectWrites
      */
     public function insertOrIgnoreReturning(array $values, array $returning = ['*'], array|string|null $uniqueBy = null)
     {
-        return $this->interlockWrite('insertOrIgnoreReturning', fn() => $this->toBase()->insertOrIgnoreReturning($values, $returning, $uniqueBy), inserted: self::interlockRowsOf($values));
+        return $this->interlockWrite('insertOrIgnoreReturning', fn() => $this->toBase()->insertOrIgnoreReturning($this->interlockWithEnteredAt($values), $returning, $uniqueBy), inserted: self::interlockRowsOf($values));
     }
 
     /**
      * A subquery's values are not known up front, so any state or guarded attribute among the columns is a direct write.
+     * The subquery selects the entered-at columns too, as Interlock cannot add them.
      *
      * @param  list<string>  $columns
      * @param  mixed  $query
@@ -167,7 +181,7 @@ trait RejectsDirectWrites
      */
     public function updateFrom(array $values)
     {
-        return $this->interlockWrite('updateFrom', fn() => $this->toBase()->updateFrom($values), array_keys($values));
+        return $this->interlockWrite('updateFrom', fn() => $this->toBase()->updateFrom([...$values, ...$this->interlockEnteredAtFor(array_keys($values))]), array_keys($values));
     }
 
     /**
@@ -184,14 +198,14 @@ trait RejectsDirectWrites
         if (! $exists) {
             $row = [...$attributes, ...$values];
 
-            return $this->interlockWrite('updateOrInsert', fn() => $query->insert($row), inserted: [$row]);
+            return $this->interlockWrite('updateOrInsert', fn() => $query->insert($this->interlockWithEnteredAt($row)), inserted: [$row]);
         }
 
         if ($values === []) {
             return true;
         }
 
-        return $this->interlockWrite('updateOrInsert', fn() => (bool) $query->limit(1)->update($values), updated: array_keys($values));
+        return $this->interlockWrite('updateOrInsert', fn() => (bool) $query->limit(1)->update([...$values, ...$this->interlockEnteredAtFor(array_keys($values))]), updated: array_keys($values));
     }
 
     /**
@@ -215,19 +229,65 @@ trait RejectsDirectWrites
         ]));
         $stateAttributes = array_values(array_intersect($written, array_keys($graph->machines)));
         $guardedAttributes = array_values(array_intersect($written, array_keys($graph->guardedAttributes)));
+        $enteredAtColumns = array_values(array_intersect($written, array_keys($graph->enteredAtColumns())));
 
-        if ($stateAttributes === [] && $guardedAttributes === []) {
+        if ($stateAttributes === [] && $guardedAttributes === [] && $enteredAtColumns === []) {
             return $write();
         }
 
         $reason = Container::getInstance()->make(BypassScope::class)->reason()
-            ?? throw DirectWriteException::throughBuilder($this->model, $method, $stateAttributes, $guardedAttributes);
+            ?? throw DirectWriteException::throughBuilder($this->model, $method, $stateAttributes, $guardedAttributes, $enteredAtColumns);
 
         $result = $write();
 
-        Event::dispatch(new BypassedMassWrite($reason, $this->model::class, $method, [...$stateAttributes, ...$guardedAttributes]));
+        Event::dispatch(new BypassedMassWrite($reason, $this->model::class, $method, [...$stateAttributes, ...$guardedAttributes, ...$enteredAtColumns]));
 
         return $result;
+    }
+
+    /**
+     * A mass write cannot tell which rows change state, so writing a state attribute counts as entering a state.
+     *
+     * @param  list<mixed>  $updated  the columns the write sets
+     * @return array<string, string> the entered-at columns to set to now, unless the write sets them itself
+     */
+    private function interlockEnteredAtFor(array $updated): array
+    {
+        if ($this->interlockSavesModel) {
+            return [];
+        }
+
+        $updated = array_map(self::interlockAttributeOf(...), array_filter($updated, is_string(...)));
+        $columns = array_filter(
+            Container::getInstance()->make(GraphRepository::class)->for($this->model)->enteredAtColumns(),
+            fn(string $stateAttribute, string $column) => in_array($stateAttribute, $updated, true) && ! in_array($column, $updated, true),
+            ARRAY_FILTER_USE_BOTH,
+        );
+
+        return array_fill_keys(array_keys($columns), $this->model->freshTimestampString());
+    }
+
+    /**
+     * An inserted row enters a state, so each row that leaves an entered-at column out gets it set to now.
+     *
+     * @param  array<mixed>  $values  one row, or a list of rows
+     * @return array<mixed>
+     */
+    private function interlockWithEnteredAt(array $values): array
+    {
+        $columns = array_keys(Container::getInstance()->make(GraphRepository::class)->for($this->model)->enteredAtColumns());
+
+        if ($this->interlockSavesModel || $columns === [] || $values === []) {
+            return $values;
+        }
+
+        $now = array_fill_keys($columns, $this->model->freshTimestampString());
+
+        if (! is_array(Arr::first($values))) {
+            return $values + $now;
+        }
+
+        return array_map(fn(mixed $row) => is_array($row) ? $row + $now : $row, $values);
     }
 
     /**

@@ -3,9 +3,11 @@
 namespace RobertBoes\Interlock;
 
 use BackedEnum;
+use DateInterval;
 use Illuminate\Database\Eloquent\Builder;
 use RobertBoes\Interlock\Scopes\InFromStateOf;
 use RobertBoes\Interlock\Scopes\InState;
+use RobertBoes\Interlock\Scopes\InStateFor;
 use RobertBoes\Interlock\Scopes\NotInState;
 
 /**
@@ -29,6 +31,22 @@ trait HasStateScopes
     public function scopeWhereNotInState(Builder $query, BackedEnum|array $states, ?string $stateAttribute = null): void
     {
         $query->tap(new NotInState($states, $stateAttribute));
+    }
+
+    /**
+     * @param  Builder<static>  $query
+     * @param  BackedEnum|list<BackedEnum>  $states
+     */
+    public function scopeWhereInStateFor(
+        Builder $query,
+        BackedEnum|array $states = [],
+        ?DateInterval $duration = null,
+        int $days = 0,
+        int $hours = 0,
+        int $minutes = 0,
+        ?string $stateAttribute = null,
+    ): void {
+        $query->tap(new InStateFor($states, $duration, $days, $hours, $minutes, $stateAttribute));
     }
 
     /**

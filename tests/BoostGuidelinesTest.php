@@ -9,6 +9,7 @@ use RobertBoes\Interlock\Definition\FluentTransition;
 use RobertBoes\Interlock\HasStateScopes;
 use RobertBoes\Interlock\Interlock;
 use RobertBoes\Interlock\Scopes\InState;
+use RobertBoes\Interlock\Scopes\InStateFor;
 use RobertBoes\Interlock\Scopes\NotInState;
 use RobertBoes\Interlock\StateMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Order;
@@ -107,13 +108,13 @@ it('calls only methods that interlocked models, machines, fluent transitions, qu
 it('names only state scopes the package has', function () {
     $scopes = namedInBoostGuidelines('/`(where\w+State\w*)\(\)`/');
 
-    expect($scopes)->toEqualCanonicalizing(['whereInState', 'whereNotInState', 'whereInFromStateOf']);
+    expect($scopes)->toEqualCanonicalizing(['whereInState', 'whereNotInState', 'whereInStateFor', 'whereInFromStateOf']);
 
     foreach ($scopes as $scope) {
         expect(method_exists(HasStateScopes::class, 'scope' . ucfirst($scope)))->toBeTrue("The guidelines name the scope {$scope}(), which does not exist.");
     }
 
-    foreach ([InState::class, NotInState::class] as $scope) {
+    foreach ([InState::class, NotInState::class, InStateFor::class] as $scope) {
         $parameters = array_map(fn(ReflectionParameter $parameter) => $parameter->getName(), (new ReflectionMethod($scope, '__construct'))->getParameters());
 
         expect($parameters)->toContain('stateAttribute');

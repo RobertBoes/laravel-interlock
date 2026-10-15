@@ -16,13 +16,14 @@ The fixture domains from the spec (`.scratch/interlock-v1/spec.md`, "Testing Dec
 - `Returns/`: an order whose only transition, `return_to_sender`, takes a `Shipment` model as input, which the container could build empty. It shares the `orders` table and the order's `OrderStatus` enum.
 - `LegacyOrders/`: an order whose machine is also called `OrderStatusMachine`, in another namespace, for the XState export of every machine refusing two machines with the same ID. It shares the `orders` table and the order's `OrderStatus` enum.
 - `TriggerOnlyPosts/`: a post whose triggered `publish` declares no authorization, so only its trigger applies it. It shares the `posts` table and the blog post's `PostStatus` enum.
+- `Tickets/`: a support ticket with two machines, `status` and `priority`, that both declare an `enteredAt` column, for recording when a state was entered and `InStateFor`. Its `status` nests `open` and `waiting` within `active`, has a self-transition (`remind`), and closes a ticket 7 days after it was resolved with an `InStateFor` trigger. Its `priority_changed_at` is cast by the model, as an immutable datetime. Namespace `RobertBoes\Interlock\Tests\Fixtures\Tickets`.
 - `History/`: a history recorder that keeps its records in memory, for swapping the recorder through the config. Namespace `RobertBoes\Interlock\Tests\Fixtures\History`.
 - `database/migrations/`: the fixture tables, loaded by `TestCase`, plus the package's own history migration.
 
 Every transition declares who may apply it by hand: authorization, `withoutAuthorization()` (`#[WithoutAuthorization]` on a class) for anyone, or, for a trigger-only transition, a trigger and no authorization. The expense's `reject`, `withdraw`, `approve` and `pay` are authorized; the trigger-only post's, the locked post's and the feed post's `publish` are trigger-only; every other transition is open to anyone.
 
-Triggers: the post's `publish` once `publish_at` has passed, the expense's guarded `submit` 30 days after the expense was created, and the order's class-based `cancel` for orders still unpaid after 3 days, which fans out. The feed post's `publish` fans out too.
+Triggers: the ticket's `close` 7 days after it was resolved, the post's `publish` once `publish_at` has passed, the expense's guarded `submit` 30 days after the expense was created, and the order's class-based `cancel` for orders still unpaid after 3 days, which fans out. The feed post's `publish` fans out too.
 
-History is on for the post's and the trigger-only post's `status` machines, the order's `status` machine and both contract machines. The order's `payment_status` machine has it off.
+History is on for the post's, the trigger-only post's and the ticket's `status` machines, the order's `status` machine and both contract machines. The order's `payment_status` machine has it off.
 
 One model lives outside this directory: `tests/MisdeclaredModels/PostWithoutHasStateMachines` declares a machine without using `HasStateMachines`, and discovery fails on any path that holds it, so it is kept out of the paths the discovery tests scan recursively.

@@ -5,12 +5,39 @@ namespace RobertBoes\Interlock\Exceptions;
 use BackedEnum;
 use Illuminate\Database\Eloquent\Model;
 use LogicException;
+use RobertBoes\Interlock\Graph\CompiledMachine;
 
 final class InvalidStateQueryException extends LogicException implements InterlockException
 {
     public static function noStates(): self
     {
         return new self('Pass at least one state to query by.');
+    }
+
+    public static function noDuration(): self
+    {
+        return new self('Pass how long the models have been in the state: minutes, hours, days or an interval.');
+    }
+
+    public static function noEnteredAtColumn(Model $model, CompiledMachine $machine): self
+    {
+        return new self(sprintf(
+            '%s does not record when its [%s] entered a state. Declare the column with enteredAt: on its #[UseStateMachine] to query how long it has been in a state.',
+            $model::class,
+            $machine->stateAttribute,
+        ));
+    }
+
+    /**
+     * @param  list<string>  $stateAttributes
+     */
+    public static function severalStateMachines(Model $model, array $stateAttributes): self
+    {
+        return new self(sprintf(
+            '%s has several state machines, on [%s]. Pass the state attribute to query as the stateAttribute argument.',
+            $model::class,
+            implode(', ', $stateAttributes),
+        ));
     }
 
     public static function noStateMachines(Model $model): self

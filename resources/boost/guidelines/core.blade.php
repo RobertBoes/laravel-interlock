@@ -11,6 +11,7 @@ Interlock (`robertboes/laravel-interlock`) keeps an Eloquent model's state attri
 - Every transition must declare who may apply it by hand, or compiling the graph throws `InvalidDefinitionException`: authorization (`->authorize(...)`, an `authorize()` method or `#[Authorize('ability')]`), `->withoutAuthorization()` (`#[WithoutAuthorization]` on a class) for anyone, or a trigger and no authorization, so only the trigger applies it. Never declare both authorization and `withoutAuthorization()`.
 - `withoutAuthorization()` means anyone: every user, guests, and jobs or commands with a null actor. Use authorization unless the transition really is open to all of them.
 - An attribute only certain transitions may write is declared on the machine with `#[GuardedAttribute('tracking_code', Ship::class)]`.
+- To know how long a model has been in its state, declare `enteredAt:` on the model: `#[UseStateMachine('status', TicketStatusMachine::class, enteredAt: 'status_changed_at')]`. Interlock sets that column on create and on every transition; never write it yourself outside a bypass. Its migration adds a nullable, indexed timestamp and backfills existing rows from `updated_at`. Do not keep a hand-written `*_changed_at` column or read `updated_at` as a stand-in for it.
 
 @verbatim
 <code-snippet name="Declare a state machine" lang="php">
@@ -91,18 +92,20 @@ Interlock::bypass('Import orders from the old shop', function () use ($rows) {
 
 ### Querying by state
 
-Use the tappable scopes; they expand parent states to their children. Pass `stateAttribute:` when one enum backs several machines on the model. With the opt-in `HasStateScopes` trait, the same scopes are `whereInState()`, `whereNotInState()` and `whereInFromStateOf()`.
+Use the tappable scopes; they expand parent states to their children. Pass `stateAttribute:` when one enum backs several machines on the model. `InStateFor` finds models that have been in a state for at least `minutes:`, `hours:`, `days:` or a `CarbonInterval`, by the `enteredAt` column. With the opt-in `HasStateScopes` trait, the same scopes are `whereInState()`, `whereNotInState()`, `whereInStateFor()` and `whereInFromStateOf()`.
 
 @verbatim
 <code-snippet name="Query by state" lang="php">
 use RobertBoes\Interlock\Scopes\InFromStateOf;
 use RobertBoes\Interlock\Scopes\InState;
+use RobertBoes\Interlock\Scopes\InStateFor;
 use RobertBoes\Interlock\Scopes\NotInState;
 
 Order::query()->tap(new InState(OrderStatus::Preparing))->get();
 Order::query()->tap(new NotInState([OrderStatus::Delivered, OrderStatus::Cancelled]))->get();
 Order::query()->tap(new InFromStateOf('ship'))->get();
 Document::query()->tap(new InState(Approval::Approved, stateAttribute: 'legal_status'))->get();
+Ticket::query()->tap(new InStateFor(TicketStatus::Resolved, days: 7))->get();
 </code-snippet>
 @endverbatim
 
@@ -116,12 +119,18 @@ $this->transition('publish')
     ->from(PostStatus::Scheduled)
     ->to(PostStatus::Published)
     ->trigger(fn(Builder $query) => $query->where('publish_at', '<=', now())),
+
+$this->transition('close')
+    ->from(TicketStatus::Resolved)
+    ->to(TicketStatus::Closed)
+    ->trigger(new InStateFor(days: 7)),
 </code-snippet>
 @endverbatim
 
 - Triggers run through `interlock:triggers`, which Interlock schedules every minute, so the scheduler and a queue worker must run.
 - A triggered transition runs without an actor and skips authorization; its guards still run. Leave authorization out for a transition only the trigger may apply: it is then trigger-only, and `availableTransitions()` never offers it. Add `->authorize(...)` or `->withoutAuthorization()` to let people apply it by hand as well. Never authorize `$actor === null` to mean "only the trigger": guests are null actors too.
 - `Builder` is `Illuminate\Database\Eloquent\Builder`. The transition's from-states are added to the condition, so do not repeat them.
+- For "in this state for N days" triggers, use `new InStateFor(days: N)` without states (add `stateAttribute:` on a model with several machines); the machine needs an `enteredAt` column. It works out the cutoff on every run. A duration from config must be read on every run too: `->trigger(fn(Builder $query) => $query->tap(new InStateFor(days: config('tickets.close_after_days'))))`.
 - A class-based transition declares a static `trigger(Builder $query)` method instead. A transition whose constructor has required parameters cannot have a trigger.
 
 ### Where enforcement stops

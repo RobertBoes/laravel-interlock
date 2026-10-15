@@ -28,6 +28,7 @@ final readonly class DirectWriteCheck
     {
         $this->startStateAttributesInAnInitialState();
         $this->rejectGuardedAttributesOnCreate();
+        $this->recordEnteringTheInitialStates();
     }
 
     /**
@@ -37,6 +38,42 @@ final readonly class DirectWriteCheck
     {
         $this->rejectDirectWritesToStateAttributes($runningTransitions);
         $this->rejectDirectWritesToGuardedAttributes($runningTransitions);
+        $this->recordEnteringBypassedStates($runningTransitions);
+    }
+
+    /**
+     * A bypassed create may set the column itself, such as an import keeping a historical time.
+     */
+    private function recordEnteringTheInitialStates(): void
+    {
+        foreach ($this->graph->enteredAtColumns() as $column => $stateAttribute) {
+            if (($this->model->getAttributes()[$column] ?? null) === null) {
+                $this->model->setAttribute($column, $this->model->freshTimestamp());
+            } else {
+                $this->rejectOutsideBypass(DirectWriteException::createdWithEnteredAtColumn($this->model, $column, $stateAttribute));
+            }
+        }
+    }
+
+    /**
+     * A running transition sets its own column. A bypassed write that changes the state sets it, unless it sets the
+     * column itself.
+     *
+     * @param  array<string, StagedTransition>  $runningTransitions
+     */
+    private function recordEnteringBypassedStates(array $runningTransitions): void
+    {
+        foreach ($this->graph->enteredAtColumns() as $column => $stateAttribute) {
+            if (isset($runningTransitions[$stateAttribute])) {
+                continue;
+            }
+
+            if ($this->model->isDirty($column)) {
+                $this->rejectOutsideBypass(DirectWriteException::toEnteredAtColumn($this->model, $column, $stateAttribute));
+            } elseif ($this->model->isDirty($stateAttribute)) {
+                $this->model->setAttribute($column, $this->model->freshTimestamp());
+            }
+        }
     }
 
     private function startStateAttributesInAnInitialState(): void
@@ -139,6 +176,13 @@ final readonly class DirectWriteCheck
         $reason = Container::getInstance()->make(BypassScope::class)->reason() ?? throw $rejection;
 
         ($this->bypassed)($bypassedWrite($reason));
+    }
+
+    private function rejectOutsideBypass(DirectWriteException $rejection): void
+    {
+        if (Container::getInstance()->make(BypassScope::class)->reason() === null) {
+            throw $rejection;
+        }
     }
 
     private function runningTransitionWrote(?StagedTransition $running, string $stateAttribute): bool
