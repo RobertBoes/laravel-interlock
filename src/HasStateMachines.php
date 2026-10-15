@@ -2,7 +2,6 @@
 
 namespace RobertBoes\Interlock;
 
-use BackedEnum;
 use Closure;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Auth\Authenticatable;
@@ -18,13 +17,11 @@ use RobertBoes\Interlock\Events\BypassedGuardedAttributeWrite;
 use RobertBoes\Interlock\Events\BypassedWrite;
 use RobertBoes\Interlock\Events\Transitioned;
 use RobertBoes\Interlock\Events\Transitioning;
-use RobertBoes\Interlock\Exceptions\AmbiguousInitialStateException;
 use RobertBoes\Interlock\Exceptions\CancelledTransitionException;
 use RobertBoes\Interlock\Exceptions\DirectWriteException;
 use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
 use RobertBoes\Interlock\Exceptions\MissingBuilderTraitException;
 use RobertBoes\Interlock\Exceptions\NotAFromStateException;
-use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\Graph\CompiledTransition;
 use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Graph\ModelGraph;
@@ -32,8 +29,9 @@ use RobertBoes\Interlock\Graph\TransitionSteps;
 use RobertBoes\Interlock\History\HistoryEntry;
 use RobertBoes\Interlock\History\HistoryRecord;
 use RobertBoes\Interlock\History\HistoryRecorder;
-use RobertBoes\Interlock\Persistence\CompareAndSwapBuilder;
 use RobertBoes\Interlock\Persistence\AppliedTransition;
+use RobertBoes\Interlock\Persistence\CompareAndSwapBuilder;
+use RobertBoes\Interlock\Persistence\DirectWriteCheck;
 use RobertBoes\Interlock\Persistence\StagedTransition;
 use RobertBoes\Interlock\Persistence\UnsavedModel;
 use RobertBoes\Interlock\Testing\TransitionLog;
@@ -624,8 +622,7 @@ trait HasStateMachines
     protected function getDirtyForUpdate(): array
     {
         $this->interlockBypassedWrites = [];
-        $this->interlockRejectDirectWritesToStateAttributes();
-        $this->interlockRejectDirectWritesToGuardedAttributes();
+        $this->interlockDirectWriteCheck()->checkUpdate($this->interlockRunningTransitions);
 
         return parent::getDirtyForUpdate();
     }
@@ -638,8 +635,7 @@ trait HasStateMachines
     protected function getAttributesForInsert(): array
     {
         $this->interlockBypassedWrites = [];
-        $this->interlockStartStateAttributesInAnInitialState();
-        $this->interlockRejectGuardedAttributesOnCreate();
+        $this->interlockDirectWriteCheck()->checkCreate();
 
         return parent::getAttributesForInsert();
     }
@@ -661,111 +657,11 @@ trait HasStateMachines
         }
     }
 
-    private function interlockStartStateAttributesInAnInitialState(): void
+    private function interlockDirectWriteCheck(): DirectWriteCheck
     {
-        foreach ($this->interlockGraph()->machines as $machine) {
-            $state = $this->getAttribute($machine->stateAttribute);
-
-            if ($state === null) {
-                $this->setAttribute($machine->stateAttribute, $this->interlockOnlyInitialState($machine));
-            } elseif ($machine->states->isParent($state)) {
-                throw DirectWriteException::createdInParentState($this, $machine, $state);
-            } elseif (! $machine->isInitialState($state)) {
-                $this->interlockBypassOrReject(
-                    DirectWriteException::notAnInitialState($this, $machine, $state),
-                    fn(string $reason) => new BypassedWrite($reason, $this, $machine->stateAttribute, null, $state),
-                );
-            }
-        }
-    }
-
-    private function interlockOnlyInitialState(CompiledMachine $machine): BackedEnum
-    {
-        return $machine->soleInitialState() ?? throw AmbiguousInitialStateException::noStateGiven($this, $machine);
-    }
-
-    private function interlockRejectDirectWritesToStateAttributes(): void
-    {
-        foreach ($this->interlockGraph()->machines as $machine) {
-            $stateAttribute = $machine->stateAttribute;
-
-            if (! $this->isDirty($stateAttribute)) {
-                continue;
-            }
-
-            $newState = $this->getAttribute($stateAttribute);
-
-            if ($newState !== null && $machine->states->isParent($newState)) {
-                throw DirectWriteException::toParentState($this, $machine, $newState);
-            }
-
-            if ($this->interlockRunningTransitionWrote($stateAttribute)) {
-                continue;
-            }
-
-            $oldState = $this->getOriginal($stateAttribute);
-
-            $this->interlockBypassOrReject(
-                DirectWriteException::toStateAttribute($this, $stateAttribute, $oldState, $newState),
-                fn(string $reason) => new BypassedWrite($reason, $this, $stateAttribute, $oldState, $newState),
-            );
-        }
-    }
-
-    /**
-     * A guarded attribute may only change in a transition allowed to write it.
-     */
-    private function interlockRejectDirectWritesToGuardedAttributes(): void
-    {
-        $running = array_values(array_map(fn(StagedTransition $staged) => $staged->compiled->name, $this->interlockRunningTransitions));
-
-        foreach ($this->interlockGraph()->guardedAttributes as $guardedAttribute => $writers) {
-            if (! $this->isDirty($guardedAttribute) || array_intersect($running, $writers) !== []) {
-                continue;
-            }
-
-            $this->interlockBypassGuardedAttributeOrReject($guardedAttribute, DirectWriteException::toGuardedAttribute($this, $guardedAttribute, $writers, $running));
-        }
-    }
-
-    private function interlockRejectGuardedAttributesOnCreate(): void
-    {
-        foreach ($this->interlockGraph()->guardedAttributes as $guardedAttribute => $writers) {
-            if (($this->getAttributes()[$guardedAttribute] ?? null) !== null) {
-                $this->interlockBypassGuardedAttributeOrReject($guardedAttribute, DirectWriteException::createdWithGuardedAttribute($this, $guardedAttribute, $writers));
-            }
-        }
-    }
-
-    private function interlockBypassGuardedAttributeOrReject(string $guardedAttribute, DirectWriteException $rejection): void
-    {
-        $this->interlockBypassOrReject($rejection, fn(string $reason) => new BypassedGuardedAttributeWrite(
-            $reason,
-            $this,
-            $guardedAttribute,
-            $this->getOriginal($guardedAttribute),
-            $this->getAttribute($guardedAttribute),
-        ));
-    }
-
-    /**
-     * Keeps the direct write as a bypassed write, dispatched and recorded once it is saved; throws the rejection when no
-     * bypass is active.
-     *
-     * @param  Closure(string): (BypassedWrite|BypassedGuardedAttributeWrite)  $bypassedWrite  builds the bypassed write from the bypass reason
-     */
-    private function interlockBypassOrReject(DirectWriteException $rejection, Closure $bypassedWrite): void
-    {
-        $reason = Container::getInstance()->make(BypassScope::class)->reason() ?? throw $rejection;
-
-        $this->interlockBypassedWrites[] = $bypassedWrite($reason);
-    }
-
-    private function interlockRunningTransitionWrote(string $stateAttribute): bool
-    {
-        $running = $this->interlockRunningTransitions[$stateAttribute] ?? null;
-
-        return $running !== null && $this->getAttribute($stateAttribute) === $running->compiled->targetState;
+        return new DirectWriteCheck($this, $this->interlockGraph(), function (BypassedWrite|BypassedGuardedAttributeWrite $bypassedWrite) {
+            $this->interlockBypassedWrites[] = $bypassedWrite;
+        });
     }
 
     private function interlockAuthenticatedActor(): ?Authenticatable
