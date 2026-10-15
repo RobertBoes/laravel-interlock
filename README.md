@@ -628,11 +628,17 @@ php artisan interlock:signalbox
 # One machine
 php artisan interlock:signalbox "App\StateMachines\OrderStatusMachine"
 
-# XState v5 config as JSON, for the Stately visualiser
+# XState v5 config as JSON
 php artisan interlock:signalbox --format=xstate
 
 # XState as TypeScript with literal types, written to a file for the frontend
 php artisan interlock:signalbox --format=xstate-ts --output=resources/js/machines.ts
+```
+
+To look at your machines, export them with `--viz` and paste the output into [Stately Sketch](https://sketch.stately.ai), then click Update. It prints the XState export, with every machine side by side as regions of one parallel machine unless you pass a single one.
+
+```bash
+php artisan interlock:signalbox --viz | pbcopy
 ```
 
 | Format | Output |
@@ -641,7 +647,7 @@ php artisan interlock:signalbox --format=xstate-ts --output=resources/js/machine
 | `xstate` | XState v5 machine config JSON |
 | `xstate-ts` | The same config as TypeScript, plus state and event types |
 
-In the XState export, transitions are events, parent states are nested states and final states are `type: 'final'`. Guards appear by name only, so no server logic leaks, and triggered transitions carry `meta: { trigger: true }`. A machine's XState ID is its class name without the namespace, so exporting every machine as XState fails when two machines share a class name; rename one, or export them one at a time. The Mermaid export of the locked post machine above looks like this:
+In the XState export, transitions are events, parent states are nested states and final states are `type: 'final'`. Guards appear by name only, so no server logic leaks; a transition with several guards gets one guard naming them all, such as `has_assessment and within_policy_limit`. Triggered transitions carry `meta: { trigger: true }`. A machine's XState ID is its class name without the namespace, so exporting every machine as XState fails when two machines share a class name; rename one, or export them one at a time. The Mermaid export of the locked post machine above looks like this:
 
 ```mermaid
 stateDiagram-v2

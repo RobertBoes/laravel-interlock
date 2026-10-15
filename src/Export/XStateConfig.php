@@ -31,6 +31,23 @@ final class XStateConfig
         return $config;
     }
 
+    /**
+     * Every machine as a region of one parallel machine, so a visualiser draws them side by side.
+     *
+     * @param  array<array{CompiledMachine, list<CompiledTransition>}>  $machines
+     * @return array<string, mixed>
+     */
+    public static function sideBySide(array $machines): array
+    {
+        $regions = new stdClass();
+
+        foreach ($machines as [$machine, $transitions]) {
+            $regions->{self::id($machine)} = self::of($machine, $transitions);
+        }
+
+        return ['id' => 'StateMachines', 'type' => 'parallel', 'states' => $regions];
+    }
+
     public static function id(CompiledMachine $machine): string
     {
         return class_basename($machine->class);
@@ -103,7 +120,7 @@ final class XStateConfig
             $guards = $transition->guardNames();
 
             if ($guards !== []) {
-                $event['guard'] = count($guards) === 1 ? $guards[0] : ['type' => 'and', 'params' => ['guards' => $guards]];
+                $event['guard'] = implode(' and ', $guards);
             }
 
             if ($transition->trigger !== null) {

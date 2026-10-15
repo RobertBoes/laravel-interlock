@@ -145,4 +145,4 @@ it('has sound state machines', function () {
 
 ### Exporting
 
-`php artisan interlock:signalbox` exports every machine as Mermaid. Use `--format=xstate` or `--format=xstate-ts --output=resources/js/machines.ts` for the frontend, or pass a machine class to export one.
+`php artisan interlock:signalbox` exports every machine as Mermaid. Use `--format=xstate` or `--format=xstate-ts --output=resources/js/machines.ts` for the frontend, or pass a machine class to export one. To show the machines to the user, use `--viz`, which prints XState JSON to paste into https://sketch.stately.ai.

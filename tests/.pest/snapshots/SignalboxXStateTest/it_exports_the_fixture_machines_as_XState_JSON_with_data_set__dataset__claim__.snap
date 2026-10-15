@@ -13,15 +13,7 @@
             "on": {
                 "settle": {
                     "target": "2",
-                    "guard": {
-                        "type": "and",
-                        "params": {
-                            "guards": [
-                                "has_assessment",
-                                "within_policy_limit"
-                            ]
-                        }
-                    }
+                    "guard": "has_assessment and within_policy_limit"
                 }
             }
         },

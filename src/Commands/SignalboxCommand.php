@@ -18,15 +18,17 @@ final class SignalboxCommand extends Command
 {
     protected $signature = 'interlock:signalbox
         {machine? : The state machine class to export; every registered machine when none is given}
-        {--format=mermaid : The format to export in: mermaid, xstate (JSON) or xstate-ts (TypeScript)}
+        {--format= : The format to export in: mermaid (the default), xstate (JSON) or xstate-ts (TypeScript)}
+        {--viz : Export as XState JSON to paste into https://sketch.stately.ai, every machine side by side unless one is given}
         {--output= : The file to write the export to, instead of stdout}';
 
     protected $description = 'Export the state machines as Mermaid diagrams or XState machine configs, one machine or every registered machine';
 
     public function handle(ModelRegistry $registry, GraphRepository $graphs): int
     {
+        $viz = (bool) $this->option('viz');
         /** @var string $formatOption */
-        $formatOption = $this->option('format');
+        $formatOption = $this->option('format') ?? ($viz ? ExportFormat::XState->value : ExportFormat::Mermaid->value);
         /** @var string|null $machineClass */
         $machineClass = $this->argument('machine');
         /** @var string|null $path */
@@ -44,6 +46,12 @@ final class SignalboxCommand extends Command
             return self::FAILURE;
         }
 
+        if ($viz && $format !== ExportFormat::XState) {
+            $this->components->error(sprintf('--viz exports XState for Stately Sketch, not [%s]. Leave out --format, or use --format=xstate.', $format->value));
+
+            return self::FAILURE;
+        }
+
         $machineClass = $machineClass === null ? null : ltrim($machineClass, '\\');
         $machines = $this->machines($registry, $graphs, $machineClass);
 
@@ -56,28 +64,40 @@ final class SignalboxCommand extends Command
             return self::FAILURE;
         }
 
+        if ($viz && $machines === []) {
+            $this->components->error('No registered model uses a state machine. Discovery scans the paths in interlock.discovery.paths for models with #[UseStateMachine]; register models outside them in interlock.models.');
+
+            return self::FAILURE;
+        }
+
         $sharedIds = $machineClass === null && $format !== ExportFormat::Mermaid ? $this->machinesSharingAnId($machines) : new Collection();
 
         if ($sharedIds->isNotEmpty()) {
             $this->components->error(sprintf(
-                'Interlock cannot export every machine as XState: machine IDs are class names without their namespace, and %s share one. Rename one of the machines, or export them one at a time.',
+                'Interlock cannot export every machine together: machine IDs are class names without their namespace, and %s share one. Rename one of the machines, or export them one at a time.',
                 $sharedIds->map(fn(Collection $machineClasses) => $machineClasses->implode(' and '))->implode('; '),
             ));
 
             return self::FAILURE;
         }
 
-        $export = $machineClass === null ? $this->exportAll($format, $machines) : $this->export($format, ...reset($machines));
+        $export = match (true) {
+            $viz => XStateConfig::json(count($machines) === 1 ? XStateConfig::of(...reset($machines)) : XStateConfig::sideBySide($machines)),
+            $machineClass === null => $this->exportAll($format, $machines),
+            default => $this->export($format, ...reset($machines)),
+        };
 
         if ($path === null) {
             $this->output->write($export);
+        } else {
+            file_put_contents($path, $export);
 
-            return self::SUCCESS;
+            $this->components->info(sprintf('Exported to [%s].', $path));
         }
 
-        file_put_contents($path, $export);
-
-        $this->components->info(sprintf('Exported to [%s].', $path));
+        if ($viz) {
+            $this->output->getErrorStyle()->writeln('<comment>Paste it into https://sketch.stately.ai and click Update.</comment>');
+        }
 
         return self::SUCCESS;
     }

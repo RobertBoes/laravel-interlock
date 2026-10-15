@@ -124,12 +124,12 @@ it('names each guard of a transition, fluent or a guard method, without its chec
         ->not->toContain('created_at');
 });
 
-it('combines several guards of a transition into one and guard, naming each', function () {
+it('names several guards of a transition together as one guard', function () {
     config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/Exports']]);
 
     expect(json_decode(xstate(['machine' => ClaimStatusMachine::class]), true)['states']['1']['on']['settle'])->toBe([
         'target' => '2',
-        'guard' => ['type' => 'and', 'params' => ['guards' => ['has_assessment', 'within_policy_limit']]],
+        'guard' => 'has_assessment and within_policy_limit',
     ]);
 });
 
