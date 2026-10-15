@@ -20,7 +20,7 @@ use RobertBoes\Interlock\Testing\TransitionLog;
 final class Interlock
 {
     /**
-     * Register interlocked models that discovery does not scan, such as models from packages or modules. Call it from a service provider's boot method.
+     * For models discovery does not scan, such as models from packages or modules.
      *
      * @param  class-string<Model>  ...$models
      */
@@ -30,11 +30,8 @@ final class Interlock
     }
 
     /**
-     * Allow direct writes to state attributes and guarded attributes while the callback runs, for seeders, imports and data fixes. Each bypassed write to a state attribute dispatches BypassedWrite with the reason, and to a guarded attribute BypassedGuardedAttributeWrite.
-     *
      * @template TReturn
      *
-     * @param  string  $reason  why the writes are made, such as "Import posts from the old blog"
      * @param  Closure(): TReturn  $callback
      * @return TReturn
      */
@@ -44,7 +41,7 @@ final class Interlock
     }
 
     /**
-     * Allow direct writes for the rest of the current test. Tests stay enforced unless they opt in; factories bypass without it.
+     * Lasts for the rest of the current test; factories bypass without it.
      */
     public static function bypassForTest(string $reason = 'test'): void
     {
@@ -58,7 +55,7 @@ final class Interlock
     }
 
     /**
-     * Whether a state is the given state, or nested within it: `Interlock::isWithin($order->status, OrderStatus::Preparing)`.
+     * Whether the state is the other state, or nested within it.
      */
     public static function isWithin(BackedEnum $state, BackedEnum $other): bool
     {
@@ -67,9 +64,7 @@ final class Interlock
     }
 
     /**
-     * Assert that every registered state machine is sound: no unreachable states, no states without a way out that are not final, no final states with outgoing transitions, and no definition the graph rejects, such as duplicate transition names.
-     *
-     * @param  class-string<Model>  ...$models  the models to check; every registered model when none are given
+     * @param  class-string<Model>  ...$models  every registered model when none are given
      */
     public static function assertMachinesAreSound(string ...$models): void
     {
@@ -84,9 +79,7 @@ final class Interlock
     }
 
     /**
-     * Skip the apply and after-commit steps of every transition for the rest of the current test, to test the code
-     * that applies them in isolation. Transitions still check their from-state, write their target state with the
-     * model's other changes and dispatch their events, and the transition assertions see them as usual.
+     * Skips the apply and after-commit steps for the rest of the test; transitions still write and dispatch events.
      */
     public static function fake(): void
     {
@@ -100,8 +93,7 @@ final class Interlock
     }
 
     /**
-     * Assert that the model was transitioned by the named transition in this test: the transition committed for the
-     * model's row, applied through this instance or any other.
+     * Matches transitions committed for the model's row, applied through this instance or any other.
      */
     public static function assertTransitioned(Model $model, string $transition): void
     {
@@ -116,8 +108,7 @@ final class Interlock
     }
 
     /**
-     * Assert that the model was not transitioned by the named transition in this test, or by any transition when no
-     * name is given.
+     * Without a name, asserts that no transition was applied at all.
      */
     public static function assertNotTransitioned(Model $model, ?string $transition = null): void
     {
@@ -133,8 +124,6 @@ final class Interlock
     }
 
     /**
-     * Every interlocked model in the app, with its state machines keyed by state attribute.
-     *
      * @return array<class-string<Model>, array<string, class-string<StateMachine>>>
      */
     public static function models(): array
@@ -143,8 +132,7 @@ final class Interlock
     }
 
     /**
-     * The transitions committed for the model's row in this test, oldest first. Checks first that the model has a
-     * transition by the given name, so a misspelt name fails instead of passing an assertNotTransitioned().
+     * Resolves the transition first, so a misspelt name fails instead of passing an assertNotTransitioned().
      *
      * @return list<string>
      */

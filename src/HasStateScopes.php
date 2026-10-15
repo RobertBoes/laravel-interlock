@@ -9,8 +9,6 @@ use RobertBoes\Interlock\Scopes\InState;
 use RobertBoes\Interlock\Scopes\NotInState;
 
 /**
- * Opt-in Eloquent scope methods for apps that prefer `Order::whereInState(...)` to tapping the scope classes.
- *
  * @mixin \Illuminate\Database\Eloquent\Model
  */
 trait HasStateScopes

@@ -42,28 +42,22 @@ use Throwable;
  */
 trait HasStateMachines
 {
-    /** @var array<string, StagedTransition> keyed by state attribute, written by the next save */
+    /** @var array<string, StagedTransition> */
     private array $interlockStagedTransitions = [];
 
-    /** @var array<string, StagedTransition> keyed by state attribute, being written by the current save */
+    /** @var array<string, StagedTransition> */
     private array $interlockRunningTransitions = [];
 
-    /** Whether the compare-and-swap update of the running transitions ran, so a nested save writes as usual */
     private bool $interlockRunningTransitionsWritten = false;
 
-    /** @var list<BypassedWrite|BypassedGuardedAttributeWrite> dispatched once the save that writes them finishes */
+    /** @var list<BypassedWrite|BypassedGuardedAttributeWrite> */
     private array $interlockBypassedWrites = [];
 
-    /** @var array<class-string<Model>, true> the models whose builder was found to use RejectsDirectWrites */
+    /** @var array<class-string<Model>, true> */
     private static array $interlockCheckedBuilders = [];
 
     /**
-     * Apply a transition by name, `transition('publish')`, or as an instance of its class, `transition(new Ship($trackingCode))`.
-     *
-     * The actor is the authenticated user, unless one is given: `transition('approve', $manager)`. Pass null to apply
-     * it on behalf of no one; authorisation still decides. Transitions staged on the model's other machines are written
-     * with it.
-     * When a saving or updating listener cancels the save, nothing is written and it throws.
+     * The actor defaults to the authenticated user; pass null to apply it on behalf of no one.
      */
     public function transition(string|Transition $transition, ?Authenticatable $actor = null): static
     {
@@ -74,13 +68,7 @@ trait HasStateMachines
     }
 
     /**
-     * Stage a transition for the next save() to write, so transitions on several machines and the model's other
-     * changes go out in one update: `$order->stageTransition('ship')->stageTransition('capture_payment')->save()`.
-     *
-     * Only the graph is checked now, and the state attribute reads the target state straight away. Authorisation,
-     * guards, the apply step and the compare-and-swap write all happen on save(), against the data as it will be
-     * stored. A machine holds one staged transition at a time. A failing save writes nothing and drops every staged
-     * transition, as do discardStagedTransitions() and refresh(). The actor defaults to the authenticated user.
+     * Only the graph is checked now; authorisation, guards and the write run on the next save().
      */
     public function stageTransition(string|Transition $transition, ?Authenticatable $actor = null): static
     {
@@ -90,8 +78,7 @@ trait HasStateMachines
     }
 
     /**
-     * @internal Applies the transition as its trigger does: without an actor and without checking its authorisation,
-     * though its guards still run, recorded under the trigger's name.
+     * @internal Applies it without an actor or an authorisation check; its guards still run.
      */
     public function interlockApplyTrigger(string $transition): void
     {
@@ -130,8 +117,7 @@ trait HasStateMachines
     }
 
     /**
-     * The transition's steps, or none while transitions are faked. They are built while faked too, so a transition
-     * that cannot be built from its name still throws.
+     * Built even while faked, so a transition that cannot be built from its name still throws.
      */
     private function interlockStepsToRun(CompiledTransition $compiled, string|Transition $transition): TransitionSteps
     {
@@ -145,7 +131,7 @@ trait HasStateMachines
     }
 
     /**
-     * Drop the staged transitions without saving, putting each state attribute back to the state it was staged from.
+     * Puts each state attribute back to the state it was staged from.
      */
     public function discardStagedTransitions(): static
     {
@@ -156,8 +142,6 @@ trait HasStateMachines
     }
 
     /**
-     * Writes the staged transitions, if any, together with the model's other changes.
-     *
      * @param  array<string, mixed>  $options
      */
     public function save(array $options = []): bool
@@ -190,9 +174,7 @@ trait HasStateMachines
     }
 
     /**
-     * Runs each committed transition's after-commit step and dispatches its Transitioned event. One that throws, or
-     * whose listener throws, keeps neither its own event nor the later transitions from running: the transitions have
-     * committed, so each one finishes, and the first failure is rethrown once they all have.
+     * The transitions have committed, so each one finishes even when another throws; the first failure is rethrown.
      *
      * @param  array<string, StagedTransition>  $stagedTransitions
      */
@@ -232,8 +214,6 @@ trait HasStateMachines
     }
 
     /**
-     * Reloads the model's attributes from the database and drops its staged transitions.
-     *
      * @return $this
      */
     public function refresh(): static
@@ -246,13 +226,7 @@ trait HasStateMachines
     }
 
     /**
-     * The transitions the actor can apply to the model right now, across all its machines: those starting from its
-     * current state whose authorisation allows the actor and whose guards hold, unsaved changes included. A transition
-     * that takes input is offered on its authorisation alone; its guards run once it is applied with its input.
-     * Nothing is written and no events are dispatched.
-     *
-     * The actor is the authenticated user, unless one is given; pass null to ask on behalf of no one. Each transition
-     * serialises as its name and target state, ready for an API resource or Inertia props.
+     * Pass null to ask on behalf of no one. A transition that takes input is offered on its authorisation alone.
      *
      * @return Collection<int, AvailableTransition>
      */
@@ -267,9 +241,8 @@ trait HasStateMachines
     }
 
     /**
-     * The copy starts its lifecycle over: its state attributes are left out of the copy and its guarded attributes
-     * cleared, so a replicating listener may set them, and each state attribute it leaves unset starts in its
-     * machine's initial state, or stays null when the machine has several.
+     * The copy starts its lifecycle over in an initial state with guarded attributes cleared, unless a replicating
+     * listener sets them.
      *
      * @param  list<string>|null  $except
      */
@@ -294,9 +267,7 @@ trait HasStateMachines
     }
 
     /**
-     * The model's history: every transition and bypassed write on its machines that record history, or on one of them
-     * when a state attribute is given. Unordered; entries recorded in the same second share a timestamp, so order a
-     * timeline by key: `$order->history('status')->oldest('id')->get()`.
+     * Unordered; entries recorded in the same second share a timestamp, so order a timeline by key.
      *
      * @return MorphMany<HistoryEntry, $this>
      */
@@ -308,11 +279,6 @@ trait HasStateMachines
     }
 
     /**
-     * Authorises every actor, except for a transition its trigger applies, then checks each transition's
-     * guards and runs its apply step, and saves them all through one compare-and-swap update and records their history,
-     * in one transaction that rolls back when a guard fails or the save fails or is cancelled. Guards and authorisation
-     * see the state each transition starts from, plus the changes of the transitions staged before it.
-     *
      * @param  array<string, StagedTransition>  $stagedTransitions
      * @param  array<string, mixed>  $options
      */
@@ -363,9 +329,6 @@ trait HasStateMachines
         return true;
     }
 
-    /**
-     * Checks the transition's guards, moves its state attribute to the target state and runs its apply step.
-     */
     private function interlockApplyTransition(StagedTransition $staged): AppliedTransition
     {
         $compiled = $staged->compiled;
@@ -383,8 +346,6 @@ trait HasStateMachines
     }
 
     /**
-     * The transition's own writes: its state attribute and the attributes its apply step set, keyed by themselves.
-     *
      * @param  array<string, mixed>  $attributesBeforeApply
      * @return array<string, string>
      */
@@ -401,8 +362,7 @@ trait HasStateMachines
     }
 
     /**
-     * Puts the model back as it was before a failed save, without the transitions it tried to write. The save may
-     * have synced the original attributes before it failed, while the database rolled back, so they are put back too.
+     * The failed save may have synced the original attributes while the database rolled back, so they are restored too.
      *
      * @param  array<string, StagedTransition>  $stagedTransitions
      */
@@ -417,8 +377,6 @@ trait HasStateMachines
     }
 
     /**
-     * Puts each state attribute back to the state its transition was staged from.
-     *
      * @param  array<string, StagedTransition>  $stagedTransitions
      */
     private function interlockRevertToFromStates(array $stagedTransitions): void
@@ -450,9 +408,8 @@ trait HasStateMachines
     }
 
     /**
-     * Running transitions are saved through a compare-and-swap query. Once it ran, a save nested
-     * in the transition, from an observer or an apply step, writes through the plain query: the row is in the target
-     * state already, and the transaction holds it.
+     * Once the compare-and-swap update ran, a nested save from an observer or apply step writes through the plain
+     * query: the row is in the target state already, and the transaction holds it.
      *
      * @param  Builder<static>  $query
      */
@@ -478,10 +435,8 @@ trait HasStateMachines
     }
 
     /**
-     * Records the history of the write's bypassed writes, in one transaction with the write: one entry for each machine
-     * whose state attribute, or one of whose guarded attributes, the write bypassed. A running transition's write is
-     * in the transition's transaction already. A write that fails drops its bypassed writes, so a later save that
-     * writes nothing does not dispatch them.
+     * A running transition's write is in its transaction already. A failed write drops its bypassed writes, so a
+     * later save that writes nothing does not dispatch them.
      *
      * @param  Closure(): bool  $write
      */
@@ -527,9 +482,6 @@ trait HasStateMachines
     }
 
     /**
-     * The bypassed writes grouped by the machine they belong to: a state attribute's own, or the machines declaring a
-     * guarded attribute.
-     *
      * @return array<string, array{string, array<string, string>}> the reason and the attributes written, keyed by state attribute
      */
     private function interlockBypassedWritesByStateAttribute(): array
@@ -551,9 +503,8 @@ trait HasStateMachines
     }
 
     /**
-     * Whether the write may be a bypassed write to record: a bypass is active and one of the model's machines records
-     * history. Not what is dirty now: this is decided before the updating or creating event, whose listeners may still
-     * set a state or guarded attribute.
+     * Not decided by what is dirty: this runs before the updating or creating listeners, which may still set a state
+     * or guarded attribute.
      */
     private function interlockMayMakeABypassedWriteThatRecordsHistory(): bool
     {
@@ -572,8 +523,6 @@ trait HasStateMachines
     }
 
     /**
-     * Interlocked models get Interlock's builder unless they set a custom builder, which must use RejectsDirectWrites.
-     *
      * @param  QueryBuilder  $query
      * @return Builder<*>
      */
@@ -585,9 +534,8 @@ trait HasStateMachines
     }
 
     /**
-     * Every query the model builds starts here, so a custom builder that lacks RejectsDirectWrites fails as soon as one
-     * is built, every time, before it can make a mass write. Checked here rather than in newEloquentBuilder(),
-     * which a model may override, and not on instantiation, so making a model needs no database connection.
+     * Checked here rather than in newEloquentBuilder(), which a model may override, and not on instantiation, so
+     * making a model needs no database connection.
      *
      * @return Builder<static>
      */

@@ -18,11 +18,6 @@ use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Graph\ModelGraph;
 
 /**
- * Rejects mass writes to state attributes and guarded attributes through the Eloquent builder of an interlocked model,
- * unless a bypass is active. Add it to the custom builder of an interlocked model; InterlockBuilder uses it.
- *
- * Inserted rows are treated as creating a model: a row may start in an initial state and leave guarded attributes null.
- *
  * @mixin Builder<Model>
  */
 trait RejectsDirectWrites
@@ -145,8 +140,7 @@ trait RejectsDirectWrites
     }
 
     /**
-     * The values a subquery inserts are not known up front, so a state attribute or guarded attribute among the
-     * columns is a direct write, whatever the subquery selects.
+     * A subquery's values are not known up front, so any state or guarded attribute among the columns is a direct write.
      *
      * @param  list<string>  $columns
      * @param  mixed  $query
@@ -177,9 +171,6 @@ trait RejectsDirectWrites
     }
 
     /**
-     * Inserts the row when no row matches the attributes, as creating a model does, and otherwise updates the first
-     * row that matches with the values; checked as that insert or that update.
-     *
      * @param  array<string, mixed>  $attributes
      * @param  array<string, mixed>|(Closure(bool): array<string, mixed>)  $values
      * @return bool
@@ -208,7 +199,7 @@ trait RejectsDirectWrites
      *
      * @param  Closure(): TResult  $write
      * @param  list<mixed>  $updated  the columns the write sets, whatever their values
-     * @param  list<array<mixed>>  $inserted  the rows the write inserts
+     * @param  list<array<mixed>>  $inserted
      * @return TResult
      */
     private function interlockWrite(string $method, Closure $write, array $updated = [], array $inserted = []): mixed
@@ -240,7 +231,7 @@ trait RejectsDirectWrites
     }
 
     /**
-     * The attributes the rows write as no model could be created: a state other than an initial state, or a guarded attribute that is set.
+     * An inserted row counts as creating a model: it may start in an initial state and leave guarded attributes null.
      *
      * @param  list<array<mixed>>  $rows
      * @return list<string>
@@ -280,9 +271,6 @@ trait RejectsDirectWrites
         );
     }
 
-    /**
-     * Whether the value is the state, as a case or as its stored value.
-     */
     private static function interlockIsState(mixed $value, BackedEnum $state): bool
     {
         if ($value instanceof BackedEnum) {
@@ -308,7 +296,6 @@ trait RejectsDirectWrites
     }
 
     /**
-     * The attribute a column of a write refers to, such as [status] for "orders.status" or [meta] for "meta->colour".
      * The table is ignored: SQLite writes a column of a joined table to the model's own table.
      */
     private static function interlockAttributeOf(string $column): string

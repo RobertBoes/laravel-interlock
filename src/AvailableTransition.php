@@ -7,10 +7,6 @@ use Illuminate\Contracts\Support\Arrayable;
 use JsonSerializable;
 
 /**
- * A transition the actor can apply to the model right now, as returned by `$model->availableTransitions($actor)`.
- * It serialises as its name, the state attribute of its machine and the value of its target state, ready for an API
- * resource or Inertia props.
- *
  * @implements Arrayable<string, int|string>
  */
 final readonly class AvailableTransition implements Arrayable, JsonSerializable
