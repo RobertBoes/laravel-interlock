@@ -762,4 +762,4 @@ Faked transitions skip their guards and authorisation too. They still check thei
 
 ## License
 
-The MIT License (MIT).
+The MIT License (MIT). See [LICENSE.md](LICENSE.md).
