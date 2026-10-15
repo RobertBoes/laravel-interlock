@@ -11,7 +11,7 @@ use RobertBoes\Interlock\Exceptions\StaleStateException;
 /**
  * The query running transitions are saved through. Its update only matches the row while the
  * stored state of every transitioned state attribute is still the state the transition started
- * from (ADR 0004), and throws stale state otherwise, before Eloquent marks the model as saved.
+ * from, and throws stale state otherwise, before Eloquent marks the model as saved.
  *
  * @template TModel of Model
  *

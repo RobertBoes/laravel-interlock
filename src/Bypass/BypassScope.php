@@ -63,7 +63,7 @@ final class BypassScope
     }
 
     /**
-     * Factories have no global hook, so they are recognised by a Factory frame in the call stack (ADR 0007).
+     * Factories have no global hook, so they are recognised by a Factory frame in the call stack.
      */
     private function calledFromAFactory(): bool
     {

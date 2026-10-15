@@ -15,9 +15,7 @@ use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\Graph\ModelGraph;
 
 /**
- * The direct writes a model's own save makes to its state attributes and guarded attributes (ADR 0001), checked right
- * before the save writes, whether or not model events are muted (ADR 0010). Each one is rejected, unless a bypass is
- * active and it is kept as a bypassed write.
+ * Checks the direct writes a model's own save makes, right before it writes, so muted model events can't skip it.
  */
 final readonly class DirectWriteCheck
 {

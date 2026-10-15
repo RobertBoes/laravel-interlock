@@ -19,7 +19,7 @@ use RobertBoes\Interlock\Graph\ModelGraph;
 
 /**
  * Rejects mass writes to state attributes and guarded attributes through the Eloquent builder of an interlocked model,
- * unless a bypass is active (ADR 0009). Add it to the custom builder of an interlocked model; InterlockBuilder uses it.
+ * unless a bypass is active. Add it to the custom builder of an interlocked model; InterlockBuilder uses it.
  *
  * Inserted rows are treated as creating a model: a row may start in an initial state and leave guarded attributes null.
  *

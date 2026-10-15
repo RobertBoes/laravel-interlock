@@ -9,7 +9,7 @@ use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Support\PhpAttribute;
 
 /**
- * How the states of one enum nest, read from the #[ParentState] attributes on its cases (ADR 0006).
+ * How the states of one enum nest, read from the #[ParentState] attributes on its cases.
  */
 final readonly class StateTree
 {

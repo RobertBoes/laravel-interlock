@@ -91,7 +91,7 @@ trait HasStateMachines
 
     /**
      * @internal Applies the transition as its trigger does: without an actor and without checking its authorisation,
-     * though its guards still run (ADR 0011), recorded under the trigger's name.
+     * though its guards still run, recorded under the trigger's name.
      */
     public function interlockApplyTrigger(string $transition): void
     {
@@ -308,7 +308,7 @@ trait HasStateMachines
     }
 
     /**
-     * Authorises every actor, except for a transition its trigger applies (ADR 0011), then checks each transition's
+     * Authorises every actor, except for a transition its trigger applies, then checks each transition's
      * guards and runs its apply step, and saves them all through one compare-and-swap update and records their history,
      * in one transaction that rolls back when a guard fails or the save fails or is cancelled. Guards and authorisation
      * see the state each transition starts from, plus the changes of the transitions staged before it.
@@ -450,7 +450,7 @@ trait HasStateMachines
     }
 
     /**
-     * Running transitions are saved through a compare-and-swap query (ADR 0004, ADR 0010). Once it ran, a save nested
+     * Running transitions are saved through a compare-and-swap query. Once it ran, a save nested
      * in the transition, from an observer or an apply step, writes through the plain query: the row is in the target
      * state already, and the transaction holds it.
      *
@@ -572,7 +572,7 @@ trait HasStateMachines
     }
 
     /**
-     * Interlocked models get Interlock's builder unless they set a custom builder, which must use RejectsDirectWrites (ADR 0009).
+     * Interlocked models get Interlock's builder unless they set a custom builder, which must use RejectsDirectWrites.
      *
      * @param  QueryBuilder  $query
      * @return Builder<*>
@@ -586,7 +586,7 @@ trait HasStateMachines
 
     /**
      * Every query the model builds starts here, so a custom builder that lacks RejectsDirectWrites fails as soon as one
-     * is built, every time, before it can make a mass write (ADR 0009). Checked here rather than in newEloquentBuilder(),
+     * is built, every time, before it can make a mass write. Checked here rather than in newEloquentBuilder(),
      * which a model may override, and not on instantiation, so making a model needs no database connection.
      *
      * @return Builder<static>
@@ -628,7 +628,7 @@ trait HasStateMachines
     }
 
     /**
-     * Called by performUpdate() after the updating event, whether or not model events are muted (ADR 0010).
+     * Called by performUpdate() after the updating event, whether or not model events are muted.
      *
      * @return array<string, mixed>
      */
@@ -641,7 +641,7 @@ trait HasStateMachines
     }
 
     /**
-     * Called by performInsert() after the creating event, whether or not model events are muted (ADR 0010).
+     * Called by performInsert() after the creating event, whether or not model events are muted.
      *
      * @return array<string, mixed>
      */

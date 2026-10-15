@@ -91,8 +91,7 @@ trait AppliesTrigger
     /**
      * A model that changed since it was loaded, or whose guard fails, is an expected outcome and is skipped quietly. Any
      * other failure is reported. Either way the run carries on, and the model is picked up again on a later run while
-     * it still matches, so there are no retries (ADR 0005). Authorisation is not checked, so it never denies a trigger
-     * (ADR 0011).
+     * it still matches, so there are no retries. Authorisation is not checked, so it never denies a trigger.
      *
      * A lost database connection is rethrown instead, failing the job: every other candidate would fail the same way,
      * and the outage would be reported once per model while the run counted as a success.
