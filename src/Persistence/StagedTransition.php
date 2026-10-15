@@ -8,9 +8,7 @@ use RobertBoes\Interlock\Graph\CompiledTransition;
 use RobertBoes\Interlock\Graph\TransitionSteps;
 
 /**
- * A transition recorded on a model instance for its next save to write: the from-state it was staged from, the steps
- * to run, the actor to authorise and, when a trigger applies it, the trigger's name, in which case the transition has
- * no actor and is not authorised.
+ * When a trigger applies the transition, it has no actor and is not authorised.
  */
 final readonly class StagedTransition
 {

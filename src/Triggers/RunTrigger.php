@@ -15,36 +15,28 @@ use Illuminate\Database\Eloquent\Model;
 use RobertBoes\Interlock\Graph\GraphRepository;
 
 /**
- * Applies one trigger's transition to the models that match its condition, at most `interlock.triggers.max_per_run`
- * of them per run, and stops before its timeout. Unique per trigger, so a slow run and the next one never process the
- * same trigger at once, and never retried: what fails still matches on a later run. A trigger that fans out dispatches one job per chunk instead,
- * and does nothing while the chunk jobs of its last run are still pending.
+ * Unique per trigger, so a slow run and the next never overlap. Never retried: what fails still matches on a later run.
  */
 final class RunTrigger implements ShouldQueue, ShouldBeUnique
 {
     use AppliesTrigger;
     use Queueable;
 
-    /** The fewest seconds a fanned-out run waits for chunk jobs that never finish before the next run dispatches again. */
     private const int MIN_PENDING_CHUNK_SECONDS = 300;
 
     public int $tries = 1;
 
     /**
-     * Seconds the job may run, from `interlock.triggers.timeout`. It must stay below the queue connection's
-     * `retry_after`, or the queue hands a slow job to a second worker while the first is still running it. The job
-     * stops itself before then, and is failed rather than run again should it not.
+     * Must stay below the queue connection's `retry_after`, or a slow job is handed to a second worker while it runs.
      */
     public int $timeout = 60;
 
     public bool $failOnTimeout = true;
 
-    /** Seconds after which the lock lapses, should a worker die without releasing it. */
     public int $uniqueFor = 3600;
 
     /**
      * @param  class-string<Model>  $model
-     * @param  string  $trigger  the name of the trigger, which is the name of the transition it applies
      */
     public function __construct(
         public readonly string $model,
@@ -92,7 +84,6 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
 
     /**
      * @param  Builder<Model>  $candidates
-     * @return bool whether it got to every matching model, rather than stopping at the cap or the deadline
      */
     private function applyInChunks(Builder $candidates, int $chunkSize, int $maxPerRun, Deadline $deadline, ExceptionHandler $exceptions, Cache $cache): bool
     {
@@ -113,10 +104,7 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
     }
 
     /**
-     * Only the keys are loaded here; each chunk's job loads its models.
-     *
      * @param  Builder<Model>  $candidates
-     * @return bool whether it dispatched jobs for every matching model, rather than stopping at the cap or the deadline
      */
     private function fanOut(Builder $candidates, int $chunkSize, int $maxPerRun, Deadline $deadline, Dispatcher $bus, PendingChunks $pendingChunks, Cache $cache): bool
     {
@@ -128,8 +116,8 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
             return true;
         }
 
-        // Long enough for every chunk job to run out its timeout in turn on one worker, and never less than the floor,
-        // so a few short chunk jobs still wait out a queue that is backed up for a while.
+        // Long enough for every chunk job to time out in turn on one worker, with a floor so a few chunk jobs still
+        // outlast a backed-up queue.
         $seconds = max($this->timeout * $chunks->count(), self::MIN_PENDING_CHUNK_SECONDS);
         $run = $pendingChunks->start($chunks->count(), $seconds);
 
@@ -152,9 +140,7 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
     }
 
     /**
-     * The cursor follows a run, chunk by chunk, so the next run carries on after the last model it got to: a backlog
-     * drains even when its first models are skipped on every run, and so does one whose runs die before their end. A
-     * run that reached the end of the matching models clears it, so the next run starts from the first again.
+     * So a backlog drains even when its first models are skipped on every run, or its runs die before their end.
      */
     private function moveCursor(Cache $cache, mixed $lastKey): void
     {

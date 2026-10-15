@@ -12,9 +12,8 @@ use RobertBoes\Interlock\Graph\GraphRepository;
 use Throwable;
 
 /**
- * Applies a trigger's transition to one chunk of the models its run found, for a trigger that fans out. The models
- * may have changed while the job waited, so only those that still match are loaded; never retried, like the run. Those
- * it has no time left for are picked up by a later run, as they still match.
+ * The models may have changed while the job waited, so only those that still match are loaded. Never retried: those
+ * left over still match on a later run.
  */
 final class RunTriggerChunk implements ShouldQueue
 {
@@ -24,9 +23,7 @@ final class RunTriggerChunk implements ShouldQueue
     public int $tries = 1;
 
     /**
-     * Seconds the job may run, from `interlock.triggers.timeout`. It must stay below the queue connection's
-     * `retry_after`, or the queue hands a slow job to a second worker while the first is still running it. The job
-     * stops itself before then, and is failed rather than run again should it not.
+     * Must stay below the queue connection's `retry_after`, or a slow job is handed to a second worker while it runs.
      */
     public int $timeout = 60;
 
@@ -34,10 +31,7 @@ final class RunTriggerChunk implements ShouldQueue
 
     /**
      * @param  class-string<Model>  $model
-     * @param  string  $trigger  the name of the trigger, which is the name of the transition it applies
-     * @param  array<int, mixed>  $keys  the keys of the models in the chunk
-     * @param  string  $run  the ID of the run that dispatched the job
-     * @param  int  $chunk  which of the run's chunks it is, from 0
+     * @param  array<int, mixed>  $keys
      */
     public function __construct(
         public readonly string $model,
@@ -69,8 +63,7 @@ final class RunTriggerChunk implements ShouldQueue
     }
 
     /**
-     * Called by the queue however the job ended, including when a worker was killed or the job timed out, which skips
-     * the finally block above. Finishing twice is harmless.
+     * Also runs when a killed worker or a timeout skipped the finally block above. Finishing twice is harmless.
      */
     public function failed(?Throwable $exception = null): void
     {

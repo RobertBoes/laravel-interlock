@@ -19,8 +19,6 @@ use RobertBoes\Interlock\Scopes\InFromStateOf;
 use Throwable;
 
 /**
- * What a trigger's jobs share: finding the models that match the trigger, and applying its transition to one of them.
- *
  * @property-read class-string<Model> $model
  * @property-read string $trigger
  * @property int $timeout
@@ -29,10 +27,6 @@ trait AppliesTrigger
 {
     use DetectsLostConnections;
 
-    /**
-     * Puts the job on the connection and queue `interlock.triggers` names, or the app's defaults when it names none,
-     * with the timeout it sets.
-     */
     private function queueAsConfigured(): void
     {
         $config = Container::getInstance()->make('config');
@@ -43,8 +37,7 @@ trait AppliesTrigger
     }
 
     /**
-     * The transition the job applies, or null when it no longer exists: a job queued before a deploy may name a
-     * transition that was renamed or removed since, which, like a trigger that was removed, leaves nothing to do.
+     * Null when the transition no longer exists: a job queued before a deploy may name one renamed or removed since.
      */
     private function transition(GraphRepository $graphs): ?CompiledTransition
     {
@@ -67,10 +60,7 @@ trait AppliesTrigger
     }
 
     /**
-     * Applies the transition to the candidates in order, until the deadline passes.
-     *
      * @param  Collection<int, Model>  $candidates
-     * @return int how many it got to, from the first
      */
     private function applyUntil(Deadline $deadline, Collection $candidates, ExceptionHandler $exceptions): int
     {
@@ -89,17 +79,15 @@ trait AppliesTrigger
     }
 
     /**
-     * A model that changed since it was loaded, or whose guard fails, is an expected outcome and is skipped quietly. Any
-     * other failure is reported. Either way the run carries on, and the model is picked up again on a later run while
-     * it still matches, so there are no retries. Authorisation is not checked, so it never denies a trigger.
+     * No retries: a model that still matches is picked up again on a later run. Authorisation is not checked, so it
+     * never denies a trigger.
      *
-     * A lost database connection is rethrown instead, failing the job: every other candidate would fail the same way,
-     * and the outage would be reported once per model while the run counted as a success.
+     * A lost connection is rethrown to fail the job: every other candidate would fail too, reported once per model in a
+     * run that counted as a success.
      */
     private function apply(Model $candidate, ExceptionHandler $exceptions): void
     {
-        // The registry rejects a model without HasStateMachines, but a job queued before a deploy may name a model that
-        // has dropped the trait since.
+        // A job queued before a deploy may name a model that has dropped HasStateMachines since.
         if (! method_exists($candidate, 'interlockApplyTrigger')) {
             throw InvalidDefinitionException::modelWithoutHasStateMachines($candidate::class);
         }

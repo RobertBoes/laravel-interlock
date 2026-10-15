@@ -15,11 +15,9 @@ final readonly class CompiledTransition
 {
     /**
      * @param  list<BackedEnum>  $fromStates  as declared, parent states included
-     * @param  list<BackedEnum>  $leafFromStates  the from-states with each parent state expanded to the leaf states within it
-     * @param  class-string<Transition>|null  $class  the transition class, or null for a fluent transition
-     * @param  TransitionSteps  $fluentSteps  a fluent transition's steps; a class-based transition's come from its object
-     * @param  (Closure(Builder<Model>): mixed)|null  $trigger  the condition the trigger adds to the model's query, or null when the transition has none
-     * @param  bool  $triggerFansOut  whether a run of the trigger dispatches one job per chunk instead of applying the transition itself
+     * @param  list<BackedEnum>  $leafFromStates
+     * @param  class-string<Transition>|null  $class  null for a fluent transition
+     * @param  (Closure(Builder<Model>): mixed)|null  $trigger
      */
     public function __construct(
         public string $name,
@@ -39,8 +37,7 @@ final readonly class CompiledTransition
     }
 
     /**
-     * Whether the actor can apply this transition to the model right now: the model's stored state is a from-state, the
-     * actor is authorised and its guards hold against the model, unsaved changes included.
+     * Checks the stored state, but the guards see unsaved changes.
      */
     public function isAvailable(Model $model, ?Authenticatable $actor): bool
     {
@@ -54,8 +51,6 @@ final readonly class CompiledTransition
     }
 
     /**
-     * The names of the transition's guards, read without building a transition class, so without its input.
-     *
      * @return list<string>
      */
     public function guardNames(): array
@@ -68,9 +63,7 @@ final readonly class CompiledTransition
     }
 
     /**
-     * The steps that can be checked before the transition's input is known. A transition class that takes input is
-     * built without its constructor, so only its authorisation is checked; its guards may read the input, and run
-     * once it is applied with it.
+     * Guards may read the input, so a transition class that takes input is only checked for authorisation.
      */
     private function stepsWithoutInput(): TransitionSteps
     {
@@ -83,10 +76,6 @@ final readonly class CompiledTransition
             : TransitionSteps::of(new $this->class());
     }
 
-    /**
-     * The steps to run: those of the given transition object, or, when the transition is applied by name, of a
-     * transition object built without input, or the fluent transition's closures.
-     */
     public function steps(?Transition $transition): TransitionSteps
     {
         if ($transition !== null) {
@@ -101,8 +90,7 @@ final readonly class CompiledTransition
     }
 
     /**
-     * Whether the transition class's constructor has required parameters. Those are its input, never built for it:
-     * the container would build a model it takes as an empty one.
+     * Required constructor parameters are input, never resolved from the container: it would build a model as an empty one.
      *
      * @param  class-string<Transition>  $class
      */

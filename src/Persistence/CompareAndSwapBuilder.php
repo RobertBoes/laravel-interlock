@@ -9,9 +9,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use RobertBoes\Interlock\Exceptions\StaleStateException;
 
 /**
- * The query running transitions are saved through. Its update only matches the row while the
- * stored state of every transitioned state attribute is still the state the transition started
- * from, and throws stale state otherwise, before Eloquent marks the model as saved.
+ * Throws stale state from the update itself, before Eloquent marks the model as saved.
  *
  * @template TModel of Model
  *
@@ -21,7 +19,7 @@ final class CompareAndSwapBuilder extends Builder
 {
     /**
      * @param  non-empty-array<string, StagedTransition>  $stagedTransitions  keyed by state attribute
-     * @param  Closure(): void  $written  called once the update wrote the target states
+     * @param  Closure(): void  $written
      */
     private function __construct(QueryBuilder $query, private readonly array $stagedTransitions, private readonly Closure $written)
     {
@@ -33,7 +31,7 @@ final class CompareAndSwapBuilder extends Builder
      *
      * @param  Builder<TSavedModel>  $saveQuery
      * @param  non-empty-array<string, StagedTransition>  $stagedTransitions  keyed by state attribute
-     * @param  Closure(): void  $written  called once the update wrote the target states, before Eloquent's updated event
+     * @param  Closure(): void  $written  runs before Eloquent's updated event
      * @return self<TSavedModel>
      */
     public static function replacing(Builder $saveQuery, array $stagedTransitions, Closure $written): self
@@ -64,12 +62,10 @@ final class CompareAndSwapBuilder extends Builder
     }
 
     /**
-     * Zero affected rows means the update matched no row, unless every transition is a self-transition: MySQL reports
-     * changed rather than matched rows, so an update that writes the values already stored also affects none. Only then
-     * does the stored row decide whether the state is stale; otherwise it only tells why.
+     * MySQL reports changed rather than matched rows, so a self-transition can affect zero rows without being stale.
      *
-     * The read locks the row: inside a transaction under MySQL's REPEATABLE READ, a plain read returns the snapshot the
-     * transaction took at its first read, while the update matched against the latest committed row.
+     * The read locks the row: under MySQL's REPEATABLE READ a plain read returns the transaction's first snapshot, while
+     * the update matched against the latest committed row.
      *
      * @param  Builder<TModel>  $storedStateQuery
      */

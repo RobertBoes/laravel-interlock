@@ -12,8 +12,6 @@ use ReflectionFunctionAbstract;
 final class PhpAttribute
 {
     /**
-     * The first attribute of the class declared on the reflected class, method or constant, or null when it has none.
-     *
      * @template TAttribute of object
      *
      * @param  ReflectionClass<*>|ReflectionClassConstant|ReflectionFunctionAbstract  $reflector

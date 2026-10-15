@@ -4,9 +4,6 @@ namespace RobertBoes\Interlock\Graph;
 
 use Closure;
 
-/**
- * One guard of a transition: a named check on the model, and the message a failure carries.
- */
 final readonly class CompiledGuard
 {
     /**

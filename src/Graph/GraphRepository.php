@@ -21,9 +21,6 @@ use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Support\PhpAttribute;
 use RobertBoes\Interlock\Transition;
 
-/**
- * Compiles each interlocked model's machines into one immutable graph, once per model class, and each state enum's nesting once per enum.
- */
 final class GraphRepository
 {
     /** @var array<class-string<Model>, ModelGraph> */
@@ -120,8 +117,8 @@ final class GraphRepository
     }
 
     /**
-     * @param  list<CompiledTransition>  $transitions  the machine's own transitions
-     * @return array<string, list<string>> the names of the transitions that may write each guarded attribute
+     * @param  list<CompiledTransition>  $transitions
+     * @return array<string, list<string>>
      */
     private function compileGuardedAttributes(CompiledMachine $machine, array $transitions): array
     {
@@ -186,8 +183,6 @@ final class GraphRepository
     }
 
     /**
-     * Reads the from-states and target state from the class's attributes, so the class is never instantiated.
-     *
      * @param  class-string<Transition>  $class
      */
     private function compileTransitionClass(Model $model, CompiledMachine $machine, string $class): CompiledTransition
@@ -225,8 +220,8 @@ final class GraphRepository
     }
 
     /**
-     * A transition class declares its trigger as a static trigger() method, so the condition is known without building
-     * the class. A trigger applies the transition by name, so the class may not take input.
+     * Static, so the condition is known without building the class. A trigger applies the transition by name, so the
+     * class may not take input.
      *
      * @param  ReflectionClass<Transition>  $class
      * @return (Closure(Builder<Model>): mixed)|null
@@ -306,8 +301,6 @@ final class GraphRepository
     }
 
     /**
-     * The first of the states that is not a case of the enum, or of any enum when the state attribute is not cast.
-     *
      * @param  list<BackedEnum>  $states
      */
     private static function stateNotOf(?string $enum, array $states): ?BackedEnum

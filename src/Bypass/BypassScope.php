@@ -7,13 +7,13 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use RobertBoes\Interlock\Exceptions\InvalidBypassException;
 
 /**
- * The bypasses active in this app instance. Bound as a singleton, so a fresh app instance (the next test, another Octane worker) starts without any.
+ * Bound as a singleton, so a fresh app instance (the next test, another Octane worker) starts without bypasses.
  */
 final class BypassScope
 {
     public const string FACTORY_REASON = 'factory';
 
-    /** @var list<string> innermost last */
+    /** @var list<string> */
     private array $reasons = [];
 
     private ?string $appWideReason = null;
@@ -41,8 +41,7 @@ final class BypassScope
     }
 
     /**
-     * Why a direct write about to be rejected is allowed after all, or null when it is not. Call it only when a write
-     * is, or may turn out to be, a direct write: it may walk the call stack.
+     * Call it only for a (possible) direct write: it may walk the call stack.
      */
     public function reason(): ?string
     {
@@ -63,7 +62,7 @@ final class BypassScope
     }
 
     /**
-     * Factories have no global hook, so they are recognised by a Factory frame in the call stack.
+     * Factories have no global hook, so they are detected from the call stack.
      */
     private function calledFromAFactory(): bool
     {

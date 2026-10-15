@@ -8,14 +8,11 @@ use RobertBoes\Interlock\Attributes\ParentState;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Support\PhpAttribute;
 
-/**
- * How the states of one enum nest, read from the #[ParentState] attributes on its cases.
- */
 final readonly class StateTree
 {
     /**
      * @param  class-string<BackedEnum>  $enum
-     * @param  array<int|string, BackedEnum>  $parents  each nested state's parent state, keyed by the nested state's value
+     * @param  array<int|string, BackedEnum>  $parents  keyed by the nested state's value
      */
     private function __construct(
         public string $enum,
@@ -74,17 +71,11 @@ final readonly class StateTree
         return in_array($state, $this->parents, true);
     }
 
-    /**
-     * The parent state the state is nested directly within, or null for a top-level state.
-     */
     public function parentOf(BackedEnum $state): ?BackedEnum
     {
         return $this->parents[$state->value] ?? null;
     }
 
-    /**
-     * Whether the state is the given state, or nested within it at any depth.
-     */
     public function isWithin(BackedEnum $state, BackedEnum $ancestor): bool
     {
         for ($current = $state; $current !== null; $current = $this->parents[$current->value] ?? null) {
@@ -97,8 +88,6 @@ final readonly class StateTree
     }
 
     /**
-     * The states nested directly within the given parent state, or the top-level states when no parent state is given.
-     *
      * @return list<BackedEnum>
      */
     public function childrenOf(?BackedEnum $parent): array
@@ -110,8 +99,6 @@ final readonly class StateTree
     }
 
     /**
-     * Every state a model can be in: each state that is not a parent state.
-     *
      * @return list<BackedEnum>
      */
     public function leaves(): array
@@ -120,8 +107,6 @@ final readonly class StateTree
     }
 
     /**
-     * The leaf states the given state stands for: itself when it is a leaf, otherwise every leaf nested within it.
-     *
      * @return list<BackedEnum>
      */
     public function leavesWithin(BackedEnum $state): array

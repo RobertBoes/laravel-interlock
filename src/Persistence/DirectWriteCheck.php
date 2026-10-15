@@ -15,19 +15,15 @@ use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\Graph\ModelGraph;
 
 /**
- * Checks the direct writes a model's own save makes, right before it writes, so muted model events can't skip it.
+ * Runs right before the save writes, not from a model event, so muted model events can't skip it.
  */
 final readonly class DirectWriteCheck
 {
     /**
-     * @param  Closure(BypassedWrite|BypassedGuardedAttributeWrite): void  $bypassed  called with each direct write a bypass lets through
+     * @param  Closure(BypassedWrite|BypassedGuardedAttributeWrite): void  $bypassed
      */
     public function __construct(private Model $model, private ModelGraph $graph, private Closure $bypassed) {}
 
-    /**
-     * Starts each state attribute left unset in its machine's initial state, and checks the model is created in an
-     * initial state and without guarded attributes.
-     */
     public function checkCreate(): void
     {
         $this->startStateAttributesInAnInitialState();
@@ -35,7 +31,7 @@ final readonly class DirectWriteCheck
     }
 
     /**
-     * @param  array<string, StagedTransition>  $runningTransitions  keyed by state attribute, being written by the save
+     * @param  array<string, StagedTransition>  $runningTransitions  keyed by state attribute
      */
     public function checkUpdate(array $runningTransitions): void
     {
@@ -98,8 +94,6 @@ final readonly class DirectWriteCheck
     }
 
     /**
-     * A guarded attribute may only change in a transition allowed to write it.
-     *
      * @param  array<string, StagedTransition>  $runningTransitions
      */
     private function rejectDirectWritesToGuardedAttributes(array $runningTransitions): void
@@ -136,10 +130,9 @@ final readonly class DirectWriteCheck
     }
 
     /**
-     * Keeps the direct write as a bypassed write, dispatched and recorded once it is saved; throws the rejection when no
-     * bypass is active.
+     * The bypassed write is dispatched and recorded only once the save succeeds.
      *
-     * @param  Closure(string): (BypassedWrite|BypassedGuardedAttributeWrite)  $bypassedWrite  builds the bypassed write from the bypass reason
+     * @param  Closure(string): (BypassedWrite|BypassedGuardedAttributeWrite)  $bypassedWrite
      */
     private function bypassOrReject(DirectWriteException $rejection, Closure $bypassedWrite): void
     {

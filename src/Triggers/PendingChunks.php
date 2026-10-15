@@ -9,20 +9,16 @@ use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * Tracks the chunk jobs of a fanned-out trigger's last run that have not finished yet. The run's own unique lock is
- * released as soon as it has dispatched them, so while any are left, the next run must not dispatch the same models
- * again.
+ * The run's unique lock is released once it has dispatched its chunk jobs, so this stops the next run from dispatching
+ * the same models while any are pending.
  *
- * Each chunk job has its own marker, scoped to its run, rather than a shared count: finishing removes the marker, so a
- * job that finishes twice (once in handle(), once in failed()) or that finishes late, after its run lapsed, cannot
- * miscount the run that comes after it. A marker is set just before its job is dispatched and removed should the
- * dispatch throw, so only jobs that were dispatched are waited for.
+ * One marker per chunk job rather than a shared count, so a job that finishes twice (handle() and failed()) or late
+ * cannot miscount the next run.
  */
 final readonly class PendingChunks
 {
     /**
      * @param  class-string<Model>  $model
-     * @param  string  $trigger  the name of the trigger
      */
     public function __construct(
         private Cache $cache,
@@ -44,10 +40,6 @@ final readonly class PendingChunks
         return array_filter($markers) !== [];
     }
 
-    /**
-     * @param  int  $seconds  after which the run lapses, should its chunk jobs never finish
-     * @return string the run's ID
-     */
     public function start(int $chunks, int $seconds): string
     {
         $run = Str::random(20);
@@ -59,7 +51,6 @@ final readonly class PendingChunks
 
     /**
      * @param  Closure(): mixed  $dispatch
-     * @param  int  $seconds  after which the chunk counts as finished, should its job never finish
      */
     public function dispatch(string $run, int $chunk, int $seconds, Closure $dispatch): void
     {

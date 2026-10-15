@@ -7,9 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Support\StateValues;
 
-/**
- * Finds the common mistakes in a model's state machines: states that cannot be reached, states with no way out, final states that can be left, and definitions the graph rejects.
- */
 final readonly class SoundnessCheck
 {
     public function __construct(private GraphRepository $graphs) {}
@@ -42,8 +39,6 @@ final readonly class SoundnessCheck
     }
 
     /**
-     * Each leaf state's problems in turn, then each final state's.
-     *
      * @param  class-string<Model>  $model
      * @param  list<CompiledTransition>  $transitions
      * @return list<string>
@@ -130,8 +125,6 @@ final readonly class SoundnessCheck
     }
 
     /**
-     * The transitions that start from the state, or from any state nested within it.
-     *
      * @param  list<CompiledTransition>  $transitions
      * @return list<CompiledTransition>
      */

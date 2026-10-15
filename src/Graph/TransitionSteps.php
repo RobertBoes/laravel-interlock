@@ -20,9 +20,6 @@ use RobertBoes\Interlock\Exceptions\UnauthorisedTransitionException;
 use RobertBoes\Interlock\Support\PhpAttribute;
 use RobertBoes\Interlock\Transition;
 
-/**
- * The steps one application of a transition runs: a fluent transition's closures, or a transition object's methods.
- */
 final readonly class TransitionSteps
 {
     /**
@@ -98,7 +95,7 @@ final readonly class TransitionSteps
     }
 
     /**
-     * @return list<CompiledGuard> the method's guard, when it is one
+     * @return list<CompiledGuard>
      */
     private static function guardsOf(ReflectionMethod $method, Transition $transition): array
     {
@@ -109,7 +106,7 @@ final readonly class TransitionSteps
     }
 
     /**
-     * @throws UnauthorisedTransitionException when the declared authorisation denies the actor
+     * @throws UnauthorisedTransitionException
      */
     public function authorise(Model $model, ?Authenticatable $actor, CompiledTransition $transition): void
     {
@@ -141,7 +138,7 @@ final readonly class TransitionSteps
     }
 
     /**
-     * @throws FailedGuardException for the first guard that does not hold
+     * @throws FailedGuardException
      */
     public function checkGuards(Model $model, CompiledTransition $transition): void
     {
