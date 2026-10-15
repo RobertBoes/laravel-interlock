@@ -13,9 +13,9 @@ class MachineWithDeadEnd extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('start')->from(TaskStatus::Todo)->to(TaskStatus::Doing),
-            $this->transition('finish')->from(TaskStatus::Doing)->to(TaskStatus::Done),
-            $this->transition('drop')->from(TaskStatus::Todo)->to(TaskStatus::Dropped),
+            $this->transition('start')->from(TaskStatus::Todo)->to(TaskStatus::Doing)->withoutAuthorization(),
+            $this->transition('finish')->from(TaskStatus::Doing)->to(TaskStatus::Done)->withoutAuthorization(),
+            $this->transition('drop')->from(TaskStatus::Todo)->to(TaskStatus::Dropped)->withoutAuthorization(),
         ];
     }
 }

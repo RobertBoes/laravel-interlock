@@ -17,6 +17,7 @@ class ExpenseStatusMachine extends StateMachine
             $this->transition('submit')
                 ->from(ExpenseStatus::Draft)
                 ->to(ExpenseStatus::Submitted)
+                ->withoutAuthorization()
                 ->guard('has_amount', fn(Expense $expense) => $expense->amount !== null, 'An expense needs an amount before it is submitted.')
                 ->trigger(fn(Builder $query) => $query->where('created_at', '<=', now()->subDays(30))),
             Approve::class,

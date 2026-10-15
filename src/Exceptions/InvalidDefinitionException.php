@@ -74,6 +74,52 @@ final class InvalidDefinitionException extends LogicException implements Interlo
     }
 
     /**
+     * @param  class-string<StateMachine>  $machine
+     */
+    public static function missingAuthorization(string $machine, string $transition): self
+    {
+        return new self(sprintf(
+            'Transition [%s] in %s declares no authorization, so no one may apply it. Call ->authorize() with who may apply it, ->withoutAuthorization() to let anyone apply it, or ->trigger() to let only its trigger apply it.',
+            $transition,
+            $machine,
+        ));
+    }
+
+    /**
+     * @param  class-string<Transition>  $transition
+     */
+    public static function missingAuthorizationOfClass(string $transition): self
+    {
+        return new self(sprintf(
+            'Transition %s declares no authorization, so no one may apply it. Add an authorize() method or #[Authorize(...)] with who may apply it, #[WithoutAuthorization] to let anyone apply it, or a static trigger() method to let only its trigger apply it.',
+            $transition,
+        ));
+    }
+
+    /**
+     * @param  class-string<StateMachine>  $machine
+     */
+    public static function authorizedAndWithoutAuthorization(string $machine, string $transition): self
+    {
+        return new self(sprintf(
+            'Transition [%s] in %s calls both ->authorize() and ->withoutAuthorization(). Keep one of them.',
+            $transition,
+            $machine,
+        ));
+    }
+
+    /**
+     * @param  class-string<Transition>  $transition
+     */
+    public static function classAuthorizedAndWithoutAuthorization(string $transition): self
+    {
+        return new self(sprintf(
+            'Transition %s declares both authorization and #[WithoutAuthorization]. Keep one of them.',
+            $transition,
+        ));
+    }
+
+    /**
      * @param  class-string<Transition>  $transition
      */
     public static function triggerNotStatic(string $transition): self

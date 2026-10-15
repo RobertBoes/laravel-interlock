@@ -17,7 +17,7 @@ class OrderStatusMachine extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('deliver')->from(OrderStatus::Pending)->to(OrderStatus::Delivered),
+            $this->transition('deliver')->from(OrderStatus::Pending)->to(OrderStatus::Delivered)->withoutAuthorization(),
         ];
     }
 }

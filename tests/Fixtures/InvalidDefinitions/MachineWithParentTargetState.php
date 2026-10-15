@@ -12,7 +12,7 @@ class MachineWithParentTargetState extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('prepare')->from(OrderStatus::Pending)->to(OrderStatus::Preparing),
+            $this->transition('prepare')->from(OrderStatus::Pending)->to(OrderStatus::Preparing)->withoutAuthorization(),
         ];
     }
 }

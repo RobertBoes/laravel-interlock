@@ -16,6 +16,7 @@ use RobertBoes\Interlock\Attributes\InitialStates;
 use RobertBoes\Interlock\Attributes\RecordsHistory;
 use RobertBoes\Interlock\Attributes\TargetState;
 use RobertBoes\Interlock\Attributes\UseStateMachine;
+use RobertBoes\Interlock\Attributes\WithoutAuthorization;
 use RobertBoes\Interlock\Definition\FluentTransition;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Support\PhpAttribute;
@@ -169,6 +170,18 @@ final class GraphRepository
             throw InvalidDefinitionException::missingFromStates($machine->class, $definition->name);
         }
 
+        $authorized = $definition->authorization !== null;
+
+        if ($authorized && $definition->anyoneMayApply) {
+            throw InvalidDefinitionException::authorizedAndWithoutAuthorization($machine->class, $definition->name);
+        }
+
+        $triggerOnly = ! $authorized && ! $definition->anyoneMayApply;
+
+        if ($triggerOnly && $definition->trigger === null) {
+            throw InvalidDefinitionException::missingAuthorization($machine->class, $definition->name);
+        }
+
         return $this->compileTransition(
             $model,
             $machine,
@@ -179,6 +192,7 @@ final class GraphRepository
             TransitionSteps::fluent($definition),
             $definition->trigger,
             $definition->triggerFansOut,
+            $triggerOnly,
         );
     }
 
@@ -201,9 +215,24 @@ final class GraphRepository
         }
 
         $ability = PhpAttribute::of($reflection, Authorize::class)?->ability;
+        $hasAuthorizeMethod = $reflection->hasMethod('authorize');
 
-        if ($ability !== null && $reflection->hasMethod('authorize')) {
+        if ($ability !== null && $hasAuthorizeMethod) {
             throw InvalidDefinitionException::authorizedTwice($class, $ability);
+        }
+
+        $authorized = $ability !== null || $hasAuthorizeMethod;
+        $anyoneMayApply = $reflection->getAttributes(WithoutAuthorization::class) !== [];
+
+        if ($authorized && $anyoneMayApply) {
+            throw InvalidDefinitionException::classAuthorizedAndWithoutAuthorization($class);
+        }
+
+        $trigger = $this->triggerOf($reflection);
+        $triggerOnly = ! $authorized && ! $anyoneMayApply;
+
+        if ($triggerOnly && $trigger === null) {
+            throw InvalidDefinitionException::missingAuthorizationOfClass($class);
         }
 
         return $this->compileTransition(
@@ -214,8 +243,9 @@ final class GraphRepository
             $targetState,
             $class,
             TransitionSteps::none(),
-            $this->triggerOf($reflection),
+            $trigger,
             $this->triggerFansOut($reflection),
+            $triggerOnly,
         );
     }
 
@@ -268,6 +298,7 @@ final class GraphRepository
         TransitionSteps $fluentSteps,
         ?Closure $trigger,
         bool $triggerFansOut,
+        bool $triggerOnly,
     ): CompiledTransition {
         $stateOfAnotherEnum = self::stateNotOf($model->getCasts()[$machine->stateAttribute] ?? null, [...$fromStates, $targetState]);
 
@@ -297,6 +328,7 @@ final class GraphRepository
             $fluentSteps,
             $trigger,
             $triggerFansOut,
+            $triggerOnly,
         );
     }
 

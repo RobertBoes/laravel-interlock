@@ -12,8 +12,19 @@ use RobertBoes\Interlock\Tests\Fixtures\Expenses\Employee;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Expense;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\ExpenseStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Pay;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineWithTransitionAuthorizedAndWithoutAuthorization;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\MachineWithTransitionWithoutAuthorization;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithTransitionAuthorizedAndWithoutAuthorization;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithTransitionAuthorizedTwice;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithTransitionClassAuthorizedAndWithoutAuthorization;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithTransitionClassWithoutAuthorization;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithTransitionWithoutAuthorization;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\TransitionAuthorizedAndWithoutAuthorization;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\TransitionAuthorizedTwice;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\TransitionWithoutAuthorization;
+use RobertBoes\Interlock\Tests\Fixtures\Orders\CancelOrder;
+use RobertBoes\Interlock\Tests\Fixtures\Orders\Order;
+use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatus;
 
 /**
  * @param  array<string, mixed>  $attributes
@@ -120,16 +131,57 @@ it('authorizes a class-based transition with a Gate ability declared on the clas
     expect($expense->fresh()->status)->toBe(ExpenseStatus::Paid);
 });
 
-it('allows a transition without declared authorization for every actor, null included', function (?Employee $actor) {
+it('lets anyone apply a fluent transition without authorization, a guest and a null actor included', function (Closure $apply) {
     $expense = Expense::create(['amount' => 4200]);
 
-    $expense->transition('submit', $actor);
+    $apply($expense);
 
     expect($expense->fresh()->status)->toBe(ExpenseStatus::Submitted);
 })->with([
-    'a staff member' => fn() => Employee::staff(),
-    'no actor' => null,
+    'a staff member' => [fn(Expense $expense) => $expense->transition('submit', Employee::staff())],
+    'a guest' => [fn(Expense $expense) => $expense->transition('submit')],
+    'a null actor' => [fn(Expense $expense) => $expense->transition('submit', null)],
 ]);
+
+it('lets anyone apply a transition class marked #[WithoutAuthorization], a guest and a null actor included', function (Closure $apply) {
+    $order = Order::create();
+
+    $apply($order);
+
+    expect($order->fresh()->status)->toBe(OrderStatus::Cancelled);
+})->with([
+    'a staff member' => [fn(Order $order) => $order->transition(new CancelOrder(), Employee::staff())],
+    'a guest' => [fn(Order $order) => $order->transition('cancel')],
+    'a null actor' => [fn(Order $order) => $order->transition('cancel', null)],
+]);
+
+it('rejects a fluent transition that declares no authorization and no trigger', function () {
+    expect(fn() => (new PostWithTransitionWithoutAuthorization())->transition('submit'))->toThrow(
+        InvalidDefinitionException::class,
+        'Transition [submit] in ' . MachineWithTransitionWithoutAuthorization::class . ' declares no authorization, so no one may apply it. Call ->authorize() with who may apply it, ->withoutAuthorization() to let anyone apply it, or ->trigger() to let only its trigger apply it.',
+    );
+});
+
+it('rejects a transition class that declares no authorization and no trigger', function () {
+    expect(fn() => (new PostWithTransitionClassWithoutAuthorization())->transition('transition_without_authorization'))->toThrow(
+        InvalidDefinitionException::class,
+        'Transition ' . TransitionWithoutAuthorization::class . ' declares no authorization, so no one may apply it. Add an authorize() method or #[Authorize(...)] with who may apply it, #[WithoutAuthorization] to let anyone apply it, or a static trigger() method to let only its trigger apply it.',
+    );
+});
+
+it('rejects a fluent transition that declares both authorization and withoutAuthorization()', function () {
+    expect(fn() => (new PostWithTransitionAuthorizedAndWithoutAuthorization())->transition('submit'))->toThrow(
+        InvalidDefinitionException::class,
+        'Transition [submit] in ' . MachineWithTransitionAuthorizedAndWithoutAuthorization::class . ' calls both ->authorize() and ->withoutAuthorization(). Keep one of them.',
+    );
+});
+
+it('rejects a transition class that declares both authorization and #[WithoutAuthorization]', function () {
+    expect(fn() => (new PostWithTransitionClassAuthorizedAndWithoutAuthorization())->transition('transition_authorized_and_without_authorization'))->toThrow(
+        InvalidDefinitionException::class,
+        'Transition ' . TransitionAuthorizedAndWithoutAuthorization::class . ' declares both authorization and #[WithoutAuthorization]. Keep one of them.',
+    );
+});
 
 it('applies the transition on behalf of the authenticated user by default', function () {
     $expense = submittedExpense(['rejection_reason' => 'No receipt']);

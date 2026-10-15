@@ -17,12 +17,13 @@ class OrderStatusMachine extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('prepare')->from(OrderStatus::Pending)->to(OrderStatus::Packing),
-            $this->transition('create_label')->from(OrderStatus::Packing)->to(OrderStatus::LabelCreated),
+            $this->transition('prepare')->from(OrderStatus::Pending)->to(OrderStatus::Packing)->withoutAuthorization(),
+            $this->transition('create_label')->from(OrderStatus::Packing)->to(OrderStatus::LabelCreated)->withoutAuthorization(),
             Ship::class,
             $this->transition('deliver')
                 ->from(OrderStatus::Shipped)
                 ->to(OrderStatus::Delivered)
+                ->withoutAuthorization()
                 ->apply(fn(Order $order) => $order->delivered_at = now())
                 ->afterCommit(fn(Order $order) => event(new OrderDelivered($order))),
             CancelOrder::class,

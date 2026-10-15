@@ -18,6 +18,8 @@ final class FluentTransition
 
     public private(set) Closure|string|null $authorization = null;
 
+    public private(set) bool $anyoneMayApply = false;
+
     public private(set) ?Closure $applyStep = null;
 
     public private(set) ?Closure $afterCommitStep = null;
@@ -53,6 +55,16 @@ final class FluentTransition
     }
 
     /**
+     * Anyone may apply it by hand, guests and a null actor included.
+     */
+    public function withoutAuthorization(): self
+    {
+        $this->anyoneMayApply = true;
+
+        return $this;
+    }
+
+    /**
      * The check receives the model, unsaved changes included, and returns whether the guard holds.
      */
     public function guard(string $name, Closure $check, string $message): self
@@ -74,7 +86,8 @@ final class FluentTransition
 
     /**
      * The condition constrains the model's query builder; the from-states are added to it. Matching models get the
-     * transition without an actor or authorization check; its guards still run.
+     * transition without an actor or authorization check; its guards still run. Without authorize() or
+     * withoutAuthorization(), only the trigger applies it.
      */
     public function trigger(callable $condition, bool $fanOut = false): self
     {

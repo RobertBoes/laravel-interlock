@@ -18,6 +18,7 @@ final readonly class CompiledTransition
      * @param  list<BackedEnum>  $leafFromStates
      * @param  class-string<Transition>|null  $class  null for a fluent transition
      * @param  (Closure(Builder<Model>): mixed)|null  $trigger
+     * @param  bool  $triggerOnly  it has a trigger and declares no authorization, so no one may apply it by hand
      */
     public function __construct(
         public string $name,
@@ -28,7 +29,8 @@ final readonly class CompiledTransition
         public ?string $class,
         private TransitionSteps $fluentSteps,
         public ?Closure $trigger,
-        public bool $triggerFansOut = false,
+        public bool $triggerFansOut,
+        public bool $triggerOnly,
     ) {}
 
     public function startsFrom(?BackedEnum $state): bool
@@ -41,7 +43,7 @@ final readonly class CompiledTransition
      */
     public function isAvailable(Model $model, ?Authenticatable $actor): bool
     {
-        if (! $this->startsFrom($model->getOriginal($this->stateAttribute))) {
+        if ($this->triggerOnly || ! $this->startsFrom($model->getOriginal($this->stateAttribute))) {
             return false;
         }
 

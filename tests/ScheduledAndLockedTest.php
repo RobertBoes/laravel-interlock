@@ -1,10 +1,11 @@
 <?php
 
 use Illuminate\Support\Facades\Artisan;
-use RobertBoes\Interlock\AvailableTransition;
 use RobertBoes\Interlock\Exceptions\DirectWriteException;
+use RobertBoes\Interlock\Exceptions\TriggerOnlyTransitionException;
 use RobertBoes\Interlock\Interlock;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
+use RobertBoes\Interlock\Tests\Fixtures\Expenses\Employee;
 use RobertBoes\Interlock\Tests\Fixtures\LockedPosts\LockedPost;
 use RobertBoes\Interlock\Tests\Fixtures\LockedPosts\LockedPostStatusMachine;
 
@@ -28,10 +29,12 @@ it('is a sound machine', function () {
     Interlock::assertMachinesAreSound(LockedPost::class);
 });
 
-it('offers no way out of scheduled but the triggered publish', function () {
+it('offers no way out of scheduled, as only the trigger publishes', function () {
     $post = lockedPostScheduledIn(1);
 
-    expect($post->availableTransitions(null)->map(fn(AvailableTransition $transition) => $transition->name)->all())->toBe(['publish']);
+    expect($post->availableTransitions(null))->toBeEmpty()
+        ->and($post->availableTransitions(Employee::manager()))->toBeEmpty()
+        ->and(fn() => $post->transition('publish', Employee::manager()))->toThrow(TriggerOnlyTransitionException::class);
 });
 
 it('keeps the publish time of a scheduled post fixed', function () {

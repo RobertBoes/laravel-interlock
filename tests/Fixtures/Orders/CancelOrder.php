@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use RobertBoes\Interlock\Attributes\FanOut;
 use RobertBoes\Interlock\Attributes\FromStates;
 use RobertBoes\Interlock\Attributes\TargetState;
+use RobertBoes\Interlock\Attributes\WithoutAuthorization;
 use RobertBoes\Interlock\Transition;
 
 /**
@@ -14,6 +15,7 @@ use RobertBoes\Interlock\Transition;
  */
 #[FromStates(OrderStatus::Pending, OrderStatus::Preparing)]
 #[TargetState(OrderStatus::Cancelled)]
+#[WithoutAuthorization]
 final class CancelOrder extends Transition
 {
     public static function name(): string

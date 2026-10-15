@@ -15,8 +15,8 @@ class LegalApprovalMachine extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('approve_legally')->from(Approval::Pending)->to(Approval::Approved),
-            $this->transition('reject_legally')->from(Approval::Pending)->to(Approval::Rejected),
+            $this->transition('approve_legally')->from(Approval::Pending)->to(Approval::Approved)->withoutAuthorization(),
+            $this->transition('reject_legally')->from(Approval::Pending)->to(Approval::Rejected)->withoutAuthorization(),
         ];
     }
 }

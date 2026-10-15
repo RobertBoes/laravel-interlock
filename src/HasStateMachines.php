@@ -22,6 +22,7 @@ use RobertBoes\Interlock\Exceptions\DirectWriteException;
 use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
 use RobertBoes\Interlock\Exceptions\MissingBuilderTraitException;
 use RobertBoes\Interlock\Exceptions\NotAFromStateException;
+use RobertBoes\Interlock\Exceptions\TriggerOnlyTransitionException;
 use RobertBoes\Interlock\Graph\CompiledTransition;
 use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Graph\ModelGraph;
@@ -293,9 +294,15 @@ trait HasStateMachines
         $this->interlockRevertToFromStates($stagedTransitions);
 
         foreach ($stagedTransitions as $staged) {
-            if ($staged->trigger === null) {
-                $staged->steps->authorize($this, $staged->actor, $staged->compiled);
+            if ($staged->trigger !== null) {
+                continue;
             }
+
+            if ($staged->compiled->triggerOnly) {
+                throw TriggerOnlyTransitionException::appliedByHand($this, $staged->compiled);
+            }
+
+            $staged->steps->authorize($this, $staged->actor, $staged->compiled);
         }
 
         $connection = $this->getConnection();

@@ -20,13 +20,13 @@ class FeedPostStatusMachine extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('submit')->from(PostStatus::Draft)->to(PostStatus::Ready),
-            $this->transition('schedule')->from(PostStatus::Ready)->to(PostStatus::Scheduled),
+            $this->transition('submit')->from(PostStatus::Draft)->to(PostStatus::Ready)->withoutAuthorization(),
+            $this->transition('schedule')->from(PostStatus::Ready)->to(PostStatus::Scheduled)->withoutAuthorization(),
             $this->transition('publish')
                 ->from(PostStatus::Ready, PostStatus::Scheduled)
                 ->to(PostStatus::Published)
                 ->trigger(new PublishAtHasPassed(), fanOut: true),
-            $this->transition('retract')->from(PostStatus::Ready, PostStatus::Scheduled)->to(PostStatus::Draft),
+            $this->transition('retract')->from(PostStatus::Ready, PostStatus::Scheduled)->to(PostStatus::Draft)->withoutAuthorization(),
         ];
     }
 }

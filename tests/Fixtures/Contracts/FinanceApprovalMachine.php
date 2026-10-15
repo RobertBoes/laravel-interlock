@@ -15,9 +15,9 @@ class FinanceApprovalMachine extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('approve_budget')->from(Approval::Pending)->to(Approval::Approved),
-            $this->transition('reject_budget')->from(Approval::Pending)->to(Approval::Rejected),
-            $this->transition('reopen_budget')->from(Approval::Rejected)->to(Approval::Pending),
+            $this->transition('approve_budget')->from(Approval::Pending)->to(Approval::Approved)->withoutAuthorization(),
+            $this->transition('reject_budget')->from(Approval::Pending)->to(Approval::Rejected)->withoutAuthorization(),
+            $this->transition('reopen_budget')->from(Approval::Rejected)->to(Approval::Pending)->withoutAuthorization(),
         ];
     }
 }

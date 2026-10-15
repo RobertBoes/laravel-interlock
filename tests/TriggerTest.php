@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Queue;
 use RobertBoes\Interlock\Events\Transitioned;
 use RobertBoes\Interlock\Events\Transitioning;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
+use RobertBoes\Interlock\Exceptions\TriggerOnlyTransitionException;
 use RobertBoes\Interlock\Exceptions\UnauthorizedTransitionException;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
@@ -425,7 +426,7 @@ describe('a trigger', function () {
             ->and($paid->fresh()->status)->toBe(OrderStatus::Pending);
     });
 
-    it('applies a transition whose authorization allows no one, without an actor', function () {
+    it('applies a trigger-only transition, which declares no authorization, without an actor', function () {
         config(['interlock.models' => [TriggerOnlyPost::class]]);
         Exceptions::fake();
         $post = TriggerOnlyPost::create(['publish_at' => '2026-10-14 09:00:00'])->transition('submit');
@@ -442,11 +443,16 @@ describe('a trigger', function () {
             ->actor_id->toBeNull();
     });
 
-    it('lets no one apply a transition whose authorization allows no one by hand, a guest included', function (Closure $apply) {
+    it('lets no one apply a trigger-only transition by hand, a guest included', function (Closure $apply) {
         $post = TriggerOnlyPost::create(['publish_at' => '2026-10-14 09:00:00'])->transition('submit');
 
-        expect(fn() => $apply($post))->toThrow(UnauthorizedTransitionException::class)
-            ->and($post->fresh()->status)->toBe(PostStatus::Ready);
+        expect(thrownBy(fn() => $apply($post)))
+            ->toBeInstanceOf(TriggerOnlyTransitionException::class)
+            ->toBeInstanceOf(UnauthorizedTransitionException::class)
+            ->getMessage()->toBe('Only its trigger applies transition [publish].')
+            ->status()->toBe(403)
+            ->and($post->fresh()->status)->toBe(PostStatus::Ready)
+            ->and($post->status)->toBe(PostStatus::Ready);
     })->with([
         'a guest' => [fn(TriggerOnlyPost $post) => $post->transition('publish')],
         'on behalf of no one' => [fn(TriggerOnlyPost $post) => $post->transition('publish', null)],
@@ -454,7 +460,7 @@ describe('a trigger', function () {
         'a staged transition on behalf of no one' => [fn(TriggerOnlyPost $post) => $post->stageTransition('publish', null)->save()],
     ]);
 
-    it('offers a transition whose authorization allows no one to no one, a guest included', function (?Employee $actor) {
+    it('offers a trigger-only transition to no one, a guest included', function (?Employee $actor) {
         $post = TriggerOnlyPost::create(['publish_at' => '2026-10-14 09:00:00'])->transition('submit');
 
         expect($post->availableTransitions($actor)->pluck('name')->all())->toBe(['schedule', 'retract'])

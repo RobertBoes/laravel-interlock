@@ -22,6 +22,7 @@ use RobertBoes\Interlock\Tests\Fixtures\Expenses\Employee;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Expense;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\ExpenseStatus;
 use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithoutTargetState;
+use RobertBoes\Interlock\Tests\Fixtures\TriggerOnlyPosts\TriggerOnlyPost;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 beforeEach(function () {
@@ -55,6 +56,18 @@ it('responds 403 when the actor may not apply the transition', function () {
         ->assertJson(['message' => 'You may not apply transition [reject].']);
 
     expect($expense->fresh()->status)->toBe(ExpenseStatus::Submitted);
+});
+
+it('responds 403 when only its trigger may apply the transition', function () {
+    Route::post('/posts/{id}/publish', fn(string $id) => TriggerOnlyPost::findOrFail($id)->transition('publish'));
+    $post = TriggerOnlyPost::create()->transition('submit');
+
+    $this->actingAs(Employee::manager())
+        ->postJson("/posts/{$post->getKey()}/publish")
+        ->assertForbidden()
+        ->assertJson(['message' => 'Only its trigger applies transition [publish].']);
+
+    expect($post->fresh()->status)->toBe(PostStatus::Ready);
 });
 
 it('responds 422 with the guard\'s message when a guard fails', function () {

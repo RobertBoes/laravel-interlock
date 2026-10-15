@@ -12,7 +12,7 @@ class MachineWithInitialStateOfAnotherEnum extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('submit')->from(PostStatus::Draft)->to(PostStatus::Ready),
+            $this->transition('submit')->from(PostStatus::Draft)->to(PostStatus::Ready)->withoutAuthorization(),
         ];
     }
 }

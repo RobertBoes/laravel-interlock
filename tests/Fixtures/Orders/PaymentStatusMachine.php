@@ -13,12 +13,13 @@ class PaymentStatusMachine extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('authorize_payment')->from(PaymentStatus::Unpaid)->to(PaymentStatus::Authorized),
+            $this->transition('authorize_payment')->from(PaymentStatus::Unpaid)->to(PaymentStatus::Authorized)->withoutAuthorization(),
             $this->transition('capture_payment')
                 ->from(PaymentStatus::Authorized)
                 ->to(PaymentStatus::Paid)
+                ->withoutAuthorization()
                 ->afterCommit(fn(Order $order) => event(new PaymentCaptured($order))),
-            $this->transition('refund')->from(PaymentStatus::Paid)->to(PaymentStatus::Refunded),
+            $this->transition('refund')->from(PaymentStatus::Paid)->to(PaymentStatus::Refunded)->withoutAuthorization(),
         ];
     }
 }

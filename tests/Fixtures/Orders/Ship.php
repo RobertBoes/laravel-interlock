@@ -4,10 +4,12 @@ namespace RobertBoes\Interlock\Tests\Fixtures\Orders;
 
 use RobertBoes\Interlock\Attributes\FromStates;
 use RobertBoes\Interlock\Attributes\TargetState;
+use RobertBoes\Interlock\Attributes\WithoutAuthorization;
 use RobertBoes\Interlock\Transition;
 
 #[FromStates(OrderStatus::LabelCreated)]
 #[TargetState(OrderStatus::Shipped)]
+#[WithoutAuthorization]
 final class Ship extends Transition
 {
     public function __construct(public readonly string $trackingCode) {}

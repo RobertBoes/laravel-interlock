@@ -6,13 +6,19 @@ use RobertBoes\Interlock\Events\Transitioned;
 use RobertBoes\Interlock\Exceptions\NotAFromStateException;
 use RobertBoes\Interlock\Exceptions\InvalidFakeException;
 use RobertBoes\Interlock\Exceptions\MissingTransitionInputException;
+use RobertBoes\Interlock\Exceptions\TriggerOnlyTransitionException;
 use RobertBoes\Interlock\Interlock;
+use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
+use RobertBoes\Interlock\Tests\Fixtures\Expenses\Employee;
+use RobertBoes\Interlock\Tests\Fixtures\Expenses\Expense;
+use RobertBoes\Interlock\Tests\Fixtures\Expenses\ExpenseStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Order;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderDelivered;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderShipped;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Ship;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Shipment;
+use RobertBoes\Interlock\Tests\Fixtures\TriggerOnlyPosts\TriggerOnlyPost;
 
 it('records a class-based transition and writes its target state without running its apply and after-commit steps', function () {
     $order = orderReadyToShip();
@@ -64,6 +70,29 @@ it('still rejects a transition the calling code may not apply while faked, and d
 })->with([
     'not from a from-state' => ['deliver', fn(Order $order) => $order->transition('deliver'), NotAFromStateException::class],
     'applied by name without its input' => ['ship', fn(Order $order) => $order->transition('ship'), MissingTransitionInputException::class],
+]);
+
+it('skips authorization while faked', function () {
+    $expense = Expense::create(['amount' => 4200])->transition('submit');
+    Interlock::fake();
+
+    $expense->transition('reject', Employee::staff());
+
+    Interlock::assertTransitioned($expense, 'reject');
+    expect($expense->fresh()->status)->toBe(ExpenseStatus::Rejected);
+});
+
+it('still refuses a trigger-only transition applied by hand while faked, and does not record it', function (Closure $apply) {
+    $post = TriggerOnlyPost::create()->transition('submit');
+    Interlock::fake();
+
+    expect(fn() => $apply($post))->toThrow(TriggerOnlyTransitionException::class, 'Only its trigger applies transition [publish].');
+
+    Interlock::assertNotTransitioned($post, 'publish');
+    expect($post->fresh()->status)->toBe(PostStatus::Ready);
+})->with([
+    'applied' => [fn(TriggerOnlyPost $post) => $post->transition('publish', Employee::manager())],
+    'staged' => [fn(TriggerOnlyPost $post) => $post->stageTransition('publish', Employee::manager())->save()],
 ]);
 
 it('fails the assertions while faked as it does for real transitions', function () {

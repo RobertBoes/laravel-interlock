@@ -12,7 +12,7 @@ class MachineWithParentInitialState extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('create_label')->from(OrderStatus::Packing)->to(OrderStatus::LabelCreated),
+            $this->transition('create_label')->from(OrderStatus::Packing)->to(OrderStatus::LabelCreated)->withoutAuthorization(),
         ];
     }
 }

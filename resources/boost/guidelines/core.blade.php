@@ -8,6 +8,8 @@ Interlock (`robertboes/laravel-interlock`) keeps an Eloquent model's state attri
 - A machine extends `StateMachine`, declares `#[InitialStates]` and `#[FinalStates]`, and returns its transitions from `transitions()`. Each transition has one or more from-states and exactly one target state, and its name is unique across all machines on the model.
 - Link it to the model with `#[UseStateMachine('status', OrderStatusMachine::class)]` and the `HasStateMachines` trait. Repeat the attribute for each state attribute.
 - A transition that needs input is a class extending `Transition`, with `#[FromStates]`, `#[TargetState]` and a typed constructor. Its name is the class name in snake case (`CreateLabel` is `create_label`).
+- Every transition must declare who may apply it by hand, or compiling the graph throws `InvalidDefinitionException`: authorization (`->authorize(...)`, an `authorize()` method or `#[Authorize('ability')]`), `->withoutAuthorization()` (`#[WithoutAuthorization]` on a class) for anyone, or a trigger and no authorization, so only the trigger applies it. Never declare both authorization and `withoutAuthorization()`.
+- `withoutAuthorization()` means anyone: every user, guests, and jobs or commands with a null actor. Use authorization unless the transition really is open to all of them.
 - An attribute only certain transitions may write is declared on the machine with `#[GuardedAttribute('tracking_code', Ship::class)]`.
 
 @verbatim
@@ -25,8 +27,8 @@ class OrderStatusMachine extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('ship')->from(OrderStatus::Preparing)->to(OrderStatus::Shipped),
-            $this->transition('cancel')->from(OrderStatus::Pending, OrderStatus::Preparing)->to(OrderStatus::Cancelled),
+            $this->transition('ship')->from(OrderStatus::Preparing)->to(OrderStatus::Shipped)->authorize('manage-orders'),
+            $this->transition('cancel')->from(OrderStatus::Pending, OrderStatus::Preparing)->to(OrderStatus::Cancelled)->authorize('cancel-order'),
         ];
     }
 }
@@ -68,6 +70,7 @@ $order->stageTransition(new Ship($trackingCode))
 - `NotAFromStateException` (409): the current state is not a from-state, as with a double-submitted form.
 - `FailedGuardException` (422): a guard failed. Declare guards with `->guard('has_title', fn(Post $post) => filled($post->title), 'A post needs a title.')` or `#[Guard('message')]` on a method of a class-based transition. Match on `$e->guard`, not on the message.
 - `UnauthorizedTransitionException` (403): the actor is not authorized. Declare it with `->authorize(fn(?User $actor, Expense $expense) => ...)`, a Gate ability name, an `authorize()` method or `#[Authorize('ability')]`. The actor defaults to the authenticated user; pass one with `transition('approve', $manager)` or `transition('approve', null)`.
+- `TriggerOnlyTransitionException` (403, extends `UnauthorizedTransitionException`): a transition with a trigger and no authorization was applied or staged by hand. Only its trigger applies it.
 - Do not check states by hand before transitioning. Use `$model->availableTransitions($actor)` to show users what they can do.
 
 ### Bypass
@@ -117,7 +120,7 @@ $this->transition('publish')
 @endverbatim
 
 - Triggers run through `interlock:triggers`, which Interlock schedules every minute, so the scheduler and a queue worker must run.
-- A triggered transition runs without an actor and skips authorization; its guards still run. For a transition only the trigger may apply, use `->authorize(fn() => false)`. Never authorize `$actor === null` to mean "only the trigger": guests are null actors too.
+- A triggered transition runs without an actor and skips authorization; its guards still run. Leave authorization out for a transition only the trigger may apply: it is then trigger-only, and `availableTransitions()` never offers it. Add `->authorize(...)` or `->withoutAuthorization()` to let people apply it by hand as well. Never authorize `$actor === null` to mean "only the trigger": guests are null actors too.
 - `Builder` is `Illuminate\Database\Eloquent\Builder`. The transition's from-states are added to the condition, so do not repeat them.
 - A class-based transition declares a static `trigger(Builder $query)` method instead. A transition whose constructor has required parameters cannot have a trigger.
 
@@ -129,7 +132,7 @@ Enforcement covers everything that goes through Eloquent. `DB::table()`, `toBase
 
 - Create models in any state with factories: `Order::factory()->create(['status' => OrderStatus::Shipped])`. Everything else stays enforced, so tests catch illegal transitions.
 - Assert on transitions with `Interlock::assertTransitioned($order, 'ship')` and `Interlock::assertNotTransitioned($order)`, not by reading the state column.
-- `Interlock::fake()` skips `apply`, `afterCommit`, guards and authorization for the rest of the test, to test the calling code in isolation.
+- `Interlock::fake()` skips `apply`, `afterCommit`, guards and authorization for the rest of the test, to test the calling code in isolation. A trigger-only transition applied by hand still throws `TriggerOnlyTransitionException`.
 - `Interlock::bypassForTest('reason')` allows direct writes for the rest of one test only.
 - Keep one test that checks every machine for unreachable states and dead ends:
 

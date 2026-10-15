@@ -12,7 +12,7 @@ class MachineWithoutTargetState extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('submit')->from(PostStatus::Draft),
+            $this->transition('submit')->from(PostStatus::Draft)->withoutAuthorization(),
         ];
     }
 }

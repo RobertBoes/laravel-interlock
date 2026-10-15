@@ -5,6 +5,7 @@ namespace RobertBoes\Interlock\Tests\Fixtures\Returns;
 use RobertBoes\Interlock\Attributes\FromStates;
 use RobertBoes\Interlock\Attributes\Guard;
 use RobertBoes\Interlock\Attributes\TargetState;
+use RobertBoes\Interlock\Attributes\WithoutAuthorization;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Shipment;
 use RobertBoes\Interlock\Transition;
@@ -14,6 +15,7 @@ use RobertBoes\Interlock\Transition;
  */
 #[FromStates(OrderStatus::Pending)]
 #[TargetState(OrderStatus::Cancelled)]
+#[WithoutAuthorization]
 final class ReturnToSender extends Transition
 {
     public function __construct(public readonly Shipment $shipment) {}

@@ -18,7 +18,7 @@ class MachineGuardingAnAttributeForAnUnlistedTransitionClass extends StateMachin
     public function transitions(): array
     {
         return [
-            $this->transition('ship')->from(OrderStatus::Pending)->to(OrderStatus::Shipped),
+            $this->transition('ship')->from(OrderStatus::Pending)->to(OrderStatus::Shipped)->withoutAuthorization(),
         ];
     }
 }

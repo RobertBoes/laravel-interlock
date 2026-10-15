@@ -82,14 +82,16 @@ class OrderStatusMachine extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('prepare')->from(OrderStatus::Pending)->to(OrderStatus::Preparing),
-            $this->transition('ship')->from(OrderStatus::Preparing)->to(OrderStatus::Shipped),
-            $this->transition('deliver')->from(OrderStatus::Shipped)->to(OrderStatus::Delivered),
-            $this->transition('cancel')->from(OrderStatus::Pending, OrderStatus::Preparing)->to(OrderStatus::Cancelled),
+            $this->transition('prepare')->from(OrderStatus::Pending)->to(OrderStatus::Preparing)->authorize('manage-orders'),
+            $this->transition('ship')->from(OrderStatus::Preparing)->to(OrderStatus::Shipped)->authorize('manage-orders'),
+            $this->transition('deliver')->from(OrderStatus::Shipped)->to(OrderStatus::Delivered)->authorize('manage-orders'),
+            $this->transition('cancel')->from(OrderStatus::Pending, OrderStatus::Preparing)->to(OrderStatus::Cancelled)->authorize('cancel-order'),
         ];
     }
 }
 ```
+
+Every transition says who may apply it by hand, here with a Gate ability. A transition anyone may apply says so with `->withoutAuthorization()`; see [Authorization](#authorization).
 
 Finally, link the machine to the model with `#[UseStateMachine]`, use the `HasStateMachines` trait and cast the state attribute to the enum. The cast is required:
 
@@ -112,7 +114,7 @@ class Order extends Model
 }
 ```
 
-The machine is compiled and checked the first time the model is used. A mistake in it, such as a transition without from-states or a target state, a parent state as a target, or two transitions with the same name, throws an `InvalidDefinitionException` that says what to fix. Discovery, triggers and exports also throw one for a model that declares `#[UseStateMachine]` but forgot the `HasStateMachines` trait, because nothing would enforce its machines.
+The machine is compiled and checked the first time the model is used. A mistake in it, such as a transition without from-states or a target state, a transition that doesn't say who may apply it, a parent state as a target, or two transitions with the same name, throws an `InvalidDefinitionException` that says what to fix. Discovery, triggers and exports also throw one for a model that declares `#[UseStateMachine]` but forgot the `HasStateMachines` trait, because nothing would enforce its machines.
 
 ### Initial and final states
 
@@ -130,6 +132,7 @@ A transition without input or logic takes one line, as above. The fluent builder
 $this->transition('deliver')
     ->from(OrderStatus::Shipped)
     ->to(OrderStatus::Delivered)
+    ->authorize('manage-orders')
     ->apply(fn(Order $order) => $order->delivered_at = now())
     ->afterCommit(fn(Order $order) => $order->customer->notify(new OrderDelivered($order))),
 ```
@@ -140,12 +143,14 @@ $this->transition('deliver')
 A transition that needs input is a class with a typed constructor. Its from-states and target state are attributes, so exports and checks can read them without input values:
 
 ```php
+use RobertBoes\Interlock\Attributes\Authorize;
 use RobertBoes\Interlock\Attributes\FromStates;
 use RobertBoes\Interlock\Attributes\TargetState;
 use RobertBoes\Interlock\Transition;
 
 #[FromStates(OrderStatus::Preparing)]
 #[TargetState(OrderStatus::Shipped)]
+#[Authorize('manage-orders')]
 final class Ship extends Transition
 {
     public function __construct(public readonly string $trackingCode) {}
@@ -167,7 +172,7 @@ List the class in the machine's `transitions()`, next to the fluent ones:
 
 ```php
 return [
-    $this->transition('prepare')->from(OrderStatus::Pending)->to(OrderStatus::Preparing),
+    $this->transition('prepare')->from(OrderStatus::Pending)->to(OrderStatus::Preparing)->authorize('manage-orders'),
     Ship::class,
     // ...
 ];
@@ -288,6 +293,7 @@ A guard is a condition on the model that must hold for the transition to apply, 
 $this->transition('publish')
     ->from(PostStatus::Ready)
     ->to(PostStatus::Published)
+    ->authorize('publish-post')
     ->guard('has_title', fn(Post $post) => filled($post->title), 'A post needs a title before it is published.'),
 ```
 
@@ -307,7 +313,9 @@ A failing guard throws `FailedGuardException` with the guard's message, which re
 
 ### Authorization
 
-A transition may say who may apply it, either as a closure or method that receives the actor and the model and returns a bool or a Gate response, or as the name of a Gate ability:
+Every transition declares who may apply it by hand, in one of three ways: authorization, `withoutAuthorization()` for anyone, or a trigger for no one but the trigger. A state machine guards changes that are often hard to undo, so a transition that declares none of these isn't open to everyone: the graph rejects it.
+
+**Authorization** is a closure or method that receives the actor and the model and returns a bool or a Gate response, or the name of a Gate ability:
 
 ```php
 $this->transition('reject')
@@ -321,9 +329,26 @@ $this->transition('withdraw')
     ->authorize('withdraw-expense'),
 ```
 
-A class-based transition defines an `authorize(?User $actor, Expense $expense)` method, or names a Gate ability with `#[Authorize('approve-expense')]` on the class. Declare one or the other, not both. A transition without authorization may be applied by every actor, a null actor included.
+A class-based transition defines an `authorize(?User $actor, Expense $expense)` method, or names a Gate ability with `#[Authorize('approve-expense')]` on the class. Declare one or the other, not both.
 
 A denied actor gets `UnauthorizedTransitionException`. It extends Laravel's `AuthorizationException`, so it renders as 403 and your existing handling of authorization failures applies. Authorization is checked before the transaction begins.
+
+**Anyone** may apply a transition declared with `->withoutAuthorization()`, or a class marked `#[WithoutAuthorization]`:
+
+```php
+use RobertBoes\Interlock\Attributes\WithoutAuthorization;
+
+$this->transition('submit')->from(ExpenseStatus::Draft)->to(ExpenseStatus::Submitted)->withoutAuthorization(),
+
+#[WithoutAuthorization]
+final class ReportProblem extends Transition
+```
+
+Anyone means anyone: every user, a guest, and a job or command that applies it with a null actor. Use it for transitions any code path may apply, not to skip deciding.
+
+**Only its trigger** applies a transition that has a [trigger](#triggers) and declares no authorization. Applying a trigger-only transition by hand throws `TriggerOnlyTransitionException`, for every actor, a guest and a null actor included; staging one throws it on `save()`. It extends `UnauthorizedTransitionException`, so it renders as 403 too. `availableTransitions()` never offers it. Give it authorization or `withoutAuthorization()` as well to let people apply it by hand; its trigger still applies it either way.
+
+The machine is checked when its graph is compiled, so a mistake fails in any test that touches the model. A transition that declares none of authorization, `withoutAuthorization()` and a trigger throws `InvalidDefinitionException` naming the transition and the three ways to fix it, and so does one that declares both authorization and `withoutAuthorization()`.
 
 ### Actors
 
@@ -340,7 +365,7 @@ A null actor means no user, such as a guest, and authorization still decides for
 
 ## Available transitions
 
-`availableTransitions()` returns the transitions an actor can apply to the model right now, across all its machines: those whose from-states include the current state, whose guards pass and whose authorization allows the actor. Nothing is written and no events are dispatched.
+`availableTransitions()` returns the transitions an actor can apply to the model right now, across all its machines: those whose from-states include the current state, whose guards pass and whose authorization allows the actor. A trigger-only transition is never among them. Nothing is written and no events are dispatched.
 
 ```php
 $order->availableTransitions();          // for the authenticated user
@@ -496,6 +521,8 @@ public static function trigger(Builder $query): void
 }
 ```
 
+The `publish` above declares no authorization, so it is trigger-only: only the trigger applies it, and applying it by hand throws `TriggerOnlyTransitionException`. To let people publish early as well, add `->authorize(...)`, or `->withoutAuthorization()` for anyone; the trigger still applies it, as triggers don't check authorization. See [Authorization](#authorization).
+
 A transition that takes input cannot be built by name, so it cannot have a trigger: a transition class whose constructor has required parameters and declares `trigger()` throws `InvalidDefinitionException` when its graph is compiled.
 
 Scheduling means setting the data the condition reads, never storing a pending run. To reschedule a post, change `publish_at`. To stop it, move it back to draft. Nothing needs cancelling.
@@ -533,7 +560,7 @@ A model whose state changed since it was loaded, or whose guard fails, is skippe
 
 ### The "scheduled and locked" pattern
 
-A plain trigger leaves the model editable until the moment it fires: a ready post can still be retracted or published by hand. When a scheduled change must not be touched any more, model the lock as its own state whose only way out is the triggered transition:
+A plain trigger leaves the model editable until the moment it fires: a ready post can still be retracted. When a scheduled change must not be touched any more, model the lock as its own state whose only way out is the triggered transition:
 
 ```php
 #[InitialStates(PostStatus::Draft)]
@@ -544,8 +571,8 @@ class PostStatusMachine extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('submit')->from(PostStatus::Draft)->to(PostStatus::Ready),
-            $this->transition('schedule')->from(PostStatus::Ready)->to(PostStatus::Scheduled),
+            $this->transition('submit')->from(PostStatus::Draft)->to(PostStatus::Ready)->authorize('edit-post'),
+            $this->transition('schedule')->from(PostStatus::Ready)->to(PostStatus::Scheduled)->authorize('edit-post'),
             $this->transition('publish')
                 ->from(PostStatus::Scheduled)
                 ->to(PostStatus::Published)
@@ -560,7 +587,7 @@ $post->publish_at = $request->date('publish_at');
 $post->transition('schedule');
 ```
 
-Once scheduled, no transition but `publish` leaves `scheduled`, and only `schedule` may write `publish_at`, so neither the state nor the time can change until the trigger publishes the post. The lock shows up in the graph and in the exports, rather than hiding in a flag. To allow unlocking, add a transition out of `scheduled`, such as `unschedule` back to `ready`. `publish` itself can still be applied by hand; to leave it to the trigger alone, authorize it for no one with `->authorize(fn() => false)`. The trigger still applies it, as triggers don't check authorization. Don't authorize only the null actor, `$actor === null`, to mean "only the trigger": a guest is a null actor too, so any code a guest can reach could apply it, and `availableTransitions()` would offer it to guests.
+Once scheduled, no transition but `publish` leaves `scheduled`, and only `schedule` may write `publish_at`, so neither the state nor the time can change until the trigger publishes the post. The lock shows up in the graph and in the exports, rather than hiding in a flag. To allow unlocking, add a transition out of `scheduled`, such as `unschedule` back to `ready`. `publish` declares no authorization, so it is trigger-only: no one can publish a scheduled post by hand, and `availableTransitions()` never offers it. Don't authorize only the null actor, `$actor === null`, to mean "only the trigger": a guest is a null actor too, so any code a guest can reach could apply it, and `availableTransitions()` would offer it to guests.
 
 ## History
 
@@ -669,6 +696,7 @@ Every Interlock exception implements `RobertBoes\Interlock\Exceptions\InterlockE
 | Exception | Status | Meaning |
 | --- | --- | --- |
 | `UnauthorizedTransitionException` | 403 | The actor may not apply the transition (or the status a denying Gate response gave) |
+| `TriggerOnlyTransitionException` | 403 | The transition is trigger-only, so no one may apply it by hand; it extends `UnauthorizedTransitionException` |
 | `FailedGuardException` | 422 | A guard failed; the body's `message` is the guard's message |
 | `StaleStateException` | 409 | The stored state changed since the model was loaded; reload and retry |
 | `NotAFromStateException` | 409 | The current state isn't one of the transition's from-states, as when a form is submitted twice |
@@ -764,7 +792,7 @@ $this->post("/orders/{$order->id}/ship", ['tracking_code' => 'TRACK-1']);
 Interlock::assertTransitioned($order, 'ship');
 ```
 
-Faked transitions skip their guards and authorization too. They still check their from-states, write their target state with the model's other changes and dispatch their events, so an illegal transition still throws.
+Faked transitions skip their guards and authorization too. They still check their from-states, write their target state with the model's other changes and dispatch their events, so an illegal transition still throws. A trigger-only transition applied by hand still throws `TriggerOnlyTransitionException`, as that is the machine's structure rather than a question of who asks.
 
 ## License
 
