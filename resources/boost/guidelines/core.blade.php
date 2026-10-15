@@ -8,8 +8,8 @@ Interlock (`robertboes/laravel-interlock`) keeps an Eloquent model's state attri
 - A machine extends `StateMachine`, declares `#[InitialStates]` and `#[FinalStates]`, and returns its transitions from `transitions()`. Each transition has one or more from-states and exactly one target state, and its name is unique across all machines on the model.
 - Link it to the model with `#[UseStateMachine('status', OrderStatusMachine::class)]` and the `HasStateMachines` trait. Repeat the attribute for each state attribute.
 - A transition that needs input is a class extending `Transition`, with `#[FromStates]`, `#[TargetState]` and a typed constructor. Its name is the class name in snake case (`CreateLabel` is `create_label`).
-- Every transition must declare who may apply it by hand, or compiling the graph throws `InvalidDefinitionException`: authorization (`->authorize(...)`, an `authorize()` method or `#[Authorize('ability')]`), `->withoutAuthorization()` (`#[WithoutAuthorization]` on a class) for anyone, or a trigger and no authorization, so only the trigger applies it. Never declare both authorization and `withoutAuthorization()`.
-- `withoutAuthorization()` means anyone: every user, guests, and jobs or commands with a null actor. Use authorization unless the transition really is open to all of them.
+- Every transition must declare who may apply it by hand, or compiling the graph throws `InvalidDefinitionException`: authorization (`->authorize(...)`, an `authorize()` method or `#[Authorize('ability')]`), `->withoutAuthorization()` (`#[WithoutAuthorization]` on a class) for anyone, `->systemOnly()` (`#[SystemOnly]`) for system code only, or a trigger and no authorization, so only the trigger applies it. Never declare two of authorization, `withoutAuthorization()` and `systemOnly()`.
+- `withoutAuthorization()` means anyone: every user, guests, and jobs or commands with a null actor. Use authorization unless the transition really is open to all of them, and `systemOnly()` with `RunsAsSystem` for a transition only jobs apply.
 - An attribute only certain transitions may write is declared on the machine with `#[GuardedAttribute('tracking_code', Ship::class)]`.
 - To know how long a model has been in its state, declare `enteredAt:` on the model: `#[UseStateMachine('status', TicketStatusMachine::class, enteredAt: 'status_changed_at')]`. Interlock sets that column on create and on every transition; never write it yourself outside a bypass. Its migration adds a nullable, indexed timestamp and backfills existing rows from `updated_at`. Do not keep a hand-written `*_changed_at` column or read `updated_at` as a stand-in for it.
 
@@ -79,6 +79,7 @@ $ticket->signal('reply', $user); // 'customer_replied', 'reopen' or null
 - `FailedGuardException` (422): a guard failed. Declare guards with `->guard('has_title', fn(Post $post) => filled($post->title), 'A post needs a title.')` or `#[Guard('message')]` on a method of a class-based transition. Match on `$e->guard`, not on the message.
 - `UnauthorizedTransitionException` (403): the actor is not authorized. Declare it with `->authorize(fn(?User $actor, Expense $expense) => ...)`, a Gate ability name, an `authorize()` method or `#[Authorize('ability')]`. The actor defaults to the authenticated user; pass one with `transition('approve', $manager)` or `transition('approve', null)`.
 - `TriggerOnlyTransitionException` (403, extends `UnauthorizedTransitionException`): a transition with a trigger and no authorization was applied or staged by hand. Only its trigger applies it.
+- `SystemOnlyTransitionException` (403, extends `UnauthorizedTransitionException`): a `systemOnly()` transition was applied, or a staged one saved, outside `Interlock::asSystem()`.
 - Do not check states by hand before transitioning. Use `$model->availableTransitions($actor)` to show users what they can do.
 
 ### Bypass
@@ -96,6 +97,31 @@ Interlock::bypass('Import orders from the old shop', function () use ($rows) {
 });
 </code-snippet>
 @endverbatim
+
+### Transitions only jobs apply
+
+For a transition only a job or other system code applies, declare `->systemOnly()` (`#[SystemOnly]` on a class) and run the job with the `RunsAsSystem` middleware. Do not use `->withoutAuthorization()` for it: that lets any actor apply it, guests included. Inside `Interlock::asSystem()` authorization is skipped and guards still run; the actor defaults to null, and history records the reason.
+
+@verbatim
+<code-snippet name="System-only transitions applied by a job" lang="php">
+use RobertBoes\Interlock\Interlock;
+use RobertBoes\Interlock\System\RunsAsSystem;
+
+$this->transition('complete')->from(DeletionStatus::Processing)->to(DeletionStatus::Completed)->systemOnly(),
+
+// In the job:
+public function middleware(): array
+{
+    return [new RunsAsSystem('Deletion job')];
+}
+
+// Middleware does not wrap a job's failed() method, or code outside a job:
+Interlock::asSystem('Deletion job', fn() => $deletion->transition('fail'));
+</code-snippet>
+@endverbatim
+
+- `systemOnly()` cannot be combined with `->authorize(...)` or `->withoutAuthorization()`. Combined with a trigger it means "the trigger, or system code".
+- A trigger-only transition is still refused inside `Interlock::asSystem()`.
 
 ### Querying by state
 
@@ -149,7 +175,7 @@ Enforcement covers everything that goes through Eloquent. `DB::table()`, `toBase
 
 - Create models in any state with factories: `Order::factory()->create(['status' => OrderStatus::Shipped])`. Everything else stays enforced, so tests catch illegal transitions.
 - Assert on transitions with `Interlock::assertTransitioned($order, 'ship')` and `Interlock::assertNotTransitioned($order)`, not by reading the state column.
-- `Interlock::fake()` skips `apply`, `afterCommit`, guards and authorization for the rest of the test, to test the calling code in isolation. A trigger-only transition applied by hand still throws `TriggerOnlyTransitionException`.
+- `Interlock::fake()` skips `apply`, `afterCommit`, guards and authorization for the rest of the test, to test the calling code in isolation. A trigger-only transition applied by hand still throws `TriggerOnlyTransitionException`, and a system-only one applied outside `Interlock::asSystem()` still throws `SystemOnlyTransitionException`.
 - `Interlock::bypassForTest('reason')` allows direct writes for the rest of one test only.
 - Keep one test that checks every machine for unreachable states and dead ends:
 

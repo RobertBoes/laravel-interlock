@@ -16,8 +16,11 @@ use RobertBoes\Interlock\Exceptions\NotAFromStateException;
 use RobertBoes\Interlock\Exceptions\StaleStateException;
 use RobertBoes\Interlock\Exceptions\UnauthorizedTransitionException;
 use RobertBoes\Interlock\Exceptions\UnknownTransitionException;
+use RobertBoes\Interlock\Interlock;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
+use RobertBoes\Interlock\Tests\Fixtures\Deletions\DeletionRequest;
+use RobertBoes\Interlock\Tests\Fixtures\Deletions\DeletionStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Employee;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Expense;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\ExpenseStatus;
@@ -68,6 +71,18 @@ it('responds 403 when only its trigger may apply the transition', function () {
         ->assertJson(['message' => 'Only its trigger applies transition [publish].']);
 
     expect($post->fresh()->status)->toBe(PostStatus::Ready);
+});
+
+it('responds 403 when only system code may apply the transition', function () {
+    Route::post('/deletions/{id}/complete', fn(string $id) => DeletionRequest::findOrFail($id)->transition('complete'));
+    $request = Interlock::asSystem('Deletion job', fn() => DeletionRequest::create()->transition('start'));
+
+    $this->actingAs(Employee::manager())
+        ->postJson("/deletions/{$request->getKey()}/complete")
+        ->assertForbidden()
+        ->assertJson(['message' => 'Only system code applies transition [complete]. Apply it inside Interlock::asSystem($reason, $callback).']);
+
+    expect($request->fresh()->status)->toBe(DeletionStatus::Processing);
 });
 
 it('responds 422 with the guard\'s message when a guard fails', function () {

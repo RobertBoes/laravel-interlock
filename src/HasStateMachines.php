@@ -25,6 +25,7 @@ use RobertBoes\Interlock\Exceptions\DirectWriteException;
 use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
 use RobertBoes\Interlock\Exceptions\MissingBuilderTraitException;
 use RobertBoes\Interlock\Exceptions\NotAFromStateException;
+use RobertBoes\Interlock\Exceptions\SystemOnlyTransitionException;
 use RobertBoes\Interlock\Exceptions\TriggerOnlyTransitionException;
 use RobertBoes\Interlock\Graph\CompiledTransition;
 use RobertBoes\Interlock\Graph\GraphRepository;
@@ -38,6 +39,7 @@ use RobertBoes\Interlock\Persistence\CompareAndSwapBuilder;
 use RobertBoes\Interlock\Persistence\DirectWriteCheck;
 use RobertBoes\Interlock\Persistence\StagedTransition;
 use RobertBoes\Interlock\Persistence\UnsavedModel;
+use RobertBoes\Interlock\System\SystemScope;
 use RobertBoes\Interlock\Testing\TransitionLog;
 use Throwable;
 
@@ -81,11 +83,12 @@ trait HasStateMachines
     }
 
     /**
-     * The actor defaults to the authenticated user; pass null to apply it on behalf of no one.
+     * The actor defaults to the authenticated user, or no one inside Interlock::asSystem(); pass null to apply it on
+     * behalf of no one.
      */
     public function transition(string|Transition $transition, ?Authenticatable $actor = null): static
     {
-        $compiled = $this->interlockStageTransition($transition, func_num_args() > 1 ? $actor : $this->interlockAuthenticatedActor(), null);
+        $compiled = $this->interlockStageTransition($transition, func_num_args() > 1 ? $actor : $this->interlockDefaultActor(), null);
         $this->interlockSaveOrThrowWhenCancelled($compiled);
 
         return $this;
@@ -106,7 +109,7 @@ trait HasStateMachines
             return null;
         }
 
-        $this->transition($answering->name, func_num_args() > 1 ? $actor : $this->interlockAuthenticatedActor());
+        $this->transition($answering->name, func_num_args() > 1 ? $actor : $this->interlockDefaultActor());
 
         return $answering->name;
     }
@@ -116,7 +119,7 @@ trait HasStateMachines
      */
     public function stageTransition(string|Transition $transition, ?Authenticatable $actor = null): static
     {
-        $this->interlockStageTransition($transition, func_num_args() > 1 ? $actor : $this->interlockAuthenticatedActor(), null);
+        $this->interlockStageTransition($transition, func_num_args() > 1 ? $actor : $this->interlockDefaultActor(), null);
 
         return $this;
     }
@@ -276,10 +279,11 @@ trait HasStateMachines
      */
     public function availableTransitions(?Authenticatable $actor = null): Collection
     {
-        $actor = func_num_args() > 0 ? $actor : $this->interlockAuthenticatedActor();
+        $actor = func_num_args() > 0 ? $actor : $this->interlockDefaultActor();
+        $asSystem = $this->interlockSystemReason() !== null;
 
         return new Collection($this->interlockGraph()->transitions())
-            ->filter(fn(CompiledTransition $transition) => $transition->isAvailable($this, $actor))
+            ->filter(fn(CompiledTransition $transition) => $transition->isAvailable($this, $actor, $asSystem))
             ->map(fn(CompiledTransition $transition) => new AvailableTransition($transition->name, $transition->signal, $transition->stateAttribute, $transition->targetState))
             ->values();
     }
@@ -336,6 +340,7 @@ trait HasStateMachines
         }
 
         $this->interlockRevertToFromStates($stagedTransitions);
+        $systemReason = $this->interlockSystemReason();
 
         foreach ($stagedTransitions as $staged) {
             if ($staged->trigger !== null) {
@@ -344,6 +349,14 @@ trait HasStateMachines
 
             if ($staged->compiled->triggerOnly) {
                 throw TriggerOnlyTransitionException::appliedByHand($this, $staged->compiled);
+            }
+
+            if ($systemReason !== null) {
+                continue;
+            }
+
+            if ($staged->compiled->systemOnly) {
+                throw SystemOnlyTransitionException::outsideSystemScope($this, $staged->compiled);
             }
 
             $staged->steps->authorize($this, $staged->actor, $staged->compiled);
@@ -364,7 +377,7 @@ trait HasStateMachines
             }
 
             foreach ($appliedTransitions as $applied) {
-                $this->interlockRecordHistory($applied->historyRecord($this));
+                $this->interlockRecordHistory($applied->historyRecord($this, $systemReason));
             }
 
             $connection->commit();
@@ -517,7 +530,8 @@ trait HasStateMachines
                     transition: null,
                     fromState: $this->getOriginal($stateAttribute),
                     targetState: $this->getAttribute($stateAttribute),
-                    actor: $this->interlockAuthenticatedActor(),
+                    actor: $this->interlockDefaultActor(),
+                    systemReason: $this->interlockSystemReason(),
                     oldAttributes: array_map(fn(string $attribute) => $this->getRawOriginal($attribute), $attributes),
                     newAttributes: array_map(fn(string $attribute) => $this->getAttributes()[$attribute] ?? null, $attributes),
                     bypassReason: $reason,
@@ -688,9 +702,21 @@ trait HasStateMachines
         });
     }
 
-    private function interlockAuthenticatedActor(): ?Authenticatable
+    /**
+     * The authenticated user, or no one inside a system scope, even within a web request.
+     */
+    private function interlockDefaultActor(): ?Authenticatable
     {
+        if ($this->interlockSystemReason() !== null) {
+            return null;
+        }
+
         return Container::getInstance()->make(AuthFactory::class)->guard()->user();
+    }
+
+    private function interlockSystemReason(): ?string
+    {
+        return Container::getInstance()->make(SystemScope::class)->reason();
     }
 
     private function interlockGraph(): ModelGraph

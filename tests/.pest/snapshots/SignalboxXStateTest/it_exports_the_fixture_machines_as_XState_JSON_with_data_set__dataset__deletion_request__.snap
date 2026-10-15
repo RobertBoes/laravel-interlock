@@ -1,0 +1,46 @@
+{
+    "id": "DeletionStatusMachine",
+    "initial": "requested",
+    "states": {
+        "requested": {
+            "on": {
+                "start": {
+                    "target": "processing",
+                    "meta": {
+                        "trigger": true,
+                        "systemOnly": true
+                    }
+                },
+                "cancel": {
+                    "target": "cancelled"
+                }
+            }
+        },
+        "processing": {
+            "on": {
+                "complete": {
+                    "target": "completed",
+                    "meta": {
+                        "systemOnly": true
+                    }
+                },
+                "fail": {
+                    "target": "failed",
+                    "guard": "has_failure_reason",
+                    "meta": {
+                        "systemOnly": true
+                    }
+                }
+            }
+        },
+        "completed": {
+            "type": "final"
+        },
+        "failed": {
+            "type": "final"
+        },
+        "cancelled": {
+            "type": "final"
+        }
+    }
+}

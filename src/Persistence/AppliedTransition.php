@@ -17,7 +17,7 @@ final readonly class AppliedTransition
         public array $oldAttributes,
     ) {}
 
-    public function historyRecord(Model $model): HistoryRecord
+    public function historyRecord(Model $model, ?string $systemReason): HistoryRecord
     {
         return new HistoryRecord(
             model: $model,
@@ -29,6 +29,7 @@ final readonly class AppliedTransition
             oldAttributes: $this->oldAttributes,
             newAttributes: array_map(fn(string $attribute) => $model->getAttributes()[$attribute] ?? null, $this->attributes),
             trigger: $this->staged->trigger,
+            systemReason: $systemReason,
         );
     }
 }

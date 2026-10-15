@@ -80,7 +80,7 @@ final class InvalidDefinitionException extends LogicException implements Interlo
     public static function missingAuthorization(string $machine, string $transition): self
     {
         return new self(sprintf(
-            'Transition [%s] in %s declares no authorization, so no one may apply it. Call ->authorize() with who may apply it, ->withoutAuthorization() to let anyone apply it, or ->trigger() to let only its trigger apply it.',
+            'Transition [%s] in %s declares no authorization, so no one may apply it. Call ->authorize() with who may apply it, ->withoutAuthorization() to let anyone apply it, ->systemOnly() to let only system code apply it, or ->trigger() to let only its trigger apply it.',
             $transition,
             $machine,
         ));
@@ -92,7 +92,7 @@ final class InvalidDefinitionException extends LogicException implements Interlo
     public static function missingAuthorizationOfClass(string $transition): self
     {
         return new self(sprintf(
-            'Transition %s declares no authorization, so no one may apply it. Add an authorize() method or #[Authorize(...)] with who may apply it, #[WithoutAuthorization] to let anyone apply it, or a static trigger() method to let only its trigger apply it.',
+            'Transition %s declares no authorization, so no one may apply it. Add an authorize() method or #[Authorize(...)] with who may apply it, #[WithoutAuthorization] to let anyone apply it, #[SystemOnly] to let only system code apply it, or a static trigger() method to let only its trigger apply it.',
             $transition,
         ));
     }
@@ -117,6 +117,33 @@ final class InvalidDefinitionException extends LogicException implements Interlo
         return new self(sprintf(
             'Transition %s declares both authorization and #[WithoutAuthorization]. Keep one of them.',
             $transition,
+        ));
+    }
+
+    /**
+     * @param  class-string<StateMachine>  $machine
+     * @param  string  $declaration  the call it combines systemOnly() with, such as "->authorize()"
+     */
+    public static function systemOnlyAnd(string $machine, string $transition, string $declaration): self
+    {
+        return new self(sprintf(
+            'Transition [%s] in %s calls both ->systemOnly() and %s. Keep one of them.',
+            $transition,
+            $machine,
+            $declaration,
+        ));
+    }
+
+    /**
+     * @param  class-string<Transition>  $transition
+     * @param  string  $declaration  what it combines #[SystemOnly] with, such as "authorization"
+     */
+    public static function classSystemOnlyAnd(string $transition, string $declaration): self
+    {
+        return new self(sprintf(
+            'Transition %s declares both #[SystemOnly] and %s. Keep one of them.',
+            $transition,
+            $declaration,
         ));
     }
 

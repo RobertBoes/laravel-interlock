@@ -28,7 +28,7 @@ it('records a transition on a machine with history', function () {
     expect($order->history)->toHaveCount(1)
         ->and($order->history->first()->only([
             'model_type', 'model_id', 'state_attribute', 'transition_name', 'from_state', 'target_state',
-            'actor_type', 'actor_id', 'old_attributes', 'new_attributes', 'bypass_reason', 'trigger_name',
+            'actor_type', 'actor_id', 'system_reason', 'old_attributes', 'new_attributes', 'bypass_reason', 'trigger_name',
         ]))->toBe([
             'model_type' => Order::class,
             'model_id' => $order->getKey(),
@@ -38,6 +38,7 @@ it('records a transition on a machine with history', function () {
             'target_state' => 'packing',
             'actor_type' => Employee::class,
             'actor_id' => 7,
+            'system_reason' => null,
             'old_attributes' => ['status' => 'pending'],
             'new_attributes' => ['status' => 'packing'],
             'bypass_reason' => null,

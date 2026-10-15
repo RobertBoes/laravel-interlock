@@ -15,6 +15,7 @@ Enforcement covers everything that goes through Eloquent. The query builder and 
 - [Applying transitions](#applying-transitions)
 - [Signals](#signals)
 - [Guards, authorization and actors](#guards-authorization-and-actors)
+- [System code](#system-code)
 - [Available transitions](#available-transitions)
 - [Querying by state](#querying-by-state)
 - [Enforcement](#enforcement)
@@ -379,7 +380,14 @@ A failing guard throws `FailedGuardException` with the guard's message, which re
 
 ### Authorization
 
-Every transition declares who may apply it by hand, in one of three ways: authorization, `withoutAuthorization()` for anyone, or a trigger for no one but the trigger. A state machine guards changes that are often hard to undo, so a transition that declares none of these isn't open to everyone: the graph rejects it.
+Every transition declares who may apply it by hand, in one of four ways:
+
+- **authorization**, `->authorize(...)` (an `authorize()` method or `#[Authorize]` on a class), for the actors it allows;
+- **`->withoutAuthorization()`** (`#[WithoutAuthorization]`), for anyone;
+- **`->systemOnly()`** (`#[SystemOnly]`), for [system code](#system-code) only;
+- **a trigger** and none of the above, for no one but the trigger.
+
+A state machine guards changes that are often hard to undo, so a transition that declares none of these isn't open to everyone: the graph rejects it.
 
 **Authorization** is a closure or method that receives the actor and the model and returns a bool or a Gate response, or the name of a Gate ability:
 
@@ -410,15 +418,17 @@ $this->transition('submit')->from(ExpenseStatus::Draft)->to(ExpenseStatus::Submi
 final class ReportProblem extends Transition
 ```
 
-Anyone means anyone: every user, a guest, and a job or command that applies it with a null actor. Use it for transitions any code path may apply, not to skip deciding.
+Anyone means anyone: every user, a guest, and a job or command that applies it with a null actor. Use it for transitions any code path may apply, not to skip deciding. For a transition only a job applies, use `systemOnly()` instead.
+
+**Only system code** applies a transition declared `->systemOnly()`, or a class marked `#[SystemOnly]`: code running inside `Interlock::asSystem()`, or the transition's trigger if it has one. Applying it anywhere else throws `SystemOnlyTransitionException`, for every actor; staging one throws it on a `save()` outside the scope. It extends `UnauthorizedTransitionException`, so it renders as 403. `availableTransitions()` offers it only inside the scope. See [System code](#system-code).
 
 **Only its trigger** applies a transition that has a [trigger](#triggers) and declares no authorization. Applying a trigger-only transition by hand throws `TriggerOnlyTransitionException`, for every actor, a guest and a null actor included; staging one throws it on `save()`. It extends `UnauthorizedTransitionException`, so it renders as 403 too. `availableTransitions()` never offers it. Give it authorization or `withoutAuthorization()` as well to let people apply it by hand; its trigger still applies it either way.
 
-The machine is checked when its graph is compiled, so a mistake fails in any test that touches the model. A transition that declares none of authorization, `withoutAuthorization()` and a trigger throws `InvalidDefinitionException` naming the transition and the three ways to fix it, and so does one that declares both authorization and `withoutAuthorization()`.
+The machine is checked when its graph is compiled, so a mistake fails in any test that touches the model. A transition that declares none of authorization, `withoutAuthorization()`, `systemOnly()` and a trigger throws `InvalidDefinitionException` naming the transition and the four ways to fix it. So does one that declares two of authorization, `withoutAuthorization()` and `systemOnly()`. A trigger combines with `systemOnly()`, meaning "the trigger, or system code", and with authorization or `withoutAuthorization()`.
 
 ### Actors
 
-The actor is the user a transition is applied on behalf of. It defaults to the authenticated user. Jobs and commands can pass one explicitly, or pass `null` to act on behalf of no one:
+The actor is the user a transition is applied on behalf of. It defaults to the authenticated user, or to no one inside [`Interlock::asSystem()`](#system-code). Jobs and commands can pass one explicitly, or pass `null` to act on behalf of no one:
 
 ```php
 $expense->transition('approve', $manager);
@@ -429,9 +439,75 @@ A null actor means no user, such as a guest, and authorization still decides for
 
 [Triggers](#triggers) are different: a trigger applies its transition without an actor and without checking its authorization. Declaring the trigger is your decision that the system may apply the transition, so there is no user to ask about. Its guards still run, and history records the trigger's name with no actor.
 
+## System code
+
+A job that deletes an account's data applies `start`, `complete` and `fail`, and no user should. `withoutAuthorization()` would let any actor apply them, a guest included, since a guest and a job both have a null actor. Declare them `systemOnly()` instead, and run the job as system code:
+
+```php
+$this->transition('start')
+    ->from(DeletionStatus::Requested)
+    ->to(DeletionStatus::Processing)
+    ->systemOnly()
+    ->trigger(fn(Builder $query) => $query->where('process_after', '<=', now())),
+
+$this->transition('complete')->from(DeletionStatus::Processing)->to(DeletionStatus::Completed)->systemOnly(),
+```
+
+```php
+use RobertBoes\Interlock\System\RunsAsSystem;
+
+final class ProcessDataDeletion implements ShouldQueue
+{
+    use Queueable;
+
+    public function __construct(public DeletionRequest $request) {}
+
+    public function middleware(): array
+    {
+        return [new RunsAsSystem('Deletion job')];
+    }
+
+    public function handle(): void
+    {
+        // ...
+        $this->request->transition('complete');
+    }
+}
+```
+
+`RunsAsSystem` runs the job's `handle()` inside `Interlock::asSystem()`. It doesn't wrap the job's `failed()` method, so wrap the transition there yourself:
+
+```php
+use RobertBoes\Interlock\Interlock;
+
+public function failed(Throwable $exception): void
+{
+    Interlock::asSystem('Deletion job', fn() => $this->request->transition('fail'));
+}
+```
+
+Any other code runs as the system the same way, such as a scheduled command, or an admin's "Process now" button. Check the admin's permission first; an actor you pass is recorded beside the reason:
+
+```php
+Gate::authorize('process-deletions');
+
+Interlock::asSystem('Admin processed now', fn() => $deletion->transition('start', auth()->user()));
+```
+
+Inside the scope:
+
+- authorization is skipped for every transition, as it is for a trigger; guards still run;
+- system-only transitions may be applied, and `availableTransitions()` offers every transition from the current state whose guards pass;
+- a trigger-only transition is still refused, and never offered: only its trigger applies it;
+- the actor defaults to null, even when a user is signed in. Pass one to record it.
+
+The reason is required, and a blank one throws `InvalidSystemScopeException`. [History](#history) records it beside the actor. Scopes nest, the innermost reason winning, and a scope ends when its callback returns or throws. `asSystem()` returns whatever the callback returns.
+
+A trigger counts as system code too: it applies its transition, system-only or not, without checking authorization.
+
 ## Available transitions
 
-`availableTransitions()` returns the transitions an actor can apply to the model right now, across all its machines: those whose from-states include the current state, whose guards pass and whose authorization allows the actor. A trigger-only transition is never among them. Nothing is written and no events are dispatched.
+`availableTransitions()` returns the transitions an actor can apply to the model right now, across all its machines: those whose from-states include the current state, whose guards pass and whose authorization allows the actor. A trigger-only transition is never among them, and a system-only one only inside [`Interlock::asSystem()`](#system-code), where authorization is skipped. Nothing is written and no events are dispatched.
 
 ```php
 $order->availableTransitions();          // for the authenticated user
@@ -613,7 +689,7 @@ public static function trigger(Builder $query): void
 }
 ```
 
-The `publish` above declares no authorization, so it is trigger-only: only the trigger applies it, and applying it by hand throws `TriggerOnlyTransitionException`. To let people publish early as well, add `->authorize(...)`, or `->withoutAuthorization()` for anyone; the trigger still applies it, as triggers don't check authorization. See [Authorization](#authorization).
+The `publish` above declares no authorization, so it is trigger-only: only the trigger applies it, and applying it by hand throws `TriggerOnlyTransitionException`. To let people publish early as well, add `->authorize(...)`, `->withoutAuthorization()` for anyone, or `->systemOnly()` for [system code](#system-code); the trigger still applies it, as triggers don't check authorization. See [Authorization](#authorization).
 
 A transition that takes input cannot be built by name, so it cannot have a trigger: a transition class whose constructor has required parameters and declares `trigger()` throws `InvalidDefinitionException` when its graph is compiled.
 
@@ -716,7 +792,7 @@ use RobertBoes\Interlock\Attributes\RecordsHistory;
 class OrderStatusMachine extends StateMachine
 ```
 
-Without the migration, the machine's first transition throws a `MissingHistoryTableException` that names the machine and says how to fix it.
+Without the migration, the machine's first transition throws a `MissingHistoryTableException` that names the machine and says how to fix it. A history table migrated before the `system_reason` column was added needs it added: `$table->text('system_reason')->nullable()`.
 
 Every transition and every bypassed write on that machine's state attribute or guarded attributes is then recorded in the `interlock_history` table, inside the same transaction as the write, so history can never disagree with the stored state. Quiet saves are recorded too. Each entry holds:
 
@@ -724,6 +800,7 @@ Every transition and every bypassed write on that machine's state attribute or g
 - the transition's name, null for a bypassed write;
 - the from-state and target state, as their backing values;
 - the actor's type and key, null when there was none;
+- `system_reason`, the reason of the [`Interlock::asSystem()`](#system-code) scope it was written in, null outside one;
 - the attributes the transition or bypassed write wrote, old and new, and not the model's other changes or its entered-at columns;
 - the bypass reason, the trigger that applied it, and a timestamp.
 
@@ -790,7 +867,7 @@ php artisan interlock:signalbox --viz | pbcopy
 | `xstate` | XState v5 machine config JSON |
 | `xstate-ts` | The same config as TypeScript, plus state and event types |
 
-In the XState export, signals are events: each state's `on` is keyed by the signal a transition answers, with the transition's name in `meta: { transition: 'reopen' }` where the two differ, and the TypeScript event type is the union of the signals. Parent states are nested states and final states are `type: 'final'`. Guards appear by name only, so no server logic leaks; a transition with several guards gets one guard naming them all, such as `has_assessment and within_policy_limit`. Triggered transitions carry `meta: { trigger: true }`. A machine's XState ID is its class name without the namespace, so exporting every machine as XState fails when two machines share a class name; rename one, or export them one at a time. The Mermaid export labels an edge with its signal, followed by the transition's name where they differ, such as `reply (reopen)`. For the locked post machine above, it looks like this:
+In the XState export, signals are events: each state's `on` is keyed by the signal a transition answers, with the transition's name in `meta: { transition: 'reopen' }` where the two differ, and the TypeScript event type is the union of the signals. Parent states are nested states and final states are `type: 'final'`. Guards appear by name only, so no server logic leaks; a transition with several guards gets one guard naming them all, such as `has_assessment and within_policy_limit`. Triggered transitions carry `meta: { trigger: true }`, and system-only transitions `meta: { systemOnly: true }`. A machine's XState ID is its class name without the namespace, so exporting every machine as XState fails when two machines share a class name; rename one, or export them one at a time. The Mermaid export labels an edge with its signal, followed by the transition's name where they differ, such as `reply (reopen)`. For the locked post machine above, it looks like this:
 
 ```mermaid
 stateDiagram-v2
@@ -813,6 +890,7 @@ Every Interlock exception implements `RobertBoes\Interlock\Exceptions\InterlockE
 | --- | --- | --- |
 | `UnauthorizedTransitionException` | 403 | The actor may not apply the transition (or the status a denying Gate response gave) |
 | `TriggerOnlyTransitionException` | 403 | The transition is trigger-only, so no one may apply it by hand; it extends `UnauthorizedTransitionException` |
+| `SystemOnlyTransitionException` | 403 | The transition is system-only and was applied outside `Interlock::asSystem()`; it extends `UnauthorizedTransitionException` |
 | `FailedGuardException` | 422 | A guard failed; the body's `message` is the guard's message |
 | `StaleStateException` | 409 | The stored state changed since the model was loaded; reload and retry |
 | `NotAFromStateException` | 409 | The current state isn't one of the transition's from-states, as when a form is submitted twice |
@@ -908,7 +986,7 @@ $this->post("/orders/{$order->id}/ship", ['tracking_code' => 'TRACK-1']);
 Interlock::assertTransitioned($order, 'ship');
 ```
 
-Faked transitions skip their guards and authorization too. They still check their from-states, write their target state with the model's other changes and dispatch their events, so an illegal transition still throws. A trigger-only transition applied by hand still throws `TriggerOnlyTransitionException`, as that is the machine's structure rather than a question of who asks.
+Faked transitions skip their guards and authorization too. They still check their from-states, write their target state with the model's other changes and dispatch their events, so an illegal transition still throws. A trigger-only transition applied by hand still throws `TriggerOnlyTransitionException`, and a system-only transition applied outside `Interlock::asSystem()` still throws `SystemOnlyTransitionException`, as that is the machine's structure rather than a question of who asks.
 
 ## License
 

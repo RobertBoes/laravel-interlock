@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property int|string|null $target_state
  * @property ?string $actor_type
  * @property int|string|null $actor_id
+ * @property ?string $system_reason the reason of the Interlock::asSystem() scope it was written in
  * @property array<string, mixed> $old_attributes
  * @property array<string, mixed> $new_attributes
  * @property ?string $bypass_reason

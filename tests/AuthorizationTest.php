@@ -158,14 +158,14 @@ it('lets anyone apply a transition class marked #[WithoutAuthorization], a guest
 it('rejects a fluent transition that declares no authorization and no trigger', function () {
     expect(fn() => (new PostWithTransitionWithoutAuthorization())->transition('submit'))->toThrow(
         InvalidDefinitionException::class,
-        'Transition [submit] in ' . MachineWithTransitionWithoutAuthorization::class . ' declares no authorization, so no one may apply it. Call ->authorize() with who may apply it, ->withoutAuthorization() to let anyone apply it, or ->trigger() to let only its trigger apply it.',
+        'Transition [submit] in ' . MachineWithTransitionWithoutAuthorization::class . ' declares no authorization, so no one may apply it. Call ->authorize() with who may apply it, ->withoutAuthorization() to let anyone apply it, ->systemOnly() to let only system code apply it, or ->trigger() to let only its trigger apply it.',
     );
 });
 
 it('rejects a transition class that declares no authorization and no trigger', function () {
     expect(fn() => (new PostWithTransitionClassWithoutAuthorization())->transition('transition_without_authorization'))->toThrow(
         InvalidDefinitionException::class,
-        'Transition ' . TransitionWithoutAuthorization::class . ' declares no authorization, so no one may apply it. Add an authorize() method or #[Authorize(...)] with who may apply it, #[WithoutAuthorization] to let anyone apply it, or a static trigger() method to let only its trigger apply it.',
+        'Transition ' . TransitionWithoutAuthorization::class . ' declares no authorization, so no one may apply it. Add an authorize() method or #[Authorize(...)] with who may apply it, #[WithoutAuthorization] to let anyone apply it, #[SystemOnly] to let only system code apply it, or a static trigger() method to let only its trigger apply it.',
     );
 });
 

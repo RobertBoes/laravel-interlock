@@ -18,6 +18,8 @@ return new class extends Migration {
             $table->string('from_state')->nullable();
             $table->string('target_state')->nullable();
             $table->nullableMorphs('actor');
+            // Null outside Interlock::asSystem().
+            $table->text('system_reason')->nullable();
             $table->json('old_attributes');
             $table->json('new_attributes');
             $table->text('bypass_reason')->nullable();

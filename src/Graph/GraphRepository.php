@@ -15,6 +15,7 @@ use RobertBoes\Interlock\Attributes\GuardedAttribute;
 use RobertBoes\Interlock\Attributes\InitialStates;
 use RobertBoes\Interlock\Attributes\OnSignal;
 use RobertBoes\Interlock\Attributes\RecordsHistory;
+use RobertBoes\Interlock\Attributes\SystemOnly;
 use RobertBoes\Interlock\Attributes\TargetState;
 use RobertBoes\Interlock\Attributes\UseStateMachine;
 use RobertBoes\Interlock\Attributes\WithoutAuthorization;
@@ -212,7 +213,15 @@ final class GraphRepository
             throw InvalidDefinitionException::authorizedAndWithoutAuthorization($machine->class, $definition->name);
         }
 
-        $triggerOnly = ! $authorized && ! $definition->anyoneMayApply;
+        if ($definition->systemOnly && $authorized) {
+            throw InvalidDefinitionException::systemOnlyAnd($machine->class, $definition->name, '->authorize()');
+        }
+
+        if ($definition->systemOnly && $definition->anyoneMayApply) {
+            throw InvalidDefinitionException::systemOnlyAnd($machine->class, $definition->name, '->withoutAuthorization()');
+        }
+
+        $triggerOnly = ! $authorized && ! $definition->anyoneMayApply && ! $definition->systemOnly;
 
         if ($triggerOnly && $definition->trigger === null) {
             throw InvalidDefinitionException::missingAuthorization($machine->class, $definition->name);
@@ -230,6 +239,7 @@ final class GraphRepository
             $definition->trigger,
             $definition->triggerFansOut,
             $triggerOnly,
+            $definition->systemOnly,
         );
     }
 
@@ -265,8 +275,18 @@ final class GraphRepository
             throw InvalidDefinitionException::classAuthorizedAndWithoutAuthorization($class);
         }
 
+        $systemOnly = $reflection->getAttributes(SystemOnly::class) !== [];
+
+        if ($systemOnly && $authorized) {
+            throw InvalidDefinitionException::classSystemOnlyAnd($class, 'authorization');
+        }
+
+        if ($systemOnly && $anyoneMayApply) {
+            throw InvalidDefinitionException::classSystemOnlyAnd($class, '#[WithoutAuthorization]');
+        }
+
         $trigger = $this->triggerOf($reflection);
-        $triggerOnly = ! $authorized && ! $anyoneMayApply;
+        $triggerOnly = ! $authorized && ! $anyoneMayApply && ! $systemOnly;
 
         if ($triggerOnly && $trigger === null) {
             throw InvalidDefinitionException::missingAuthorizationOfClass($class);
@@ -284,6 +304,7 @@ final class GraphRepository
             $trigger,
             $this->triggerFansOut($reflection),
             $triggerOnly,
+            $systemOnly,
         );
     }
 
@@ -358,6 +379,7 @@ final class GraphRepository
         ?Closure $trigger,
         bool $triggerFansOut,
         bool $triggerOnly,
+        bool $systemOnly,
     ): CompiledTransition {
         $stateOfAnotherEnum = self::stateNotOf($model->getCasts()[$machine->stateAttribute] ?? null, [...$fromStates, $targetState]);
 
@@ -389,6 +411,7 @@ final class GraphRepository
             $trigger,
             $triggerFansOut,
             $triggerOnly,
+            $systemOnly,
         );
     }
 

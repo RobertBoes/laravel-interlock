@@ -19,6 +19,7 @@ final readonly class CompiledTransition
      * @param  class-string<Transition>|null  $class  null for a fluent transition
      * @param  (Closure(Builder<Model>): mixed)|null  $trigger
      * @param  bool  $triggerOnly  it has a trigger and declares no authorization, so no one may apply it by hand
+     * @param  bool  $systemOnly  only system code, or its trigger, applies it
      */
     public function __construct(
         public string $name,
@@ -32,6 +33,7 @@ final readonly class CompiledTransition
         public ?Closure $trigger,
         public bool $triggerFansOut,
         public bool $triggerOnly,
+        public bool $systemOnly,
     ) {}
 
     public function startsFrom(?BackedEnum $state): bool
@@ -40,17 +42,17 @@ final readonly class CompiledTransition
     }
 
     /**
-     * Checks the stored state, but the guards see unsaved changes.
+     * Checks the stored state, but the guards see unsaved changes. System code skips authorization.
      */
-    public function isAvailable(Model $model, ?Authenticatable $actor): bool
+    public function isAvailable(Model $model, ?Authenticatable $actor, bool $asSystem): bool
     {
-        if ($this->triggerOnly || ! $this->startsFrom($model->getOriginal($this->stateAttribute))) {
+        if ($this->triggerOnly || ($this->systemOnly && ! $asSystem) || ! $this->startsFrom($model->getOriginal($this->stateAttribute))) {
             return false;
         }
 
         $steps = $this->stepsWithoutInput();
 
-        return $steps->allows($model, $actor) && $steps->guardsHold($model);
+        return ($asSystem || $steps->allows($model, $actor)) && $steps->guardsHold($model);
     }
 
     /**

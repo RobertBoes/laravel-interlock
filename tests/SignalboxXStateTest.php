@@ -5,6 +5,7 @@ use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\ImportedPostStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Contracts\FinanceApprovalMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Contracts\LegalApprovalMachine;
+use RobertBoes\Interlock\Tests\Fixtures\Deletions\DeletionStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\ExpenseStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\Exports\ClaimStatusMachine;
 use RobertBoes\Interlock\Tests\Fixtures\LegacyOrders\OrderStatusMachine as LegacyOrderStatusMachine;
@@ -175,6 +176,20 @@ it('types the events of the TypeScript export as the signals, each once', functi
         ->toContain('export type TicketStatusMachineEvent = { type: "answer" } | { type: "reply" } | { type: "close" };');
 });
 
+it('marks system-only transitions in the metadata', function () {
+    config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/Deletions']]);
+
+    $states = json_decode(xstate(['machine' => DeletionStatusMachine::class]), true)['states'];
+
+    expect($states['requested']['on'])->toBe([
+        'start' => ['target' => 'processing', 'meta' => ['trigger' => true, 'systemOnly' => true]],
+        'cancel' => ['target' => 'cancelled'],
+    ])->and($states['processing']['on'])->toBe([
+        'complete' => ['target' => 'completed', 'meta' => ['systemOnly' => true]],
+        'fail' => ['target' => 'failed', 'guard' => 'has_failure_reason', 'meta' => ['systemOnly' => true]],
+    ]);
+});
+
 it('keys states of an integer-backed enum by their value as a string, in an object', function () {
     config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/Exports']]);
 
@@ -261,6 +276,7 @@ dataset('fixture machines', [
     'expense' => [ExpenseStatusMachine::class, [__DIR__ . '/Fixtures/Expenses']],
     'claim' => [ClaimStatusMachine::class, [__DIR__ . '/Fixtures/Exports']],
     'ticket' => [TicketStatusMachine::class, [__DIR__ . '/Fixtures/SupportTickets']],
+    'deletion request' => [DeletionStatusMachine::class, [__DIR__ . '/Fixtures/Deletions']],
 ]);
 
 it('exports the fixture machines as XState JSON', function (string $machine, array $paths) {

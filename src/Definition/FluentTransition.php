@@ -20,6 +20,8 @@ final class FluentTransition
 
     public private(set) bool $anyoneMayApply = false;
 
+    public private(set) bool $systemOnly = false;
+
     public private(set) ?Closure $applyStep = null;
 
     public private(set) ?Closure $afterCommitStep = null;
@@ -80,6 +82,16 @@ final class FluentTransition
     }
 
     /**
+     * Only system code, inside Interlock::asSystem(), applies it, or its trigger if it declares one.
+     */
+    public function systemOnly(): self
+    {
+        $this->systemOnly = true;
+
+        return $this;
+    }
+
+    /**
      * The check receives the model, unsaved changes included, and returns whether the guard holds.
      */
     public function guard(string $name, Closure $check, string $message): self
@@ -101,8 +113,8 @@ final class FluentTransition
 
     /**
      * The condition constrains the model's query builder; the from-states are added to it. Matching models get the
-     * transition without an actor or authorization check; its guards still run. Without authorize() or
-     * withoutAuthorization(), only the trigger applies it.
+     * transition without an actor or authorization check; its guards still run. Without authorize(),
+     * withoutAuthorization() or systemOnly(), only the trigger applies it.
      */
     public function trigger(callable $condition, bool $fanOut = false): self
     {

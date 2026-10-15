@@ -133,6 +133,10 @@ final class XStateConfig
                 $event['meta']['trigger'] = true;
             }
 
+            if ($transition->systemOnly) {
+                $event['meta']['systemOnly'] = true;
+            }
+
             $events->{$transition->signal} = $event;
         }
 

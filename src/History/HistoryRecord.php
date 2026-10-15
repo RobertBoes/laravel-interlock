@@ -13,6 +13,7 @@ final readonly class HistoryRecord
      * @param  ?BackedEnum  $fromState  null for a model created in its state inside a bypass
      * @param  array<string, mixed>  $oldAttributes  as stored before the write
      * @param  array<string, mixed>  $newAttributes  as stored after the write
+     * @param  ?string  $systemReason  the reason of the Interlock::asSystem() scope it was written in
      */
     public function __construct(
         public Model $model,
@@ -25,5 +26,6 @@ final readonly class HistoryRecord
         public array $newAttributes,
         public ?string $bypassReason = null,
         public ?string $trigger = null,
+        public ?string $systemReason = null,
     ) {}
 }

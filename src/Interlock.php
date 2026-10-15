@@ -15,6 +15,7 @@ use RobertBoes\Interlock\Exceptions\InvalidBypassException;
 use RobertBoes\Interlock\Exceptions\InvalidFakeException;
 use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Graph\SoundnessCheck;
+use RobertBoes\Interlock\System\SystemScope;
 use RobertBoes\Interlock\Testing\TransitionLog;
 use RobertBoes\Interlock\Triggers\TriggerMonitor;
 use RobertBoes\Interlock\Triggers\TriggerStatus;
@@ -40,6 +41,20 @@ final class Interlock
     public static function bypass(string $reason, Closure $callback): mixed
     {
         return Container::getInstance()->make(BypassScope::class)->run($reason, $callback);
+    }
+
+    /**
+     * Runs the callback as system code: transitions skip authorization, guards still run, and the actor defaults to
+     * null. Only system code applies a system-only transition.
+     *
+     * @template TReturn
+     *
+     * @param  Closure(): TReturn  $callback
+     * @return TReturn
+     */
+    public static function asSystem(string $reason, Closure $callback): mixed
+    {
+        return Container::getInstance()->make(SystemScope::class)->run($reason, $callback);
     }
 
     /**

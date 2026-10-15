@@ -48,6 +48,12 @@ it('keys events by signal', function () {
     ]);
 });
 
+it('marks system-only transitions', function () {
+    config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/Deletions']]);
+
+    expect(vizConfig()['states']['processing']['on']['complete'])->toBe(['target' => 'completed', 'meta' => ['systemOnly' => true]]);
+});
+
 it('refuses to combine machines that share a class name', function () {
     config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/Orders', __DIR__ . '/Fixtures/LegacyOrders']]);
 

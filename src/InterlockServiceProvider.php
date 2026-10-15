@@ -15,6 +15,7 @@ use RobertBoes\Interlock\Discovery\ModelRegistry;
 use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\History\DatabaseHistoryRecorder;
 use RobertBoes\Interlock\History\HistoryRecorder;
+use RobertBoes\Interlock\System\SystemScope;
 use RobertBoes\Interlock\Testing\PestExpectations;
 use RobertBoes\Interlock\Testing\TransitionLog;
 use Spatie\LaravelPackageTools\Package;
@@ -35,6 +36,7 @@ class InterlockServiceProvider extends PackageServiceProvider
     {
         $this->app->singleton(GraphRepository::class);
         $this->app->singleton(BypassScope::class);
+        $this->app->singleton(SystemScope::class);
         $this->app->singleton(HistoryRecorder::class, fn(Application $app) => $app->make(
             $app->make('config')->string('interlock.history.recorder', DatabaseHistoryRecorder::class),
         ));

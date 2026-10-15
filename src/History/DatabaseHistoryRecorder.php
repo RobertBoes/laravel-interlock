@@ -37,6 +37,7 @@ final class DatabaseHistoryRecorder implements HistoryRecorder
                 default => null,
             },
             'actor_id' => $record->actor?->getAuthIdentifier(),
+            'system_reason' => $record->systemReason,
             'old_attributes' => $record->oldAttributes,
             'new_attributes' => $record->newAttributes,
             'bypass_reason' => $record->bypassReason,
