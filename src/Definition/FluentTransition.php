@@ -43,10 +43,7 @@ final class FluentTransition
     }
 
     /**
-     * Declare who may apply the transition: a closure that receives the actor (null when there is none) and the model
-     * and returns a bool or a Gate response, or the name of a Gate ability, checked for the actor with the model. A
-     * denied actor makes the transition throw UnauthorisedTransitionException, which renders as 403. Without it,
-     * every actor may apply the transition, null included.
+     * A closure receiving the actor (or null) and the model that returns a bool or a Gate response, or a Gate ability.
      */
     public function authorise(Closure|string $authorisation): self
     {
@@ -56,9 +53,7 @@ final class FluentTransition
     }
 
     /**
-     * Add a guard: a condition on the model that must hold for the transition to apply, such as "stock is available".
-     * The check receives the model, unsaved changes included, and returns whether the condition holds. When it does
-     * not, the transition throws FailedGuardException with the message, which renders as 422.
+     * The check receives the model, unsaved changes included, and returns whether the guard holds.
      */
     public function guard(string $name, Closure $check, string $message): self
     {
@@ -68,8 +63,7 @@ final class FluentTransition
     }
 
     /**
-     * Run a step inside the transition's transaction, before the compare-and-swap write. The closure receives the
-     * model; attributes it sets are saved in the same update, and rows it writes roll back when the transition fails.
+     * Runs inside the transaction, before the compare-and-swap write; attributes it sets are saved in the same update.
      */
     public function apply(Closure $step): self
     {
@@ -79,16 +73,8 @@ final class FluentTransition
     }
 
     /**
-     * Apply the transition by itself once a condition holds, such as "`publish_at` has passed". The condition receives
-     * the model's query builder and constrains it: `fn(Builder $query) => $query->where('publish_at', '<=', now())`,
-     * or any other callable, such as an invokable scope class the app already taps onto its queries.
-     * The transition's from-states are added to it, so it only says what is specific to the trigger. Every minute, the
-     * scheduled interlock:triggers command applies the transition to each model that matches, without an actor and
-     * without checking its authorisation; its guards still run. Rescheduling means changing the data the condition
-     * reads; nothing needs cancelling.
-     *
-     * Each run applies it to at most `interlock.triggers.max_per_run` models, a chunk at a time. With `fanOut: true`,
-     * a run dispatches one job per chunk instead, so a busy trigger can use several queue workers.
+     * The condition constrains the model's query builder; the from-states are added to it. Matching models get the
+     * transition without an actor or authorisation check; its guards still run.
      */
     public function trigger(callable $condition, bool $fanOut = false): self
     {
@@ -98,9 +84,6 @@ final class FluentTransition
         return $this;
     }
 
-    /**
-     * Run a step once the transition has committed. The closure receives the model.
-     */
     public function afterCommit(Closure $step): self
     {
         $this->afterCommitStep = $step;

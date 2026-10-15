@@ -83,8 +83,6 @@ final class SignalboxCommand extends Command
     }
 
     /**
-     * Each registered machine once, with its transitions, ordered by class name, or only the given machine.
-     *
      * @return array<class-string<StateMachine>, array{CompiledMachine, list<CompiledTransition>}>
      */
     private function machines(ModelRegistry $registry, GraphRepository $graphs, ?string $only): array
@@ -121,9 +119,6 @@ final class SignalboxCommand extends Command
     }
 
     /**
-     * Exports every machine in one document: Mermaid diagrams as Markdown, XState configs as one JSON object keyed by
-     * machine ID, and TypeScript as one module.
-     *
      * @param  array<class-string<StateMachine>, array{CompiledMachine, list<CompiledTransition>}>  $machines
      */
     private function exportAll(ExportFormat $format, array $machines): string
@@ -136,8 +131,6 @@ final class SignalboxCommand extends Command
     }
 
     /**
-     * The machines whose XState IDs are the same, so that one would overwrite the other in an export of every machine.
-     *
      * @param  array<class-string<StateMachine>, array{CompiledMachine, list<CompiledTransition>}>  $machines
      * @return Collection<int, Collection<int, class-string<StateMachine>>>
      */
@@ -161,8 +154,6 @@ final class SignalboxCommand extends Command
     }
 
     /**
-     * Puts the diagrams in one Markdown document, each under a heading with its machine's name, ready to paste into docs or a pull request.
-     *
      * @param  array<class-string<StateMachine>, array{CompiledMachine, list<CompiledTransition>}>  $machines
      */
     private function markdown(array $machines): string

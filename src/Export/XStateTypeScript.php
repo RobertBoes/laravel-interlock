@@ -7,10 +7,6 @@ use Illuminate\Support\Str;
 use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\Graph\CompiledTransition;
 
-/**
- * Writes a state machine's XState config as TypeScript: the config as a constant with literal types, a union of the
- * states a model can be in and a union of the events, ready to type a frontend's state and the events it sends.
- */
 final class XStateTypeScript
 {
     /**

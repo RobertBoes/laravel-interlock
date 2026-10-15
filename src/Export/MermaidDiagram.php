@@ -6,9 +6,6 @@ use BackedEnum;
 use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\Graph\CompiledTransition;
 
-/**
- * Draws a state machine as a Mermaid `stateDiagram-v2`. States are named by their enum case, parent states are composite states, and each transition labels an edge from each of its from-states.
- */
 final class MermaidDiagram
 {
     private const string INDENT = '    ';
@@ -38,8 +35,6 @@ final class MermaidDiagram
     }
 
     /**
-     * Declares the states nested directly within the parent state, each parent state among them as a composite state around its own children.
-     *
      * @return list<string>
      */
     private static function states(CompiledMachine $machine, ?BackedEnum $parent, string $indent): array

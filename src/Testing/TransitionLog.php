@@ -5,9 +5,8 @@ namespace RobertBoes\Interlock\Testing;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * The transitions committed in this app instance, for Interlock's test assertions, and whether Interlock is faked.
- * Bound as a singleton, so a fresh app instance (the next test) starts empty and unfaked. It only records while
- * tests run, so long-running workers never accumulate transitions.
+ * A singleton, so each test's fresh app instance starts empty and unfaked. It only records while tests run, so
+ * long-running workers never accumulate transitions.
  */
 final class TransitionLog
 {
@@ -26,8 +25,6 @@ final class TransitionLog
     }
 
     /**
-     * The names of the transitions committed for the model's row, through this instance or any other, oldest first.
-     *
      * @return list<string>
      */
     public function transitionsOf(Model $model): array

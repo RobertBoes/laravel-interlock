@@ -8,7 +8,7 @@ use RuntimeException;
 final class MissingHistoryTableException extends RuntimeException implements InterlockException
 {
     /**
-     * @param  class-string<StateMachine>  $machine  the machine whose #[RecordsHistory] needs the table
+     * @param  class-string<StateMachine>  $machine
      */
     public static function on(?string $connection, string $table, string $machine): self
     {

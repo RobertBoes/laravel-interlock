@@ -6,8 +6,7 @@ use Attribute;
 use RobertBoes\Interlock\Transition;
 
 /**
- * An attribute other than the state attribute that only the named transitions of this state machine may write, such
- * as `#[GuardedAttribute('tracking_code', Ship::class)]`. Declared on the state machine, once per guarded attribute.
+ * An attribute that only the given transitions, by name or by class, may write.
  */
 #[Attribute(Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE)]
 final readonly class GuardedAttribute
@@ -16,7 +15,7 @@ final readonly class GuardedAttribute
     public array $transitions;
 
     /**
-     * @param  string|class-string<Transition>  ...$transitions  the transitions that may write it, by name or by class
+     * @param  string|class-string<Transition>  ...$transitions
      */
     public function __construct(public string $attribute, string ...$transitions)
     {

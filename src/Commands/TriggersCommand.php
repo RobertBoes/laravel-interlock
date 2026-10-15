@@ -13,7 +13,7 @@ use RobertBoes\Interlock\Triggers\RunTrigger;
 use Throwable;
 
 /**
- * Scheduled every minute by default. It only dispatches, so a large backlog never slows the scheduler down: the jobs do the querying.
+ * Only dispatches, so a large backlog never slows the scheduler down: the jobs do the querying.
  */
 final class TriggersCommand extends Command
 {
@@ -37,9 +37,8 @@ final class TriggersCommand extends Command
     }
 
     /**
-     * The lock is taken here, as dispatch() does for a unique job, and released by the queue once the job has run. A
-     * dispatch that fails releases it at once, so the next run can dispatch the trigger again, and is reported rather
-     * than thrown, so the triggers after it are still dispatched.
+     * Takes the unique lock as dispatch() would; the queue releases it once the job has run. A failed dispatch releases
+     * it at once and is reported rather than thrown, so the triggers after it are still dispatched.
      *
      * @return bool false when the dispatch failed
      */

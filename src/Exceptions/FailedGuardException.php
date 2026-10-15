@@ -8,9 +8,6 @@ use RobertBoes\Interlock\Graph\CompiledTransition;
 use RuntimeException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
-/**
- * A guard of the transition did not hold: "not now". Its message is the guard's own, and it renders as 422.
- */
 final class FailedGuardException extends RuntimeException implements InterlockException, HttpExceptionInterface
 {
     private function __construct(

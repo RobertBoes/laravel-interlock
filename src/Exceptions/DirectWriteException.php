@@ -38,8 +38,8 @@ final class DirectWriteException extends LogicException implements InterlockExce
     }
 
     /**
-     * @param  list<string>  $writers  the transitions that may write the guarded attribute
-     * @param  list<string>  $runningTransitions  the transitions being written by the save
+     * @param  list<string>  $writers
+     * @param  list<string>  $runningTransitions
      */
     public static function toGuardedAttribute(Model $model, string $guardedAttribute, array $writers, array $runningTransitions): self
     {
@@ -58,7 +58,7 @@ final class DirectWriteException extends LogicException implements InterlockExce
     }
 
     /**
-     * @param  list<string>  $writers  the transitions that may write the guarded attribute
+     * @param  list<string>  $writers
      */
     public static function createdWithGuardedAttribute(Model $model, string $guardedAttribute, array $writers): self
     {

@@ -8,8 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use RobertBoes\Interlock\Graph\CompiledTransition;
 
 /**
- * The actor may not apply the transition: "not you". It extends Laravel's authorisation exception, so it renders as
- * 403, or with the status a denying Gate response gave.
+ * Renders as 403, or with the status a denying Gate response gave.
  */
 final class UnauthorisedTransitionException extends AuthorizationException implements InterlockException
 {

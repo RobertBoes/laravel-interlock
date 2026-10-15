@@ -6,9 +6,6 @@ use Illuminate\Database\Eloquent\Model;
 use Pest\Expectation;
 use RobertBoes\Interlock\Interlock;
 
-/**
- * Interlock's Pest expectations, registered by the service provider when tests run under Pest.
- */
 final class PestExpectations
 {
     public static function register(): void
@@ -22,8 +19,6 @@ final class PestExpectations
     }
 
     /**
-     * The models an expectation is about: one model class, a list of them, or the registry from Interlock::models().
-     *
      * @param  class-string<Model>|list<class-string<Model>>|array<class-string<Model>, mixed>  $value
      * @return list<class-string<Model>>
      */

@@ -9,13 +9,11 @@ use RobertBoes\Interlock\Graph\GraphRepository;
 use WeakMap;
 
 /**
- * Writes history to the interlock_history table, on the model's own connection so it joins the write's transaction.
+ * Writes on the model's own connection, so the entry joins the write's transaction.
  */
 final class DatabaseHistoryRecorder implements HistoryRecorder
 {
-    /**
-     * @var WeakMap<ConnectionInterface, true> the connections the history table was found on
-     */
+    /** @var WeakMap<ConnectionInterface, true> */
     private WeakMap $connectionsWithTable;
 
     public function __construct(
@@ -51,9 +49,8 @@ final class DatabaseHistoryRecorder implements HistoryRecorder
     }
 
     /**
-     * Checked before the first entry on each connection, rather than by catching the insert's failure: on Postgres a
-     * failed statement aborts the transaction the insert runs in, so nothing more could be asked of the database after
-     * it. Only a table that exists is remembered, so a long-running worker sees the migration once it has run.
+     * Checked up front rather than by catching the insert's failure: on Postgres a failed statement aborts the
+     * transaction. Only a table that exists is remembered, so a long-running worker sees the migration once it has run.
      */
     private function ensureTableExists(HistoryEntry $entry, HistoryRecord $record): void
     {

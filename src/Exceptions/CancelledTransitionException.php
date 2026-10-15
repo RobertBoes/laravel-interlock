@@ -6,9 +6,6 @@ use Illuminate\Database\Eloquent\Model;
 use RobertBoes\Interlock\Graph\CompiledTransition;
 use RuntimeException;
 
-/**
- * A saving or updating listener cancelled the save that would have written a transition. Nothing was written.
- */
 final class CancelledTransitionException extends RuntimeException implements InterlockException
 {
     public static function saveCancelled(Model $model, CompiledTransition $transition): self

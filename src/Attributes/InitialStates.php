@@ -5,9 +5,6 @@ namespace RobertBoes\Interlock\Attributes;
 use Attribute;
 use BackedEnum;
 
-/**
- * The states a model may be created in, declared on its state machine.
- */
 #[Attribute(Attribute::TARGET_CLASS)]
 final readonly class InitialStates
 {

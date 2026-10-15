@@ -10,8 +10,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use RobertBoes\Interlock\Graph\GraphRepository;
 
 /**
- * Limits a query to the models whose current state is a from-state of the named transition. Guards and authorisation
- * are not evaluated.
+ * Guards and authorisation are not evaluated.
  */
 final readonly class InFromStateOf
 {

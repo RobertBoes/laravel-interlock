@@ -9,11 +9,8 @@ use RobertBoes\Interlock\Graph\CompiledTransition;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 /**
- * The stored state changed after the model was loaded, so the transition did not apply. It renders as 409 Conflict:
- * reload and try again.
- *
- * Laravel renders the message of an HTTP exception even with debug off, so the message says only that; the model, the
- * transition and the states are on its properties, and in the context Laravel's reporter logs.
+ * Laravel renders an HTTP exception's message even with debug off, so the message stays generic; the details are on
+ * its properties and in context().
  */
 final class StaleStateException extends RuntimeException implements InterlockException, HttpExceptionInterface
 {
@@ -39,8 +36,6 @@ final class StaleStateException extends RuntimeException implements InterlockExc
     }
 
     /**
-     * What Laravel's reporter logs with the exception.
-     *
      * @return array{model: class-string<Model>, key: mixed, transition: string, state_attribute: string, loaded_state: int|string, stored_state: int|string|null, row_deleted: bool}
      */
     public function context(): array

@@ -8,9 +8,7 @@ use RobertBoes\Interlock\Graph\CompiledTransition;
 use stdClass;
 
 /**
- * Builds an XState v5 machine config for a state machine. States are keyed by their enum value, the value a model
- * stores, so a frontend can look up the state it was given. Transitions are events on their from-states, parent states
- * are nested states, final states are `type: 'final'`, and guards appear by name only.
+ * States are keyed by their enum value, the value a model stores, so a frontend can look up the state it was given.
  */
 final class XStateConfig
 {
@@ -38,17 +36,13 @@ final class XStateConfig
         return class_basename($machine->class);
     }
 
-    /**
-     * Encodes configs as JSON, ready to import into the Stately visualiser or a frontend build.
-     */
     public static function json(mixed $config): string
     {
         return json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . PHP_EOL;
     }
 
     /**
-     * The state nodes nested directly within the parent state, or the top-level ones when no parent state is given.
-     * Maps are objects, so states keyed by sequential integer values still encode as a JSON object.
+     * An object, so states keyed by sequential integer values still encode as a JSON object.
      *
      * @param  list<CompiledTransition>  $transitions
      */
@@ -64,9 +58,8 @@ final class XStateConfig
     }
 
     /**
-     * One state node. XState needs an initial child for every parent state; as a parent state is never a target state,
-     * nothing enters one without naming a child, so its first child stands in. A leaf state within a final parent state
-     * is final itself, as XState only marks leaf states final.
+     * XState needs an initial child for every parent state; nothing enters one without naming a child, so its first
+     * child stands in. A leaf within a final parent state is final itself, as XState only marks leaf states final.
      *
      * @param  list<CompiledTransition>  $transitions
      */
@@ -124,7 +117,7 @@ final class XStateConfig
     }
 
     /**
-     * A target state by its key when it is a sibling of the from-state, otherwise by its ID, which XState resolves from anywhere in the machine.
+     * A sibling by its key, any other state by its `#id` path, which XState resolves from anywhere in the machine.
      */
     private static function target(CompiledMachine $machine, BackedEnum $fromState, BackedEnum $targetState): string
     {

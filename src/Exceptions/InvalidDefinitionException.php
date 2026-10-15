@@ -212,7 +212,7 @@ final class InvalidDefinitionException extends LogicException implements Interlo
     }
 
     /**
-     * @param  list<BackedEnum>  $path  from the state, through its parent states, back to itself
+     * @param  list<BackedEnum>  $path  the cycle, from the state back to itself
      */
     public static function stateNestedWithinItself(BackedEnum $state, array $path): self
     {
@@ -226,7 +226,7 @@ final class InvalidDefinitionException extends LogicException implements Interlo
 
     /**
      * @param  class-string<StateMachine>  $machine
-     * @param  list<string>  $transitions  the machine's transitions
+     * @param  list<string>  $transitions
      */
     public static function guardedAttributeWrittenByUnknownTransition(string $machine, string $guardedAttribute, string $transition, array $transitions): self
     {

@@ -12,10 +12,7 @@ use RobertBoes\Interlock\Graph\CompiledMachine;
 use RobertBoes\Interlock\Graph\GraphRepository;
 
 /**
- * Limits a query to the models in one of the given states: `Order::query()->tap(new InState(OrderStatus::Preparing))`.
- *
- * A parent state stands for every state nested within it. The state attribute is found from the states' enum; pass it
- * as `stateAttribute` when the model has several machines with states of that enum.
+ * A parent state stands for every state nested within it.
  */
 final readonly class InState
 {

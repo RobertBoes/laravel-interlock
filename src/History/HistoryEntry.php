@@ -7,8 +7,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 
 /**
- * One row of history: a transition, or a bypassed write, on one state attribute of a model. States are stored as
- * their backing values, and the written attributes as they are stored on the model's row.
+ * States are stored as their backing values, and the written attributes as they are stored on the model's row.
  *
  * @property string $model_type
  * @property int|string $model_id

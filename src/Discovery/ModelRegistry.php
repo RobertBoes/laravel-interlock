@@ -13,9 +13,6 @@ use RobertBoes\Interlock\HasStateMachines;
 use RobertBoes\Interlock\StateMachine;
 use SplFileInfo;
 
-/**
- * Knows every interlocked model in the app: the ones found in the configured paths, plus the ones registered explicitly.
- */
 final class ModelRegistry
 {
     /** @var list<class-string<Model>> */
@@ -46,9 +43,6 @@ final class ModelRegistry
         return $this->models ??= $this->withRegistered($this->cached() ?? $this->scan());
     }
 
-    /**
-     * Scan the configured paths, whether or not a cache exists, and write what is found to the cache.
-     */
     public function cache(): void
     {
         file_put_contents(
@@ -154,8 +148,6 @@ final class ModelRegistry
     }
 
     /**
-     * A model that declares machines must use HasStateMachines, or nothing enforces them and its triggers never run.
-     *
      * @param  ReflectionClass<Model>  $model
      * @return array<string, class-string<StateMachine>>
      */

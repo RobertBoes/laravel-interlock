@@ -2,9 +2,6 @@
 
 namespace RobertBoes\Interlock\Export;
 
-/**
- * The formats interlock:signalbox exports a state machine in.
- */
 enum ExportFormat: string
 {
     case Mermaid = 'mermaid';
