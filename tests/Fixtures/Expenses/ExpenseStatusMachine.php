@@ -24,12 +24,12 @@ class ExpenseStatusMachine extends StateMachine
             $this->transition('reject')
                 ->from(ExpenseStatus::Submitted)
                 ->to(ExpenseStatus::Rejected)
-                ->authorise(fn(?Employee $actor, Expense $expense) => $actor?->isManager() === true)
+                ->authorize(fn(?Employee $actor, Expense $expense) => $actor?->isManager() === true)
                 ->guard('has_rejection_reason', fn(Expense $expense) => filled($expense->rejection_reason), 'Give a reason for rejecting the expense.'),
             $this->transition('withdraw')
                 ->from(ExpenseStatus::Submitted)
                 ->to(ExpenseStatus::Draft)
-                ->authorise('withdraw-expense'),
+                ->authorize('withdraw-expense'),
         ];
     }
 }

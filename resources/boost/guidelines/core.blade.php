@@ -62,12 +62,12 @@ $order->stageTransition(new Ship($trackingCode))
 </code-snippet>
 @endverbatim
 
-### Failures, guards and authorisation
+### Failures, guards and authorization
 
 - `StaleStateException` (409): the stored state changed since the model was loaded. Nothing was written. Reload the model and decide again; do not catch and retry blindly. Use `lockForUpdate()` to wait instead of failing.
 - `NotAFromStateException` (409): the current state is not a from-state, as with a double-submitted form.
 - `FailedGuardException` (422): a guard failed. Declare guards with `->guard('has_title', fn(Post $post) => filled($post->title), 'A post needs a title.')` or `#[Guard('message')]` on a method of a class-based transition. Match on `$e->guard`, not on the message.
-- `UnauthorisedTransitionException` (403): the actor is not authorised. Declare it with `->authorise(fn(?User $actor, Expense $expense) => ...)`, a Gate ability name, an `authorise()` method or `#[Authorise('ability')]`. The actor defaults to the authenticated user; pass one with `transition('approve', $manager)` or `transition('approve', null)`.
+- `UnauthorizedTransitionException` (403): the actor is not authorized. Declare it with `->authorize(fn(?User $actor, Expense $expense) => ...)`, a Gate ability name, an `authorize()` method or `#[Authorize('ability')]`. The actor defaults to the authenticated user; pass one with `transition('approve', $manager)` or `transition('approve', null)`.
 - Do not check states by hand before transitioning. Use `$model->availableTransitions($actor)` to show users what they can do.
 
 ### Bypass
@@ -117,7 +117,7 @@ $this->transition('publish')
 @endverbatim
 
 - Triggers run through `interlock:triggers`, which Interlock schedules every minute, so the scheduler and a queue worker must run.
-- A triggered transition runs without an actor and skips authorisation; its guards still run. For a transition only the trigger may apply, use `->authorise(fn() => false)`. Never authorise `$actor === null` to mean "only the trigger": guests are null actors too.
+- A triggered transition runs without an actor and skips authorization; its guards still run. For a transition only the trigger may apply, use `->authorize(fn() => false)`. Never authorize `$actor === null` to mean "only the trigger": guests are null actors too.
 - `Builder` is `Illuminate\Database\Eloquent\Builder`. The transition's from-states are added to the condition, so do not repeat them.
 - A class-based transition declares a static `trigger(Builder $query)` method instead. A transition whose constructor has required parameters cannot have a trigger.
 
@@ -129,7 +129,7 @@ Enforcement covers everything that goes through Eloquent. `DB::table()`, `toBase
 
 - Create models in any state with factories: `Order::factory()->create(['status' => OrderStatus::Shipped])`. Everything else stays enforced, so tests catch illegal transitions.
 - Assert on transitions with `Interlock::assertTransitioned($order, 'ship')` and `Interlock::assertNotTransitioned($order)`, not by reading the state column.
-- `Interlock::fake()` skips `apply`, `afterCommit`, guards and authorisation for the rest of the test, to test the calling code in isolation.
+- `Interlock::fake()` skips `apply`, `afterCommit`, guards and authorization for the rest of the test, to test the calling code in isolation.
 - `Interlock::bypassForTest('reason')` allows direct writes for the rest of one test only.
 - Keep one test that checks every machine for unreachable states and dead ends:
 

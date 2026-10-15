@@ -7,8 +7,8 @@ use RobertBoes\Interlock\Attributes\UseStateMachine;
 use RobertBoes\Interlock\HasStateMachines;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
 
-#[UseStateMachine('status', MachineWithTransitionAuthorisedTwice::class)]
-class PostWithTransitionAuthorisedTwice extends Model
+#[UseStateMachine('status', MachineWithTransitionAuthorizedTwice::class)]
+class PostWithTransitionAuthorizedTwice extends Model
 {
     use HasStateMachines;
 

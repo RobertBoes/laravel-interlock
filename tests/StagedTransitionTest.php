@@ -10,7 +10,7 @@ use RobertBoes\Interlock\Exceptions\FailedGuardException;
 use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
 use RobertBoes\Interlock\Exceptions\NotAFromStateException;
 use RobertBoes\Interlock\Exceptions\StaleStateException;
-use RobertBoes\Interlock\Exceptions\UnauthorisedTransitionException;
+use RobertBoes\Interlock\Exceptions\UnauthorizedTransitionException;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Employee;
@@ -63,18 +63,18 @@ it('writes transitions staged on several machines in one update on save', functi
     $order = orderReadyToShip();
     Event::fake([Transitioned::class, OrderShipped::class]);
 
-    $order->stageTransition(new Ship('TRACK-1'))->stageTransition('authorise_payment');
+    $order->stageTransition(new Ship('TRACK-1'))->stageTransition('authorize_payment');
     $updates = updatesDuring(fn() => $order->save());
 
     expect($updates)->toHaveCount(1)
         ->and($order->fresh())
         ->status->toBe(OrderStatus::Shipped)
-        ->payment_status->toBe(PaymentStatus::Authorised)
+        ->payment_status->toBe(PaymentStatus::Authorized)
         ->tracking_code->toBe('TRACK-1')
         ->and($order->shipments()->pluck('tracking_code')->all())->toBe(['TRACK-1']);
     Event::assertDispatched(OrderShipped::class);
     Event::assertDispatched(fn(Transitioned $event) => $event->transition === 'ship' && $event->targetState === OrderStatus::Shipped);
-    Event::assertDispatched(fn(Transitioned $event) => $event->transition === 'authorise_payment' && $event->targetState === PaymentStatus::Authorised);
+    Event::assertDispatched(fn(Transitioned $event) => $event->transition === 'authorize_payment' && $event->targetState === PaymentStatus::Authorized);
 });
 
 it('writes the model\'s other unsaved changes in the same update as a staged transition', function () {
@@ -133,15 +133,15 @@ it('checks the guards of a staged transition on save, against the data as it wil
         ->amount->toBe(4200);
 });
 
-it('authorises the actor of a staged transition on save', function () {
+it('authorizes the actor of a staged transition on save', function () {
     $expense = Expense::create(['amount' => 4200, 'rejection_reason' => 'No receipt'])->transition('submit');
 
     $expense->stageTransition('reject', Employee::staff());
 
-    expect(fn() => $expense->save())->toThrow(UnauthorisedTransitionException::class);
+    expect(fn() => $expense->save())->toThrow(UnauthorizedTransitionException::class);
 });
 
-it('authorises a staged transition for the authenticated user when no actor is given', function () {
+it('authorizes a staged transition for the authenticated user when no actor is given', function () {
     $expense = Expense::create(['amount' => 4200, 'rejection_reason' => 'No receipt'])->transition('submit');
     $this->actingAs(Employee::manager());
 
@@ -153,25 +153,25 @@ it('authorises a staged transition for the authenticated user when no actor is g
 it('compares and swaps every staged state attribute, so one stale machine fails the whole save', function () {
     $order = Order::create();
     $stale = Order::find($order->getKey());
-    $order->transition('authorise_payment');
+    $order->transition('authorize_payment');
 
-    $stale->stageTransition('prepare')->stageTransition('authorise_payment');
+    $stale->stageTransition('prepare')->stageTransition('authorize_payment');
 
     expect(thrownBy(fn() => $stale->save()))
         ->toBeInstanceOf(StaleStateException::class)
         ->context()->toBe([
             'model' => Order::class,
             'key' => $order->getKey(),
-            'transition' => 'authorise_payment',
+            'transition' => 'authorize_payment',
             'state_attribute' => 'payment_status',
             'loaded_state' => 'unpaid',
-            'stored_state' => 'authorised',
+            'stored_state' => 'authorized',
             'row_deleted' => false,
         ]);
 
     expect($order->fresh())
         ->status->toBe(OrderStatus::Pending)
-        ->payment_status->toBe(PaymentStatus::Authorised);
+        ->payment_status->toBe(PaymentStatus::Authorized);
 });
 
 it('throws when a second transition is staged on the same machine', function () {
@@ -200,12 +200,12 @@ it('throws on save when a state attribute with a staged transition was written d
 });
 
 it('lets a guarded attribute be written only by a staged transition allowed to write it', function () {
-    $order = Order::create()->stageTransition('prepare')->stageTransition('authorise_payment');
+    $order = Order::create()->stageTransition('prepare')->stageTransition('authorize_payment');
     $order->tracking_code = 'TRACK-1';
 
     expect(fn() => $order->save())->toThrow(
         DirectWriteException::class,
-        'Cannot save ' . Order::class . ' [' . $order->getKey() . ']: its guarded attribute [tracking_code] was changed during transitions [prepare, authorise_payment], none of which may write it. Only [ship] may write it.',
+        'Cannot save ' . Order::class . ' [' . $order->getKey() . ']: its guarded attribute [tracking_code] was changed during transitions [prepare, authorize_payment], none of which may write it. Only [ship] may write it.',
     );
 
     expect($order->fresh())
@@ -214,7 +214,7 @@ it('lets a guarded attribute be written only by a staged transition allowed to w
 });
 
 it('discards staged transitions, putting each state attribute back', function () {
-    $order = Order::create()->stageTransition('prepare')->stageTransition('authorise_payment');
+    $order = Order::create()->stageTransition('prepare')->stageTransition('authorize_payment');
     Event::fake([Transitioned::class]);
 
     $result = $order->discardStagedTransitions();
@@ -266,7 +266,7 @@ it('writes nothing when a staged transition fails on save, and does not carry it
     Event::assertNotDispatched(Transitioned::class);
 })->with([
     'a failed guard' => [fn(Expense $expense) => $expense->stageTransition('reject', Employee::manager()), FailedGuardException::class],
-    'a denied actor' => [fn(Expense $expense) => $expense->forceFill(['rejection_reason' => 'No receipt'])->stageTransition('reject', Employee::staff()), UnauthorisedTransitionException::class],
+    'a denied actor' => [fn(Expense $expense) => $expense->forceFill(['rejection_reason' => 'No receipt'])->stageTransition('reject', Employee::staff()), UnauthorizedTransitionException::class],
     'stale state' => [function (Expense $expense) {
         Expense::find($expense->getKey())->forceFill(['rejection_reason' => 'No receipt'])->transition('reject', Employee::manager());
         $expense->forceFill(['rejection_reason' => 'Duplicate'])->stageTransition('reject', Employee::manager());
@@ -291,7 +291,7 @@ function stageShipThatFailsAfterCommitAndCapturePayment(Order $order): ArrayObje
 }
 
 it('runs every after-commit step and dispatches every Transitioned before rethrowing the first failure', function (Closure $save) {
-    $order = orderReadyToShip()->transition('authorise_payment');
+    $order = orderReadyToShip()->transition('authorize_payment');
     $dispatched = stageShipThatFailsAfterCommitAndCapturePayment($order);
 
     expect(fn() => $save($order))->toThrow(RuntimeException::class, 'The mail server is down.')
@@ -305,7 +305,7 @@ it('runs every after-commit step and dispatches every Transitioned before rethro
 ]);
 
 it('rethrows the first after-commit failure when several fail', function () {
-    $order = orderReadyToShip()->transition('authorise_payment');
+    $order = orderReadyToShip()->transition('authorize_payment');
     $dispatched = stageShipThatFailsAfterCommitAndCapturePayment($order);
     Event::listen(PaymentCaptured::class, fn() => throw new RuntimeException('The receipt printer is jammed.'));
 

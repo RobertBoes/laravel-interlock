@@ -16,7 +16,7 @@ final class FluentTransition
     /** @var list<CompiledGuard> */
     public private(set) array $guards = [];
 
-    public private(set) Closure|string|null $authorisation = null;
+    public private(set) Closure|string|null $authorization = null;
 
     public private(set) ?Closure $applyStep = null;
 
@@ -45,9 +45,9 @@ final class FluentTransition
     /**
      * A closure receiving the actor (or null) and the model that returns a bool or a Gate response, or a Gate ability.
      */
-    public function authorise(Closure|string $authorisation): self
+    public function authorize(Closure|string $authorization): self
     {
-        $this->authorisation = $authorisation;
+        $this->authorization = $authorization;
 
         return $this;
     }
@@ -74,7 +74,7 @@ final class FluentTransition
 
     /**
      * The condition constrains the model's query builder; the from-states are added to it. Matching models get the
-     * transition without an actor or authorisation check; its guards still run.
+     * transition without an actor or authorization check; its guards still run.
      */
     public function trigger(callable $condition, bool $fanOut = false): self
     {

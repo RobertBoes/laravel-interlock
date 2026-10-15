@@ -4,12 +4,12 @@
     "states": {
         "unpaid": {
             "on": {
-                "authorise_payment": {
-                    "target": "authorised"
+                "authorize_payment": {
+                    "target": "authorized"
                 }
             }
         },
-        "authorised": {
+        "authorized": {
             "on": {
                 "capture_payment": {
                     "target": "paid"

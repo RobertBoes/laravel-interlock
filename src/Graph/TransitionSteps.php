@@ -12,22 +12,22 @@ use Illuminate\Support\Str;
 use ReflectionAttribute;
 use ReflectionClass;
 use ReflectionMethod;
-use RobertBoes\Interlock\Attributes\Authorise;
+use RobertBoes\Interlock\Attributes\Authorize;
 use RobertBoes\Interlock\Attributes\Guard;
 use RobertBoes\Interlock\Definition\FluentTransition;
 use RobertBoes\Interlock\Exceptions\FailedGuardException;
-use RobertBoes\Interlock\Exceptions\UnauthorisedTransitionException;
+use RobertBoes\Interlock\Exceptions\UnauthorizedTransitionException;
 use RobertBoes\Interlock\Support\PhpAttribute;
 use RobertBoes\Interlock\Transition;
 
 final readonly class TransitionSteps
 {
     /**
-     * @param  (Closure(?Authenticatable, Model): (bool|Response))|null  $authorisation
+     * @param  (Closure(?Authenticatable, Model): (bool|Response))|null  $authorization
      * @param  list<CompiledGuard>  $guards
      */
     private function __construct(
-        private ?Closure $authorisation,
+        private ?Closure $authorization,
         private array $guards,
         private ?Closure $apply,
         private ?Closure $afterCommit,
@@ -40,21 +40,21 @@ final readonly class TransitionSteps
 
     public static function fluent(FluentTransition $definition): self
     {
-        $authorisation = is_string($definition->authorisation)
-            ? self::gateAbility($definition->authorisation)
-            : $definition->authorisation;
+        $authorization = is_string($definition->authorization)
+            ? self::gateAbility($definition->authorization)
+            : $definition->authorization;
 
-        return new self($authorisation, $definition->guards, $definition->applyStep, $definition->afterCommitStep);
+        return new self($authorization, $definition->guards, $definition->applyStep, $definition->afterCommitStep);
     }
 
     public static function of(Transition $transition): self
     {
         $class = new ReflectionClass($transition);
-        $ability = PhpAttribute::of($class, Authorise::class)?->ability;
+        $ability = PhpAttribute::of($class, Authorize::class)?->ability;
 
         return new self(
             match (true) {
-                method_exists($transition, 'authorise') => $transition->authorise(...),
+                method_exists($transition, 'authorize') => $transition->authorize(...),
                 $ability !== null => self::gateAbility($ability),
                 default => null,
             },
@@ -74,7 +74,7 @@ final readonly class TransitionSteps
 
     public function withoutGuards(): self
     {
-        return new self($this->authorisation, [], $this->apply, $this->afterCommit);
+        return new self($this->authorization, [], $this->apply, $this->afterCommit);
     }
 
     /**
@@ -106,29 +106,29 @@ final readonly class TransitionSteps
     }
 
     /**
-     * @throws UnauthorisedTransitionException
+     * @throws UnauthorizedTransitionException
      */
-    public function authorise(Model $model, ?Authenticatable $actor, CompiledTransition $transition): void
+    public function authorize(Model $model, ?Authenticatable $actor, CompiledTransition $transition): void
     {
-        $response = $this->authorisationResponse($model, $actor);
+        $response = $this->authorizationResponse($model, $actor);
 
         if ($response->denied()) {
-            throw UnauthorisedTransitionException::denied($model, $transition, $response);
+            throw UnauthorizedTransitionException::denied($model, $transition, $response);
         }
     }
 
     public function allows(Model $model, ?Authenticatable $actor): bool
     {
-        return $this->authorisationResponse($model, $actor)->allowed();
+        return $this->authorizationResponse($model, $actor)->allowed();
     }
 
-    private function authorisationResponse(Model $model, ?Authenticatable $actor): Response
+    private function authorizationResponse(Model $model, ?Authenticatable $actor): Response
     {
-        if ($this->authorisation === null) {
+        if ($this->authorization === null) {
             return Response::allow();
         }
 
-        $result = ($this->authorisation)($actor, $model);
+        $result = ($this->authorization)($actor, $model);
 
         if ($result instanceof Response) {
             return $result;

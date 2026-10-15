@@ -91,7 +91,7 @@ it('nests child states within their parent state, and targets states at another 
     ]);
 });
 
-it('names each guard of a transition, fluent or a guard method, without its check, message or authorisation', function () {
+it('names each guard of a transition, fluent or a guard method, without its check, message or authorization', function () {
     config(['interlock.discovery.paths' => [__DIR__ . '/Fixtures/Expenses']]);
 
     $export = xstate(['machine' => ExpenseStatusMachine::class]);

@@ -68,7 +68,7 @@ trait HasStateMachines
     }
 
     /**
-     * Only the graph is checked now; authorisation, guards and the write run on the next save().
+     * Only the graph is checked now; authorization, guards and the write run on the next save().
      */
     public function stageTransition(string|Transition $transition, ?Authenticatable $actor = null): static
     {
@@ -78,7 +78,7 @@ trait HasStateMachines
     }
 
     /**
-     * @internal Applies it without an actor or an authorisation check; its guards still run.
+     * @internal Applies it without an actor or an authorization check; its guards still run.
      */
     public function interlockApplyTrigger(string $transition): void
     {
@@ -226,7 +226,7 @@ trait HasStateMachines
     }
 
     /**
-     * Pass null to ask on behalf of no one. A transition that takes input is offered on its authorisation alone.
+     * Pass null to ask on behalf of no one. A transition that takes input is offered on its authorization alone.
      *
      * @return Collection<int, AvailableTransition>
      */
@@ -294,7 +294,7 @@ trait HasStateMachines
 
         foreach ($stagedTransitions as $staged) {
             if ($staged->trigger === null) {
-                $staged->steps->authorise($this, $staged->actor, $staged->compiled);
+                $staged->steps->authorize($this, $staged->actor, $staged->compiled);
             }
         }
 

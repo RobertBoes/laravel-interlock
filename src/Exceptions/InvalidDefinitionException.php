@@ -64,10 +64,10 @@ final class InvalidDefinitionException extends LogicException implements Interlo
     /**
      * @param  class-string<Transition>  $transition
      */
-    public static function authorisedTwice(string $transition, string $ability): self
+    public static function authorizedTwice(string $transition, string $ability): self
     {
         return new self(sprintf(
-            'Transition %s declares both an authorise() method and #[Authorise(\'%s\')]. Keep one of them.',
+            'Transition %s declares both an authorize() method and #[Authorize(\'%s\')]. Keep one of them.',
             $transition,
             $ability,
         ));

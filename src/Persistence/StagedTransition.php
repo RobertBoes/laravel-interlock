@@ -8,7 +8,7 @@ use RobertBoes\Interlock\Graph\CompiledTransition;
 use RobertBoes\Interlock\Graph\TransitionSteps;
 
 /**
- * When a trigger applies the transition, it has no actor and is not authorised.
+ * When a trigger applies the transition, it has no actor and is not authorized.
  */
 final readonly class StagedTransition
 {

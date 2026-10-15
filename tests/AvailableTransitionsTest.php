@@ -26,7 +26,7 @@ function availableNames(iterable $available): array
 it('returns the transitions whose from-states include the current state, across every machine of the model', function () {
     $order = Order::create();
 
-    expect(availableNames($order->availableTransitions(null)))->toBe(['prepare', 'cancel', 'authorise_payment']);
+    expect(availableNames($order->availableTransitions(null)))->toBe(['prepare', 'cancel', 'authorize_payment']);
 });
 
 it('leaves out a transition whose guard fails, checked against the model\'s unsaved changes', function () {
@@ -39,7 +39,7 @@ it('leaves out a transition whose guard fails, checked against the model\'s unsa
     expect(availableNames($expense->availableTransitions(null)))->toBe(['submit']);
 });
 
-it('leaves out a transition whose authorisation denies the actor', function (Closure $actor, array $available) {
+it('leaves out a transition whose authorization denies the actor', function (Closure $actor, array $available) {
     Gate::define('withdraw-expense', fn(Employee $employee, Expense $expense) => $employee->id === $expense->claimant_id);
     $expense = Expense::create(['amount' => 4200, 'claimant_id' => 3, 'rejection_reason' => 'No receipt'])->transition('submit');
 
@@ -50,7 +50,7 @@ it('leaves out a transition whose authorisation denies the actor', function (Clo
     'no actor' => [fn() => null, []],
 ]);
 
-it('evaluates authorisation for the authenticated user unless an actor is given, null included', function () {
+it('evaluates authorization for the authenticated user unless an actor is given, null included', function () {
     $expense = Expense::create(['amount' => 4200, 'rejection_reason' => 'No receipt'])->transition('submit');
 
     $this->actingAs(Employee::manager(id: 5));
@@ -65,9 +65,9 @@ it('serialises as a list of name, state attribute and target state, for an API r
     expect($available->toArray())->toBe([
         ['name' => 'ship', 'state_attribute' => 'status', 'target_state' => 'shipped'],
         ['name' => 'cancel', 'state_attribute' => 'status', 'target_state' => 'cancelled'],
-        ['name' => 'authorise_payment', 'state_attribute' => 'payment_status', 'target_state' => 'authorised'],
+        ['name' => 'authorize_payment', 'state_attribute' => 'payment_status', 'target_state' => 'authorized'],
     ])->and(JsonResource::make(['transitions' => $available])->toJson())->toBe(
-        '{"transitions":[{"name":"ship","state_attribute":"status","target_state":"shipped"},{"name":"cancel","state_attribute":"status","target_state":"cancelled"},{"name":"authorise_payment","state_attribute":"payment_status","target_state":"authorised"}]}',
+        '{"transitions":[{"name":"ship","state_attribute":"status","target_state":"shipped"},{"name":"cancel","state_attribute":"status","target_state":"cancelled"},{"name":"authorize_payment","state_attribute":"payment_status","target_state":"authorized"}]}',
     );
 });
 
@@ -93,13 +93,13 @@ it('leaves out a class-based transition whose guard method fails', function () {
     expect(availableNames($expense->availableTransitions(Employee::manager(id: 5))))->toBe(['reject']);
 });
 
-it('offers a transition that takes input on its from-states and authorisation, leaving its guards to when it is applied with its input', function () {
+it('offers a transition that takes input on its from-states and authorization, leaving its guards to when it is applied with its input', function () {
     Gate::define('pay-expense', fn(Employee $employee, Expense $expense) => $employee->role === 'finance');
     $expense = Expense::create(['amount' => 4200])->transition('submit')->transition('approve', Employee::manager(id: 5));
 
     expect(availableNames($expense->availableTransitions(Employee::finance())))->toBe(['pay'])
         ->and(availableNames($expense->availableTransitions(Employee::manager())))->toBe([])
-        ->and(availableNames(orderReadyToShip()->availableTransitions(null)))->toBe(['ship', 'cancel', 'authorise_payment']);
+        ->and(availableNames(orderReadyToShip()->availableTransitions(null)))->toBe(['ship', 'cancel', 'authorize_payment']);
 });
 
 it('offers a transition whose input the container could build without running its guards against made-up input', function () {

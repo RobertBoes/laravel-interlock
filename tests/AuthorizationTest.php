@@ -6,14 +6,14 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use RobertBoes\Interlock\Exceptions\InterlockException;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
-use RobertBoes\Interlock\Exceptions\UnauthorisedTransitionException;
+use RobertBoes\Interlock\Exceptions\UnauthorizedTransitionException;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Approve;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Employee;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Expense;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\ExpenseStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Pay;
-use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithTransitionAuthorisedTwice;
-use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\TransitionAuthorisedTwice;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\PostWithTransitionAuthorizedTwice;
+use RobertBoes\Interlock\Tests\Fixtures\InvalidDefinitions\TransitionAuthorizedTwice;
 
 /**
  * @param  array<string, mixed>  $attributes
@@ -23,7 +23,7 @@ function submittedExpense(array $attributes = []): Expense
     return Expense::create(['amount' => 4200, 'claimant_id' => 3, ...$attributes])->transition('submit');
 }
 
-it('authorises a fluent transition with a closure that takes the actor and the model', function () {
+it('authorizes a fluent transition with a closure that takes the actor and the model', function () {
     $expense = submittedExpense(['rejection_reason' => 'No receipt']);
 
     $expense->transition('reject', Employee::manager());
@@ -35,7 +35,7 @@ it('throws when the closure denies the actor, and writes nothing', function (?Em
     $expense = submittedExpense(['rejection_reason' => 'No receipt']);
 
     expect(fn() => $expense->transition('reject', $actor))->toThrow(
-        UnauthorisedTransitionException::class,
+        UnauthorizedTransitionException::class,
         'You may not apply transition [reject].',
     );
 
@@ -46,7 +46,7 @@ it('throws when the closure denies the actor, and writes nothing', function (?Em
     'no actor' => null,
 ]);
 
-it('throws an exception that extends Laravel\'s authorisation exception', function () {
+it('throws an exception that extends Laravel\'s authorization exception', function () {
     $expense = submittedExpense(['rejection_reason' => 'No receipt']);
 
     expect(thrownBy(fn() => $expense->transition('reject', Employee::staff())))
@@ -54,14 +54,14 @@ it('throws an exception that extends Laravel\'s authorisation exception', functi
         ->toBeInstanceOf(InterlockException::class);
 });
 
-it('authorises a fluent transition with a Gate ability, checked for the actor with the model', function () {
+it('authorizes a fluent transition with a Gate ability, checked for the actor with the model', function () {
     Gate::define('withdraw-expense', fn(Employee $employee, Expense $expense) => $employee->id === $expense->claimant_id
         ? Response::allow()
         : Response::deny('Only the claimant may withdraw an expense.'));
     $expense = submittedExpense(['claimant_id' => 3]);
 
     expect(fn() => $expense->transition('withdraw', Employee::staff(id: 4)))->toThrow(
-        UnauthorisedTransitionException::class,
+        UnauthorizedTransitionException::class,
         'Only the claimant may withdraw an expense.',
     );
 
@@ -74,7 +74,7 @@ it('denies a Gate ability that requires a user when there is no actor', function
     Gate::define('withdraw-expense', fn(Employee $employee, Expense $expense) => true);
     $expense = submittedExpense();
 
-    expect(fn() => $expense->transition('withdraw', null))->toThrow(UnauthorisedTransitionException::class);
+    expect(fn() => $expense->transition('withdraw', null))->toThrow(UnauthorizedTransitionException::class);
 
     expect($expense->fresh()->status)->toBe(ExpenseStatus::Submitted);
 });
@@ -84,16 +84,16 @@ it('keeps the status a denying Gate response gives', function () {
     $expense = submittedExpense();
 
     expect(thrownBy(fn() => $expense->transition('withdraw', Employee::staff())))
-        ->toBeInstanceOf(UnauthorisedTransitionException::class)
+        ->toBeInstanceOf(UnauthorizedTransitionException::class)
         ->status()->toBe(404);
 });
 
-it('authorises a class-based transition with its authorise method', function (Closure $actor, bool $allowed) {
+it('authorizes a class-based transition with its authorize method', function (Closure $actor, bool $allowed) {
     $expense = submittedExpense(['claimant_id' => 1]);
 
     $thrown = thrownBy(fn() => $expense->transition(new Approve(), $actor()));
 
-    expect($thrown instanceof UnauthorisedTransitionException)->toBe(! $allowed)
+    expect($thrown instanceof UnauthorizedTransitionException)->toBe(! $allowed)
         ->and($expense->fresh()->status)->toBe($allowed ? ExpenseStatus::Approved : ExpenseStatus::Submitted);
 })->with([
     'a manager' => [fn() => Employee::manager(id: 5), true],
@@ -102,25 +102,25 @@ it('authorises a class-based transition with its authorise method', function (Cl
     'no actor' => [fn() => null, false],
 ]);
 
-it('rejects a transition class that declares both an authorise method and a Gate ability', function () {
-    expect(fn() => (new PostWithTransitionAuthorisedTwice())->transition('transition_authorised_twice'))->toThrow(
+it('rejects a transition class that declares both an authorize method and a Gate ability', function () {
+    expect(fn() => (new PostWithTransitionAuthorizedTwice())->transition('transition_authorized_twice'))->toThrow(
         InvalidDefinitionException::class,
-        'Transition ' . TransitionAuthorisedTwice::class . ' declares both an authorise() method and #[Authorise(\'submit-post\')]. Keep one of them.',
+        'Transition ' . TransitionAuthorizedTwice::class . ' declares both an authorize() method and #[Authorize(\'submit-post\')]. Keep one of them.',
     );
 });
 
-it('authorises a class-based transition with a Gate ability declared on the class', function () {
+it('authorizes a class-based transition with a Gate ability declared on the class', function () {
     Gate::define('pay-expense', fn(Employee $employee, Expense $expense) => $employee->role === 'finance');
     $expense = submittedExpense()->transition(new Approve(), Employee::manager());
 
-    expect(fn() => $expense->transition(new Pay('PAY-1'), Employee::manager()))->toThrow(UnauthorisedTransitionException::class);
+    expect(fn() => $expense->transition(new Pay('PAY-1'), Employee::manager()))->toThrow(UnauthorizedTransitionException::class);
 
     $expense->transition(new Pay('PAY-1'), Employee::finance());
 
     expect($expense->fresh()->status)->toBe(ExpenseStatus::Paid);
 });
 
-it('allows a transition without declared authorisation for every actor, null included', function (?Employee $actor) {
+it('allows a transition without declared authorization for every actor, null included', function (?Employee $actor) {
     $expense = Expense::create(['amount' => 4200]);
 
     $expense->transition('submit', $actor);
@@ -135,7 +135,7 @@ it('applies the transition on behalf of the authenticated user by default', func
     $expense = submittedExpense(['rejection_reason' => 'No receipt']);
 
     $this->actingAs(Employee::staff());
-    expect(fn() => $expense->transition('reject'))->toThrow(UnauthorisedTransitionException::class);
+    expect(fn() => $expense->transition('reject'))->toThrow(UnauthorizedTransitionException::class);
 
     $this->actingAs(Employee::manager());
     $expense->transition('reject');
@@ -147,8 +147,8 @@ it('applies the transition on behalf of the actor given, instead of the authenti
     $expense = submittedExpense(['rejection_reason' => 'No receipt']);
 
     $this->actingAs(Employee::manager());
-    expect(fn() => $expense->transition('reject', null))->toThrow(UnauthorisedTransitionException::class)
-        ->and(fn() => $expense->transition('reject', Employee::staff()))->toThrow(UnauthorisedTransitionException::class);
+    expect(fn() => $expense->transition('reject', null))->toThrow(UnauthorizedTransitionException::class)
+        ->and(fn() => $expense->transition('reject', Employee::staff()))->toThrow(UnauthorizedTransitionException::class);
 
     $this->actingAs(Employee::staff());
     $expense->transition('reject', Employee::manager());
@@ -156,13 +156,13 @@ it('applies the transition on behalf of the actor given, instead of the authenti
     expect($expense->fresh()->status)->toBe(ExpenseStatus::Rejected);
 });
 
-it('authorises the actor before checking guards', function () {
+it('authorizes the actor before checking guards', function () {
     $expense = submittedExpense(['rejection_reason' => null]);
 
-    expect(fn() => $expense->transition('reject', Employee::staff()))->toThrow(UnauthorisedTransitionException::class);
+    expect(fn() => $expense->transition('reject', Employee::staff()))->toThrow(UnauthorizedTransitionException::class);
 });
 
-it('authorises the actor outside the transition\'s transaction', function () {
+it('authorizes the actor outside the transition\'s transaction', function () {
     $levels = [];
     Gate::define('withdraw-expense', function (Employee $employee) use (&$levels) {
         $levels[] = DB::transactionLevel();

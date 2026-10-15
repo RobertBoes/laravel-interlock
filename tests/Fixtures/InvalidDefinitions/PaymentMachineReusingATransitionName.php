@@ -12,8 +12,8 @@ class PaymentMachineReusingATransitionName extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('authorise_payment')->from(PaymentStatus::Unpaid)->to(PaymentStatus::Authorised),
-            $this->transition('cancel')->from(PaymentStatus::Authorised)->to(PaymentStatus::Unpaid),
+            $this->transition('authorize_payment')->from(PaymentStatus::Unpaid)->to(PaymentStatus::Authorized),
+            $this->transition('cancel')->from(PaymentStatus::Authorized)->to(PaymentStatus::Unpaid),
         ];
     }
 }

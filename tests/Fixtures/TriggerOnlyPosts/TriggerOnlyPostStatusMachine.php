@@ -10,7 +10,7 @@ use RobertBoes\Interlock\StateMachine;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
 
 /**
- * The post lifecycle, with a triggered publish whose authorisation allows no one, a null actor included.
+ * The post lifecycle, with a triggered publish whose authorization allows no one, a null actor included.
  */
 #[RecordsHistory]
 #[InitialStates(PostStatus::Draft)]
@@ -25,7 +25,7 @@ class TriggerOnlyPostStatusMachine extends StateMachine
             $this->transition('publish')
                 ->from(PostStatus::Ready, PostStatus::Scheduled)
                 ->to(PostStatus::Published)
-                ->authorise(fn() => false)
+                ->authorize(fn() => false)
                 ->trigger(fn(Builder $query) => $query->where('publish_at', '<=', now())),
             $this->transition('retract')->from(PostStatus::Ready, PostStatus::Scheduled)->to(PostStatus::Draft),
         ];

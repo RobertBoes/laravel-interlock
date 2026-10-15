@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use RobertBoes\Interlock\Graph\GraphRepository;
 
 /**
- * Guards and authorisation are not evaluated.
+ * Guards and authorization are not evaluated.
  */
 final readonly class InFromStateOf
 {

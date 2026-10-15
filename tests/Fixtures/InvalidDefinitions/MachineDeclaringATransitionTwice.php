@@ -12,8 +12,8 @@ class MachineDeclaringATransitionTwice extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('pay')->from(PaymentStatus::Unpaid)->to(PaymentStatus::Authorised),
-            $this->transition('pay')->from(PaymentStatus::Authorised)->to(PaymentStatus::Paid),
+            $this->transition('pay')->from(PaymentStatus::Unpaid)->to(PaymentStatus::Authorized),
+            $this->transition('pay')->from(PaymentStatus::Authorized)->to(PaymentStatus::Paid),
         ];
     }
 }

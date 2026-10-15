@@ -7,17 +7,17 @@ use RobertBoes\Interlock\Tests\Fixtures\Orders\OrderStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\PaymentStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Orders\Ship;
 
-function shippedAndAuthorisedOrder(): Order
+function shippedAndAuthorizedOrder(): Order
 {
     return Order::create()
         ->transition('prepare')
         ->transition('create_label')
         ->transition(new Ship('TRACK-1'))
-        ->transition('authorise_payment');
+        ->transition('authorize_payment');
 }
 
 it('starts a copy of an order over in its initial states, without its tracking code', function () {
-    $copy = shippedAndAuthorisedOrder()->replicate();
+    $copy = shippedAndAuthorizedOrder()->replicate();
 
     expect($copy)
         ->status->toBe(OrderStatus::Pending)
@@ -26,7 +26,7 @@ it('starts a copy of an order over in its initial states, without its tracking c
 });
 
 it('saves a copy of an order that has left its initial states', function () {
-    $order = shippedAndAuthorisedOrder();
+    $order = shippedAndAuthorizedOrder();
 
     $copy = $order->replicate();
     $copy->save();
@@ -37,7 +37,7 @@ it('saves a copy of an order that has left its initial states', function () {
         ->tracking_code->toBeNull()
         ->and($order->fresh())
         ->status->toBe(OrderStatus::Shipped)
-        ->payment_status->toBe(PaymentStatus::Authorised)
+        ->payment_status->toBe(PaymentStatus::Authorized)
         ->tracking_code->toBe('TRACK-1');
 });
 

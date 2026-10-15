@@ -63,7 +63,7 @@ final readonly class CompiledTransition
     }
 
     /**
-     * Guards may read the input, so a transition class that takes input is only checked for authorisation.
+     * Guards may read the input, so a transition class that takes input is only checked for authorization.
      */
     private function stepsWithoutInput(): TransitionSteps
     {

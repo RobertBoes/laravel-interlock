@@ -13,9 +13,9 @@ class PaymentStatusMachine extends StateMachine
     public function transitions(): array
     {
         return [
-            $this->transition('authorise_payment')->from(PaymentStatus::Unpaid)->to(PaymentStatus::Authorised),
+            $this->transition('authorize_payment')->from(PaymentStatus::Unpaid)->to(PaymentStatus::Authorized),
             $this->transition('capture_payment')
-                ->from(PaymentStatus::Authorised)
+                ->from(PaymentStatus::Authorized)
                 ->to(PaymentStatus::Paid)
                 ->afterCommit(fn(Order $order) => event(new PaymentCaptured($order))),
             $this->transition('refund')->from(PaymentStatus::Paid)->to(PaymentStatus::Refunded),

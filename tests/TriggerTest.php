@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Queue;
 use RobertBoes\Interlock\Events\Transitioned;
 use RobertBoes\Interlock\Events\Transitioning;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
-use RobertBoes\Interlock\Exceptions\UnauthorisedTransitionException;
+use RobertBoes\Interlock\Exceptions\UnauthorizedTransitionException;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
 use RobertBoes\Interlock\Tests\Fixtures\Expenses\Employee;
@@ -414,7 +414,7 @@ describe('a trigger', function () {
         $pending = Order::create();
         $packing = Order::create()->transition('prepare');
         $shipped = orderReadyToShip()->transition(new Ship('TRACK-1'));
-        $paid = Order::create()->transition('authorise_payment')->transition('capture_payment');
+        $paid = Order::create()->transition('authorize_payment')->transition('capture_payment');
 
         $this->travelTo('2026-10-04 12:00:00');
         $this->artisan('interlock:triggers');
@@ -425,7 +425,7 @@ describe('a trigger', function () {
             ->and($paid->fresh()->status)->toBe(OrderStatus::Pending);
     });
 
-    it('applies a transition whose authorisation allows no one, without an actor', function () {
+    it('applies a transition whose authorization allows no one, without an actor', function () {
         config(['interlock.models' => [TriggerOnlyPost::class]]);
         Exceptions::fake();
         $post = TriggerOnlyPost::create(['publish_at' => '2026-10-14 09:00:00'])->transition('submit');
@@ -442,10 +442,10 @@ describe('a trigger', function () {
             ->actor_id->toBeNull();
     });
 
-    it('lets no one apply a transition whose authorisation allows no one by hand, a guest included', function (Closure $apply) {
+    it('lets no one apply a transition whose authorization allows no one by hand, a guest included', function (Closure $apply) {
         $post = TriggerOnlyPost::create(['publish_at' => '2026-10-14 09:00:00'])->transition('submit');
 
-        expect(fn() => $apply($post))->toThrow(UnauthorisedTransitionException::class)
+        expect(fn() => $apply($post))->toThrow(UnauthorizedTransitionException::class)
             ->and($post->fresh()->status)->toBe(PostStatus::Ready);
     })->with([
         'a guest' => [fn(TriggerOnlyPost $post) => $post->transition('publish')],
@@ -454,7 +454,7 @@ describe('a trigger', function () {
         'a staged transition on behalf of no one' => [fn(TriggerOnlyPost $post) => $post->stageTransition('publish', null)->save()],
     ]);
 
-    it('offers a transition whose authorisation allows no one to no one, a guest included', function (?Employee $actor) {
+    it('offers a transition whose authorization allows no one to no one, a guest included', function (?Employee $actor) {
         $post = TriggerOnlyPost::create(['publish_at' => '2026-10-14 09:00:00'])->transition('submit');
 
         expect($post->availableTransitions($actor)->pluck('name')->all())->toBe(['schedule', 'retract'])

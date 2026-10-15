@@ -14,7 +14,7 @@ use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Exceptions\NotAFromStateException;
 use RobertBoes\Interlock\Exceptions\StaleStateException;
-use RobertBoes\Interlock\Exceptions\UnauthorisedTransitionException;
+use RobertBoes\Interlock\Exceptions\UnauthorizedTransitionException;
 use RobertBoes\Interlock\Exceptions\UnknownTransitionException;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
@@ -175,8 +175,8 @@ it('lets an app render stale state its own way', function () {
         ->assertExactJson(['message' => 'Someone else got there first.']);
 });
 
-it('lets an app render an unauthorised transition its own way, like any authorisation failure', function () {
-    app(ExceptionHandler::class)->renderable(fn(AccessDeniedHttpException $e) => $e->getPrevious() instanceof UnauthorisedTransitionException
+it('lets an app render an unauthorized transition its own way, like any authorization failure', function () {
+    app(ExceptionHandler::class)->renderable(fn(AccessDeniedHttpException $e) => $e->getPrevious() instanceof UnauthorizedTransitionException
         ? response()->json(['message' => "Ask a manager to {$e->getPrevious()->transition} it."], 403)
         : null);
     $expense = expenseAwaitingReview();

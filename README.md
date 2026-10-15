@@ -4,7 +4,7 @@ Interlock keeps an Eloquent model's state consistent with a transition graph you
 
 State only changes through named transitions such as `ship`, `cancel` or `publish`. Assigning the attribute and saving throws. So do `update([...])`, `create([...])` in a state that isn't initial, and `Order::where(...)->update([...])`. Every transition writes with compare-and-swap, so when the state has changed since the model was loaded, the transition fails instead of overwriting it.
 
-Transitions can also take typed input, check guards and authorisation, and write related rows in the same transaction, with follow-up work held back until it commits. Triggers apply a transition on their own once a condition holds. History, if you turn it on, records who changed what and why. You can export the machines to Mermaid for your docs, or to XState for the frontend.
+Transitions can also take typed input, check guards and authorization, and write related rows in the same transaction, with follow-up work held back until it commits. Triggers apply a transition on their own once a condition holds. History, if you turn it on, records who changed what and why. You can export the machines to Mermaid for your docs, or to XState for the frontend.
 
 Enforcement covers everything that goes through Eloquent. The query builder and raw SQL are outside it; see [Where enforcement stops](#where-enforcement-stops).
 
@@ -13,7 +13,7 @@ Enforcement covers everything that goes through Eloquent. The query builder and 
 - [Installation](#installation)
 - [Defining a state machine](#defining-a-state-machine)
 - [Applying transitions](#applying-transitions)
-- [Guards, authorisation and actors](#guards-authorisation-and-actors)
+- [Guards, authorization and actors](#guards-authorization-and-actors)
 - [Available transitions](#available-transitions)
 - [Querying by state](#querying-by-state)
 - [Enforcement](#enforcement)
@@ -124,7 +124,7 @@ Final states are where a model is meant to end up, so they have no outgoing tran
 
 ### Fluent and class-based transitions
 
-A transition without input or logic takes one line, as above. The fluent builder also takes [guards](#guards), [authorisation](#authorisation), a [trigger](#triggers) and two steps:
+A transition without input or logic takes one line, as above. The fluent builder also takes [guards](#guards), [authorization](#authorization), a [trigger](#triggers) and two steps:
 
 ```php
 $this->transition('deliver')
@@ -274,11 +274,11 @@ $order->stageTransition(new Ship($trackingCode))
     ->save();
 ```
 
-Staging only checks the graph, so it fails straight away when the current state isn't a from-state, and from then on the state attribute reads the target state. Everything else waits for `save()`: authorisation, guards, the `apply` step and the compare-and-swap write, all checked against the data as it will be stored. Each machine holds one staged transition at a time; staging a second on the same machine throws. `discardStagedTransitions()` drops them and puts the state attributes back, and so does `refresh()`.
+Staging only checks the graph, so it fails straight away when the current state isn't a from-state, and from then on the state attribute reads the target state. Everything else waits for `save()`: authorization, guards, the `apply` step and the compare-and-swap write, all checked against the data as it will be stored. Each machine holds one staged transition at a time; staging a second on the same machine throws. `discardStagedTransitions()` drops them and puts the state attributes back, and so does `refresh()`.
 
-## Guards, authorisation and actors
+## Guards, authorization and actors
 
-A guard says "not now", authorisation says "not you". They throw different exceptions, so an API can tell them apart.
+A guard says "not now", authorization says "not you". They throw different exceptions, so an API can tell them apart.
 
 ### Guards
 
@@ -305,7 +305,7 @@ public function inStock(Order $order): bool
 
 A failing guard throws `FailedGuardException` with the guard's message, which renders as 422. Guards run inside the transaction, before `apply`.
 
-### Authorisation
+### Authorization
 
 A transition may say who may apply it, either as a closure or method that receives the actor and the model and returns a bool or a Gate response, or as the name of a Gate ability:
 
@@ -313,17 +313,17 @@ A transition may say who may apply it, either as a closure or method that receiv
 $this->transition('reject')
     ->from(ExpenseStatus::Submitted)
     ->to(ExpenseStatus::Rejected)
-    ->authorise(fn(?User $actor, Expense $expense) => $actor?->isManager() === true),
+    ->authorize(fn(?User $actor, Expense $expense) => $actor?->isManager() === true),
 
 $this->transition('withdraw')
     ->from(ExpenseStatus::Submitted)
     ->to(ExpenseStatus::Draft)
-    ->authorise('withdraw-expense'),
+    ->authorize('withdraw-expense'),
 ```
 
-A class-based transition defines an `authorise(?User $actor, Expense $expense)` method, or names a Gate ability with `#[Authorise('approve-expense')]` on the class. Declare one or the other, not both. A transition without authorisation may be applied by every actor, a null actor included.
+A class-based transition defines an `authorize(?User $actor, Expense $expense)` method, or names a Gate ability with `#[Authorize('approve-expense')]` on the class. Declare one or the other, not both. A transition without authorization may be applied by every actor, a null actor included.
 
-A denied actor gets `UnauthorisedTransitionException`. It extends Laravel's `AuthorizationException`, so it renders as 403 and your existing handling of authorisation failures applies. Authorisation is checked before the transaction begins.
+A denied actor gets `UnauthorizedTransitionException`. It extends Laravel's `AuthorizationException`, so it renders as 403 and your existing handling of authorization failures applies. Authorization is checked before the transaction begins.
 
 ### Actors
 
@@ -334,13 +334,13 @@ $expense->transition('approve', $manager);
 $expense->transition('approve', null);
 ```
 
-A null actor means no user, such as a guest, and authorisation still decides for it. A Gate ability whose callback takes a non-nullable user denies a null actor, as Laravel's Gate does for guests.
+A null actor means no user, such as a guest, and authorization still decides for it. A Gate ability whose callback takes a non-nullable user denies a null actor, as Laravel's Gate does for guests.
 
-[Triggers](#triggers) are different: a trigger applies its transition without an actor and without checking its authorisation. Declaring the trigger is your decision that the system may apply the transition, so there is no user to ask about. Its guards still run, and history records the trigger's name with no actor.
+[Triggers](#triggers) are different: a trigger applies its transition without an actor and without checking its authorization. Declaring the trigger is your decision that the system may apply the transition, so there is no user to ask about. Its guards still run, and history records the trigger's name with no actor.
 
 ## Available transitions
 
-`availableTransitions()` returns the transitions an actor can apply to the model right now, across all its machines: those whose from-states include the current state, whose guards pass and whose authorisation allows the actor. Nothing is written and no events are dispatched.
+`availableTransitions()` returns the transitions an actor can apply to the model right now, across all its machines: those whose from-states include the current state, whose guards pass and whose authorization allows the actor. Nothing is written and no events are dispatched.
 
 ```php
 $order->availableTransitions();          // for the authenticated user
@@ -354,11 +354,11 @@ Each one serialises as its name, the state attribute of the machine it belongs t
 [
     {"name": "ship", "state_attribute": "status", "target_state": "shipped"},
     {"name": "cancel", "state_attribute": "status", "target_state": "cancelled"},
-    {"name": "authorise_payment", "state_attribute": "payment_status", "target_state": "authorised"}
+    {"name": "authorize_payment", "state_attribute": "payment_status", "target_state": "authorized"}
 ]
 ```
 
-A transition that takes input is offered on its from-states and authorisation alone, because its guards may read input that only exists once it is applied. Its `authorise()` method must not read that input.
+A transition that takes input is offered on its from-states and authorization alone, because its guards may read input that only exists once it is applied. Its `authorize()` method must not read that input.
 
 ## Querying by state
 
@@ -376,7 +376,7 @@ Order::query()->tap(new InFromStateOf('ship'))->get();
 
 `InState` and `NotInState` expand a parent state to its children, so "all preparing orders" includes the packing ones. They find the state attribute from the enum; pass it as `stateAttribute` when one enum backs several machines on the model: `new InState(Approval::Approved, stateAttribute: 'legal_status')`.
 
-`InFromStateOf` finds the models in a from-state of the transition. It does not evaluate guards or authorisation; ask the model for its [available transitions](#available-transitions) when those matter.
+`InFromStateOf` finds the models in a from-state of the transition. It does not evaluate guards or authorization; ask the model for its [available transitions](#available-transitions) when those matter.
 
 The scopes also work as eager-load constraints, with `with()` and `load()`:
 
@@ -511,7 +511,7 @@ Two config keys change that:
 
 The command does no querying itself. It dispatches one queued job per trigger, so a large backlog never slows the scheduler down, and a queue worker must be running to process them. The jobs go to the app's default queue connection and queue; `interlock.triggers.connection` and `interlock.triggers.queue` send them elsewhere, such as a queue with its own workers so a big backlog doesn't hold up other work. Each job is unique per trigger, so a slow run and the next one never work on the same trigger at once; this needs a cache store that supports locks, as Laravel's unique jobs do. When a job can't be dispatched, say because the queue is down, the command reports it, dispatches the other triggers, and exits with a failure; the next run tries that trigger again.
 
-The job applies the transition to each matching model, a chunk at a time in key order, without an actor and without checking its authorisation, and records the trigger's name in history. Its guards still run. Three config keys size it:
+The job applies the transition to each matching model, a chunk at a time in key order, without an actor and without checking its authorization, and records the trigger's name in history. Its guards still run. Three config keys size it:
 
 - `interlock.triggers.chunk_size` (default 100): how many models it loads at a time.
 - `interlock.triggers.max_per_run` (default 1000): the most models one run handles. A bigger backlog drains over the next runs, each carrying on where the last stopped, even when the last died partway: the run saves its place after every chunk.
@@ -529,7 +529,7 @@ Each chunk job carries its chunk's keys in its payload. With UUID or ULID keys, 
 
 Queue workers keep running the code they booted with, so run `php artisan queue:restart` after a deploy that adds, renames or removes a trigger. A trigger job still queued for a transition that was removed, or lost its trigger, does nothing.
 
-A model whose state changed since it was loaded, or whose guard fails, is skipped quietly. Any other exception is reported and the run carries on with the rest. Either way the model still matches the condition, so the next run picks it up again. There are no retries, and nothing to clean up. A lost database connection is the exception: it fails the job instead of being reported once per model, and the next run tries again. Authorisation can't stop a trigger; to stop it, change or remove the trigger, or add a guard.
+A model whose state changed since it was loaded, or whose guard fails, is skipped quietly. Any other exception is reported and the run carries on with the rest. Either way the model still matches the condition, so the next run picks it up again. There are no retries, and nothing to clean up. A lost database connection is the exception: it fails the job instead of being reported once per model, and the next run tries again. Authorization can't stop a trigger; to stop it, change or remove the trigger, or add a guard.
 
 ### The "scheduled and locked" pattern
 
@@ -560,7 +560,7 @@ $post->publish_at = $request->date('publish_at');
 $post->transition('schedule');
 ```
 
-Once scheduled, no transition but `publish` leaves `scheduled`, and only `schedule` may write `publish_at`, so neither the state nor the time can change until the trigger publishes the post. The lock shows up in the graph and in the exports, rather than hiding in a flag. To allow unlocking, add a transition out of `scheduled`, such as `unschedule` back to `ready`. `publish` itself can still be applied by hand; to leave it to the trigger alone, authorise it for no one with `->authorise(fn() => false)`. The trigger still applies it, as triggers don't check authorisation. Don't authorise only the null actor, `$actor === null`, to mean "only the trigger": a guest is a null actor too, so any code a guest can reach could apply it, and `availableTransitions()` would offer it to guests.
+Once scheduled, no transition but `publish` leaves `scheduled`, and only `schedule` may write `publish_at`, so neither the state nor the time can change until the trigger publishes the post. The lock shows up in the graph and in the exports, rather than hiding in a flag. To allow unlocking, add a transition out of `scheduled`, such as `unschedule` back to `ready`. `publish` itself can still be applied by hand; to leave it to the trigger alone, authorize it for no one with `->authorize(fn() => false)`. The trigger still applies it, as triggers don't check authorization. Don't authorize only the null actor, `$actor === null`, to mean "only the trigger": a guest is a null actor too, so any code a guest can reach could apply it, and `availableTransitions()` would offer it to guests.
 
 ## History
 
@@ -668,7 +668,7 @@ Every Interlock exception implements `RobertBoes\Interlock\Exceptions\InterlockE
 
 | Exception | Status | Meaning |
 | --- | --- | --- |
-| `UnauthorisedTransitionException` | 403 | The actor may not apply the transition (or the status a denying Gate response gave) |
+| `UnauthorizedTransitionException` | 403 | The actor may not apply the transition (or the status a denying Gate response gave) |
 | `FailedGuardException` | 422 | A guard failed; the body's `message` is the guard's message |
 | `StaleStateException` | 409 | The stored state changed since the model was loaded; reload and retry |
 | `NotAFromStateException` | 409 | The current state isn't one of the transition's from-states, as when a form is submitted twice |
@@ -764,7 +764,7 @@ $this->post("/orders/{$order->id}/ship", ['tracking_code' => 'TRACK-1']);
 Interlock::assertTransitioned($order, 'ship');
 ```
 
-Faked transitions skip their guards and authorisation too. They still check their from-states, write their target state with the model's other changes and dispatch their events, so an illegal transition still throws.
+Faked transitions skip their guards and authorization too. They still check their from-states, write their target state with the model's other changes and dispatch their events, so an illegal transition still throws.
 
 ## License
 

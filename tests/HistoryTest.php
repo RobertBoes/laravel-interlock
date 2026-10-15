@@ -61,7 +61,7 @@ it('records the attributes the apply step set, and not the model\'s other unsave
 it('records nothing for a machine without history', function () {
     $order = Order::create();
 
-    $order->transition('authorise_payment');
+    $order->transition('authorize_payment');
 
     expect($order->history)->toBeEmpty();
 });

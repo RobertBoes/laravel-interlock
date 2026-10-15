@@ -1,10 +1,10 @@
 stateDiagram-v2
     Unpaid
-    Authorised
+    Authorized
     Paid
     Refunded
     [*] --> Unpaid
-    Unpaid --> Authorised: authorise_payment
-    Authorised --> Paid: capture_payment
+    Unpaid --> Authorized: authorize_payment
+    Authorized --> Paid: capture_payment
     Paid --> Refunded: refund
     Refunded --> [*]

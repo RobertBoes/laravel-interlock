@@ -7,7 +7,7 @@ use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use ReflectionClass;
-use RobertBoes\Interlock\Attributes\Authorise;
+use RobertBoes\Interlock\Attributes\Authorize;
 use RobertBoes\Interlock\Attributes\FanOut;
 use RobertBoes\Interlock\Attributes\FinalStates;
 use RobertBoes\Interlock\Attributes\FromStates;
@@ -200,10 +200,10 @@ final class GraphRepository
             throw InvalidDefinitionException::missingFromStatesAttribute($class);
         }
 
-        $ability = PhpAttribute::of($reflection, Authorise::class)?->ability;
+        $ability = PhpAttribute::of($reflection, Authorize::class)?->ability;
 
-        if ($ability !== null && $reflection->hasMethod('authorise')) {
-            throw InvalidDefinitionException::authorisedTwice($class, $ability);
+        if ($ability !== null && $reflection->hasMethod('authorize')) {
+            throw InvalidDefinitionException::authorizedTwice($class, $ability);
         }
 
         return $this->compileTransition(

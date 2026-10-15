@@ -52,7 +52,7 @@ it('applies a transition passed as an instance of its class, with its typed inpu
 it('lists fluent and class-based transitions side by side, named after the class unless it overrides the name', function () {
     expect(fn() => Order::create()->transition('shpi'))->toThrow(
         UnknownTransitionException::class,
-        Order::class . ' has no transition named [shpi]. Its transitions are [prepare, create_label, ship, deliver, cancel, authorise_payment, capture_payment, refund].',
+        Order::class . ' has no transition named [shpi]. Its transitions are [prepare, create_label, ship, deliver, cancel, authorize_payment, capture_payment, refund].',
     );
 });
 

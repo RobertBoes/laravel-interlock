@@ -10,7 +10,7 @@ use RobertBoes\Interlock\Graph\CompiledTransition;
 /**
  * Renders as 403, or with the status a denying Gate response gave.
  */
-final class UnauthorisedTransitionException extends AuthorizationException implements InterlockException
+final class UnauthorizedTransitionException extends AuthorizationException implements InterlockException
 {
     private function __construct(
         string $message,

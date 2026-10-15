@@ -7,10 +7,10 @@ use RobertBoes\Interlock\StateMachine;
 use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\PostStatus;
 
 #[InitialStates(PostStatus::Draft)]
-class MachineWithTransitionAuthorisedTwice extends StateMachine
+class MachineWithTransitionAuthorizedTwice extends StateMachine
 {
     public function transitions(): array
     {
-        return [TransitionAuthorisedTwice::class];
+        return [TransitionAuthorizedTwice::class];
     }
 }

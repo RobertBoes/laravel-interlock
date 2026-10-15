@@ -32,7 +32,7 @@ final class XStateConfig
     }
 
     /**
-     * Every machine as a region of one parallel machine, so a visualiser draws them side by side.
+     * Every machine as a region of one parallel machine, so a visualizer draws them side by side.
      *
      * @param  array<array{CompiledMachine, list<CompiledTransition>}>  $machines
      * @return array<string, mixed>

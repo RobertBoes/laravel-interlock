@@ -51,14 +51,14 @@ it('applies a transition to the machine that declares it, by name alone', functi
     $order = Order::create();
     Event::fake([Transitioned::class]);
 
-    $order->transition('authorise_payment');
+    $order->transition('authorize_payment');
 
     expect($order->fresh())
-        ->payment_status->toBe(PaymentStatus::Authorised)
+        ->payment_status->toBe(PaymentStatus::Authorized)
         ->status->toBe(OrderStatus::Pending);
-    Event::assertDispatched(fn(Transitioned $event) => $event->transition === 'authorise_payment'
+    Event::assertDispatched(fn(Transitioned $event) => $event->transition === 'authorize_payment'
         && $event->fromState === PaymentStatus::Unpaid
-        && $event->targetState === PaymentStatus::Authorised);
+        && $event->targetState === PaymentStatus::Authorized);
 });
 
 it('checks a transition\'s from-states against its own machine\'s state attribute', function () {
@@ -70,13 +70,13 @@ it('checks a transition\'s from-states against its own machine\'s state attribut
         ->transition->toBe('capture_payment')
         ->stateAttribute->toBe('payment_status')
         ->currentState->toBe(PaymentStatus::Unpaid)
-        ->fromStates->toBe([PaymentStatus::Authorised]);
+        ->fromStates->toBe([PaymentStatus::Authorized]);
 });
 
 it('lists the transitions of every machine when a transition is unknown', function () {
     expect(fn() => Order::create()->transition('pay'))->toThrow(
         UnknownTransitionException::class,
-        Order::class . ' has no transition named [pay]. Its transitions are [prepare, create_label, ship, deliver, cancel, authorise_payment, capture_payment, refund].',
+        Order::class . ' has no transition named [pay]. Its transitions are [prepare, create_label, ship, deliver, cancel, authorize_payment, capture_payment, refund].',
     );
 });
 
@@ -99,11 +99,11 @@ it('compares and swaps only the state attribute of the transition\'s machine', f
     $first = Order::find($order->getKey());
     $second = Order::find($order->getKey());
 
-    $first->transition('authorise_payment');
+    $first->transition('authorize_payment');
     $second->transition('prepare');
 
     expect($order->fresh())
-        ->payment_status->toBe(PaymentStatus::Authorised)
+        ->payment_status->toBe(PaymentStatus::Authorized)
         ->status->toBe(OrderStatus::Packing);
 });
 
@@ -113,7 +113,7 @@ it('throws stale state when another instance transitioned the same machine first
     $second = Order::find($order->getKey());
 
     $first->transition('prepare');
-    $second->transition('authorise_payment');
+    $second->transition('authorize_payment');
 
     expect(thrownBy(fn() => $second->transition('cancel')))
         ->toBeInstanceOf(StaleStateException::class)
@@ -129,11 +129,11 @@ it('throws stale state when another instance transitioned the same machine first
 
     expect($order->fresh())
         ->status->toBe(OrderStatus::Packing)
-        ->payment_status->toBe(PaymentStatus::Authorised);
+        ->payment_status->toBe(PaymentStatus::Authorized);
 });
 
 it('rejects a transition name declared by two of a model\'s machines', function () {
-    expect(fn() => (new OrderWithDuplicateTransitionNames())->transition('authorise_payment'))->toThrow(
+    expect(fn() => (new OrderWithDuplicateTransitionNames())->transition('authorize_payment'))->toThrow(
         InvalidDefinitionException::class,
         'Transition [cancel] is declared by both ' . OrderStatusMachine::class . ' for [status] and ' . PaymentMachineReusingATransitionName::class . ' for [payment_status] on ' . OrderWithDuplicateTransitionNames::class . '. Transition names are unique per model, so rename one of them.',
     );
@@ -147,7 +147,7 @@ it('rejects a transition name declared twice in one machine', function () {
 });
 
 it('rejects two machines for one state attribute', function () {
-    expect(fn() => (new OrderWithTwoMachinesForOneAttribute())->transition('authorise_payment'))->toThrow(
+    expect(fn() => (new OrderWithTwoMachinesForOneAttribute())->transition('authorize_payment'))->toThrow(
         InvalidDefinitionException::class,
         OrderWithTwoMachinesForOneAttribute::class . ' declares both ' . PaymentStatusMachine::class . ' and ' . PaymentMachineReusingATransitionName::class . ' for [payment_status]. A state attribute has one state machine.',
     );

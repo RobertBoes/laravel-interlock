@@ -79,7 +79,7 @@ trait AppliesTrigger
     }
 
     /**
-     * No retries: a model that still matches is picked up again on a later run. Authorisation is not checked, so it
+     * No retries: a model that still matches is picked up again on a later run. Authorization is not checked, so it
      * never denies a trigger.
      *
      * A lost connection is rethrown to fail the job: every other candidate would fail too, reported once per model in a

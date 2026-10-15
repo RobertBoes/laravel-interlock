@@ -14,7 +14,7 @@ final class Approve extends Transition
     /** In cents. */
     private const int APPROVAL_LIMIT = 100_000;
 
-    public function authorise(?Employee $actor, Expense $expense): bool
+    public function authorize(?Employee $actor, Expense $expense): bool
     {
         return $actor?->isManager() === true && $actor->id !== $expense->claimant_id;
     }

@@ -98,7 +98,7 @@ it('throws when a transition that may not write the tracking code saves it, and 
         ->tracking_code->toBeNull();
 })->with([
     'of the same machine' => 'prepare',
-    'of another machine' => 'authorise_payment',
+    'of another machine' => 'authorize_payment',
 ]);
 
 it('saves a direct write to the tracking code inside a bypass', function () {

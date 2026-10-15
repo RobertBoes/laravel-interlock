@@ -4,12 +4,12 @@ export const paymentStatusMachine = {
     "states": {
         "unpaid": {
             "on": {
-                "authorise_payment": {
-                    "target": "authorised"
+                "authorize_payment": {
+                    "target": "authorized"
                 }
             }
         },
-        "authorised": {
+        "authorized": {
             "on": {
                 "capture_payment": {
                     "target": "paid"
@@ -29,6 +29,6 @@ export const paymentStatusMachine = {
     }
 } as const;
 
-export type PaymentStatusMachineState = "unpaid" | "authorised" | "paid" | "refunded";
+export type PaymentStatusMachineState = "unpaid" | "authorized" | "paid" | "refunded";
 
-export type PaymentStatusMachineEvent = { type: "authorise_payment" } | { type: "capture_payment" } | { type: "refund" };
+export type PaymentStatusMachineEvent = { type: "authorize_payment" } | { type: "capture_payment" } | { type: "refund" };
