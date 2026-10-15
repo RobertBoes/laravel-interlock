@@ -10,6 +10,8 @@ use Illuminate\Contracts\Debug\ExceptionHandler;
 use RobertBoes\Interlock\Discovery\ModelRegistry;
 use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Triggers\RunTrigger;
+use RobertBoes\Interlock\Triggers\TriggerMonitor;
+use RobertBoes\Interlock\Triggers\TriggerStatus;
 use Throwable;
 
 /**
@@ -17,12 +19,19 @@ use Throwable;
  */
 final class TriggersCommand extends Command
 {
-    protected $signature = 'interlock:triggers';
+    protected $signature = 'interlock:triggers
+        {--status : Show the models matching each trigger, its last run and whether it is overdue, instead of dispatching}';
 
     protected $description = 'Dispatch one job per trigger, to apply each triggered transition to the models that match';
 
-    public function handle(ModelRegistry $registry, GraphRepository $graphs, Dispatcher $bus, Cache $cache, ExceptionHandler $exceptions): int
+    public function handle(ModelRegistry $registry, GraphRepository $graphs, Dispatcher $bus, Cache $cache, ExceptionHandler $exceptions, TriggerMonitor $monitor): int
     {
+        if ($this->option('status')) {
+            $this->status($monitor);
+
+            return self::SUCCESS;
+        }
+
         $allDispatched = true;
 
         foreach (array_keys($registry->models()) as $model) {
@@ -34,6 +43,21 @@ final class TriggersCommand extends Command
         }
 
         return $allDispatched ? self::SUCCESS : self::FAILURE;
+    }
+
+    private function status(TriggerMonitor $monitor): void
+    {
+        $this->table(
+            ['Model', 'Transition', 'Matching', 'Last run', 'Matching since', 'Overdue'],
+            array_map(fn(TriggerStatus $status) => [
+                $status->model,
+                $status->transition,
+                $status->matching,
+                $status->lastRunAt?->toDateTimeString() ?? 'never',
+                $status->matchingSince?->toDateTimeString() ?? '-',
+                $status->overdue ? 'yes' : 'no',
+            ], $monitor->statuses()),
+        );
     }
 
     /**

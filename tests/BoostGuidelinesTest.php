@@ -49,7 +49,7 @@ it('ships the guidelines where Boost looks for them, and renders them with Blade
 });
 
 it('names only Artisan commands the package registers', function () {
-    $commands = namedInBoostGuidelines('/\b(interlock:[a-z]+)\b/');
+    $commands = namedInBoostGuidelines('/\b(interlock:[a-z]+(?::[a-z]+)*)\b/');
 
     expect($commands)->not->toBeEmpty()
         ->and(array_keys(Artisan::all()))->toContain(...$commands);

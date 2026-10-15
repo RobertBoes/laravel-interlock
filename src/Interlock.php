@@ -16,6 +16,8 @@ use RobertBoes\Interlock\Exceptions\InvalidFakeException;
 use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Graph\SoundnessCheck;
 use RobertBoes\Interlock\Testing\TransitionLog;
+use RobertBoes\Interlock\Triggers\TriggerMonitor;
+use RobertBoes\Interlock\Triggers\TriggerStatus;
 
 final class Interlock
 {
@@ -121,6 +123,16 @@ final class Interlock
         }
 
         Assert::assertNotContains($transition, $applied, sprintf('The unexpected transition [%s] was applied to %s.', $transition, self::describe($model)));
+    }
+
+    /**
+     * One entry per trigger of every registered model, counting the models that match each one now.
+     *
+     * @return list<TriggerStatus>
+     */
+    public static function triggerStatus(): array
+    {
+        return Container::getInstance()->make(TriggerMonitor::class)->statuses();
     }
 
     /**

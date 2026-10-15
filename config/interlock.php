@@ -41,6 +41,11 @@ return [
         // it has passed, and the next run carries on from there.
         'timeout' => 60,
 
+        // The minutes after which `interlock:triggers:check` reports a trigger whose condition matches models as
+        // overdue: when no run of it has finished within them, or models have matched it at the start of every run
+        // for longer.
+        'overdue_after' => 15,
+
         // The queue connection and queue the trigger jobs are pushed to. Null uses the app's default.
         'connection' => null,
         'queue' => null,

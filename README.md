@@ -650,6 +650,30 @@ Queue workers keep running the code they booted with, so run `php artisan queue:
 
 A model whose state changed since it was loaded, or whose guard fails, is skipped quietly. Any other exception is reported and the run carries on with the rest. Either way the model still matches the condition, so the next run picks it up again. There are no retries, and nothing to clean up. A lost database connection is the exception: it fails the job instead of being reported once per model, and the next run tries again. Authorization can't stop a trigger; to stop it, change or remove the trigger, or add a guard.
 
+### Monitoring triggers
+
+A trigger can stop working without any error: the scheduler stops, the queue workers stop, or the trigger runs but its models never leave the from-states, say because a guard always fails or every model throws. So you don't need a watchdog of your own, or a backstop sweep beside the trigger, each run records in the app's cache when it finished and whether models matched at its start.
+
+```bash
+php artisan interlock:triggers --status
+```
+
+This prints one row per trigger: how many models match it now, when its last run finished, since when models have matched at the start of every run, and whether it is overdue. It changes nothing. `Interlock::triggerStatus()` returns the same rows as `TriggerStatus` objects.
+
+A trigger is overdue when models match it now and either no run has finished within `interlock.triggers.overdue_after` minutes (default 15), or models have matched it at the start of every run for longer than that. **A backlog older than the threshold also counts as overdue**, even while every run finishes: a trigger with more due models than its runs work through, or one whose condition matches new models before every run, never gets a run that starts with none. Raise the threshold for such a trigger, or let it work through more per run with `interlock.triggers.max_per_run` or `fanOut: true`.
+
+`interlock:triggers:check` fails and names each overdue trigger, and succeeds when none is. Schedule it with a heartbeat ping on success, so your uptime monitor hears from it only while every trigger keeps up, and also notices when the scheduler itself stops:
+
+```php
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::command('interlock:triggers:check')
+    ->everyFiveMinutes()
+    ->pingOnSuccess('https://heartbeat.example.com/interlock-triggers');
+```
+
+A trigger that fans out counts as running once its dispatching run finishes; chunk jobs still pending don't make it overdue by themselves. The check reads the cache the trigger jobs write to, so the scheduler and the queue workers must share a cache store.
+
 ### The "scheduled and locked" pattern
 
 A plain trigger leaves the model editable until the moment it fires: a ready post can still be retracted. When a scheduled change must not be touched any more, model the lock as its own state whose only way out is the triggered transition:

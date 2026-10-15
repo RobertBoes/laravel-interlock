@@ -9,6 +9,7 @@ use RobertBoes\Interlock\Bypass\BypassScope;
 use RobertBoes\Interlock\Commands\CacheCommand;
 use RobertBoes\Interlock\Commands\ClearCommand;
 use RobertBoes\Interlock\Commands\SignalboxCommand;
+use RobertBoes\Interlock\Commands\TriggersCheckCommand;
 use RobertBoes\Interlock\Commands\TriggersCommand;
 use RobertBoes\Interlock\Discovery\ModelRegistry;
 use RobertBoes\Interlock\Graph\GraphRepository;
@@ -27,7 +28,7 @@ class InterlockServiceProvider extends PackageServiceProvider
             ->name('laravel-interlock')
             ->hasConfigFile('interlock')
             ->hasMigration('create_interlock_history_table')
-            ->hasCommands(CacheCommand::class, ClearCommand::class, SignalboxCommand::class, TriggersCommand::class);
+            ->hasCommands(CacheCommand::class, ClearCommand::class, SignalboxCommand::class, TriggersCommand::class, TriggersCheckCommand::class);
     }
 
     public function packageRegistered(): void

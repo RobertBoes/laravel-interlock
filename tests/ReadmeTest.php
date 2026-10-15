@@ -34,9 +34,9 @@ it('publishes the config and the history migration under the tags it names', fun
 });
 
 it('names only Artisan commands the package registers', function () {
-    $commands = namedInReadme('/\b(interlock:[a-z]+)\b/');
+    $commands = namedInReadme('/\b(interlock:[a-z]+(?::[a-z]+)*)\b/');
 
-    expect($commands)->toEqualCanonicalizing(['interlock:cache', 'interlock:clear', 'interlock:signalbox', 'interlock:triggers'])
+    expect($commands)->toEqualCanonicalizing(['interlock:cache', 'interlock:clear', 'interlock:signalbox', 'interlock:triggers', 'interlock:triggers:check'])
         ->and(array_keys(Artisan::all()))->toContain(...$commands);
 });
 

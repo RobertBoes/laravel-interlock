@@ -2,6 +2,7 @@
 
 namespace RobertBoes\Interlock\Triggers;
 
+use Closure;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Contracts\Cache\Repository as Cache;
@@ -59,9 +60,24 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
             return;
         }
 
+        $runs = new TriggerRuns($cache, $this->model, $this->trigger);
+        $runs->start($this->candidates($transition->trigger)->exists());
+
+        $this->run($transition->trigger, $transition->triggerFansOut, $deadline, $config, $cache, $bus, $exceptions);
+
+        $runs->finish();
+    }
+
+    /**
+     * A fanned-out trigger whose chunk jobs are still pending counts as having run: the scheduler and queue are working.
+     *
+     * @param  Closure(Builder<Model>): mixed  $condition
+     */
+    private function run(Closure $condition, bool $fansOut, Deadline $deadline, Repository $config, Cache $cache, Dispatcher $bus, ExceptionHandler $exceptions): void
+    {
         $pendingChunks = new PendingChunks($cache, $this->model, $this->trigger);
 
-        if ($transition->triggerFansOut && $pendingChunks->any()) {
+        if ($fansOut && $pendingChunks->any()) {
             return;
         }
 
@@ -69,11 +85,11 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
         $chunkSize = $config->integer('interlock.triggers.chunk_size', 100);
         $cursor = $cache->get($this->cursorKey());
 
-        $candidates = $this->candidates($transition->trigger)
+        $candidates = $this->candidates($condition)
             ->when($cursor !== null, fn(Builder $query) => $query->where($query->getModel()->getQualifiedKeyName(), '>', $cursor))
             ->limit($maxPerRun);
 
-        $reachedTheEnd = $transition->triggerFansOut
+        $reachedTheEnd = $fansOut
             ? $this->fanOut($candidates, $chunkSize, $maxPerRun, $deadline, $bus, $pendingChunks, $cache)
             : $this->applyInChunks($candidates, $chunkSize, $maxPerRun, $deadline, $exceptions, $cache);
 
