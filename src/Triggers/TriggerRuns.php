@@ -55,11 +55,14 @@ final readonly class TriggerRuns
         return $this->date('matching_since');
     }
 
+    /**
+     * Redis stores numbers unserialized and returns them as strings.
+     */
     private function date(string $name): ?CarbonInterface
     {
         $timestamp = $this->cache->get($this->key($name));
 
-        return is_int($timestamp) ? Date::createFromTimestamp($timestamp, date_default_timezone_get()) : null;
+        return is_numeric($timestamp) ? Date::createFromTimestamp((int) $timestamp, date_default_timezone_get()) : null;
     }
 
     private function key(string $name): string

@@ -1,6 +1,8 @@
 <?php
 
+use Illuminate\Cache\ArrayStore;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
@@ -76,6 +78,29 @@ describe('a trigger run', function () {
 
         expect($post->fresh()->status)->toBe(PostStatus::Published)
             ->and(postTriggerStatus()->matchingSince)->toBeNull();
+    });
+
+    it('reads its times back from a cache store that returns numbers as strings, as Redis does', function () {
+        Cache::extend('numbers-as-strings', fn() => Cache::repository(new class extends ArrayStore {
+            public function get($key)
+            {
+                $value = parent::get($key);
+
+                return is_int($value) ? (string) $value : $value;
+            }
+        }));
+        config(['cache.stores.numbers-as-strings' => ['driver' => 'numbers-as-strings'], 'cache.default' => 'numbers-as-strings']);
+        app()->forgetInstance('cache.store');
+        Exceptions::fake();
+        breakPublishing(postDueAt('2026-10-14 09:00:00'));
+
+        $this->travelTo('2026-10-14 09:00:00');
+        $this->artisan('interlock:triggers');
+
+        expect(postTriggerStatus())
+            ->lastRunAt?->toDateTimeString()->toBe('2026-10-14 09:00:00')
+            ->matchingSince?->toDateTimeString()->toBe('2026-10-14 09:00:00')
+            ->overdue->toBeFalse();
     });
 
     it('is never overdue while every run applies the models that became due since the last', function () {
