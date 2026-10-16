@@ -8,6 +8,11 @@
         "interlock"
     ],
     "homepage": "https://github.com/robertboes/laravel-interlock",
+    "support": {
+        "issues": "https://github.com/robertboes/laravel-interlock/issues",
+        "source": "https://github.com/robertboes/laravel-interlock",
+        "security": "https://github.com/robertboes/laravel-interlock/security/policy"
+    },
     "license": "MIT",
     "authors": [
         {
