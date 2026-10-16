@@ -159,7 +159,7 @@ final class Interlock
     }
 
     /**
-     * Resolves the transition first, so a misspelt name fails instead of passing an assertNotTransitioned().
+     * Resolves the transition first, so a misspelled name fails instead of passing an assertNotTransitioned().
      *
      * @return list<string>
      */

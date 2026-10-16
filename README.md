@@ -584,7 +584,7 @@ A direct write is any change to a state attribute or guarded attribute that does
 - `create()` and `insert` in a state that is not an initial state, or with a guarded attribute set;
 - `saveQuietly()`, `updateQuietly()`, `createQuietly()` and `Model::withoutEvents()`, because enforcement does not depend on model events;
 - writing an [entered-at column](#recording-when-a-state-was-entered) yourself, through the model or the builder;
-- mass writes through the Eloquent builder: `update`, `updateFrom`, `updateOrInsert`, `upsert`, `increment`, `decrement`, `incrementEach`, `decrementEach`, `insert`, `insertOrIgnore`, `insertOrIgnoreReturning` and `insertGetId`, whenever they touch a state attribute or guarded attribute, and `insertUsing` and `insertOrIgnoreUsing` whenever their columns include one, since the values a subquery selects are not known up front.
+- mass writes through the Eloquent builder: `update`, `updateFrom`, `updateOrInsert`, `upsert`, `increment`, `decrement`, `incrementEach`, `decrementEach`, `insert`, `insertOrIgnore`, `insertOrIgnoreReturning` (Laravel 13 and later) and `insertGetId`, whenever they touch a state attribute or guarded attribute, and `insertUsing` and `insertOrIgnoreUsing` whenever their columns include one, since the values a subquery selects are not known up front.
 
 There is no setting that turns enforcement off. The only way past it is a [bypass](#bypass), which needs a reason. Deletes, force deletes and restores are not governed; that is what policies are for.
 
@@ -974,7 +974,7 @@ Interlock::assertNotTransitioned($order, 'cancel');
 Interlock::assertNotTransitioned($order); // no transition at all
 ```
 
-Only transitions that committed count. A misspelt transition name throws, so it can't make `assertNotTransitioned()` pass by accident.
+Only transitions that committed count. A misspelled transition name throws, so it can't make `assertNotTransitioned()` pass by accident.
 
 ### Faking transitions
 
