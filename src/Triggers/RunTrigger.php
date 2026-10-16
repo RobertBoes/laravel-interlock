@@ -66,6 +66,10 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
         $this->run($transition->trigger, $transition->triggerFansOut, $deadline, $config, $cache, $bus, $exceptions);
 
         $runs->finish();
+
+        if (! $transition->triggerFansOut && ! $this->candidates($transition->trigger)->exists()) {
+            $runs->clear();
+        }
     }
 
     /**

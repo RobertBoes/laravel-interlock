@@ -60,6 +60,10 @@ final class RunTriggerChunk implements ShouldQueue
         } finally {
             $this->finish($cache);
         }
+
+        if (! (new PendingChunks($cache, $this->model, $this->trigger))->any() && ! $this->candidates($condition)->exists()) {
+            (new TriggerRuns($cache, $this->model, $this->trigger))->clear();
+        }
     }
 
     /**

@@ -37,6 +37,14 @@ final readonly class TriggerRuns
         $this->cache->forever($this->key('last_run_at'), Date::now()->getTimestamp());
     }
 
+    /**
+     * Called once a run leaves nothing matching, so models that keep arriving between runs never make a healthy trigger overdue.
+     */
+    public function clear(): void
+    {
+        $this->cache->forget($this->key('matching_since'));
+    }
+
     public function lastRunAt(): ?CarbonInterface
     {
         return $this->date('last_run_at');

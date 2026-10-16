@@ -734,9 +734,9 @@ A trigger can stop working without any error: the scheduler stops, the queue wor
 php artisan interlock:triggers --status
 ```
 
-This prints one row per trigger: how many models match it now, when its last run finished, since when models have matched at the start of every run, and whether it is overdue. It changes nothing. `Interlock::triggerStatus()` returns the same rows as `TriggerStatus` objects.
+This prints one row per trigger: how many models match it now, when its last run finished, since when models have kept matching without a run leaving none, and whether it is overdue. It changes nothing. `Interlock::triggerStatus()` returns the same rows as `TriggerStatus` objects.
 
-A trigger is overdue when models match it now and either no run has finished within `interlock.triggers.overdue_after` minutes (default 15), or models have matched it at the start of every run for longer than that. **A backlog older than the threshold also counts as overdue**, even while every run finishes: a trigger with more due models than its runs work through, or one whose condition matches new models before every run, never gets a run that starts with none. Raise the threshold for such a trigger, or let it work through more per run with `interlock.triggers.max_per_run` or `fanOut: true`.
+A trigger is overdue when models match it now and either no run has finished within `interlock.triggers.overdue_after` minutes (default 15), or models have kept matching it for longer than that: no run, and for a trigger that fans out no last chunk job, has left none matching since. Models that become due between runs don't count against it, as long as each run applies them. **A backlog older than the threshold does count as overdue**: a trigger with more due models than its runs work through stays matching after every run. Raise the threshold for such a trigger, or let it work through more per run with `interlock.triggers.max_per_run` or `fanOut: true`.
 
 `interlock:triggers:check` fails and names each overdue trigger, and succeeds when none is. Schedule it with a heartbeat ping on success, so your uptime monitor hears from it only while every trigger keeps up, and also notices when the scheduler itself stops:
 

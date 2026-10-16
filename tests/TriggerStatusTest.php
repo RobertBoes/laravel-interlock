@@ -53,7 +53,7 @@ describe('a trigger run', function () {
         expect(postTriggerStatus()->lastRunAt?->toDateTimeString())->toBe('2026-10-14 09:01:00');
     });
 
-    it('records since when models have matched at its start, until a run starts with none', function () {
+    it('records since when models have matched, until a run leaves none matching', function () {
         Exceptions::fake();
         $post = postDueAt('2026-10-14 09:00:00');
         breakPublishing($post);
@@ -75,12 +75,21 @@ describe('a trigger run', function () {
         $this->artisan('interlock:triggers');
 
         expect($post->fresh()->status)->toBe(PostStatus::Published)
-            ->and(postTriggerStatus()->matchingSince?->toDateTimeString())->toBe('2026-10-14 09:00:00');
+            ->and(postTriggerStatus()->matchingSince)->toBeNull();
+    });
 
-        $this->travelTo('2026-10-14 09:07:00');
-        $this->artisan('interlock:triggers');
+    it('is never overdue while every run applies the models that became due since the last', function () {
+        $this->travelTo('2026-10-14 09:00:00');
 
-        expect(postTriggerStatus()->matchingSince)->toBeNull();
+        foreach (range(0, 20) as $minute) {
+            $this->travelTo(now()->setTime(9, $minute));
+            postDueAt(now()->toDateTimeString());
+            $this->artisan('interlock:triggers');
+        }
+
+        expect(Post::query()->where('status', PostStatus::Published)->count())->toBe(21)
+            ->and(postTriggerStatus()->matchingSince)->toBeNull()
+            ->and(postTriggerStatus()->overdue)->toBeFalse();
     });
 
     it('records no finish when it fails', function () {
@@ -93,6 +102,18 @@ describe('a trigger run', function () {
 
         expect(postTriggerStatus()->lastRunAt)->toBeNull()
             ->and(postTriggerStatus()->matchingSince?->toDateTimeString())->toBe('2026-10-14 09:00:00');
+    });
+
+    it('clears a fanned-out trigger once its last chunk job leaves none matching', function () {
+        config(['interlock.models' => [FeedPost::class], 'interlock.triggers.chunk_size' => 1]);
+        FeedPost::create(['publish_at' => '2026-10-14 09:00:00'])->transition('submit');
+        FeedPost::create(['publish_at' => '2026-10-14 09:00:00'])->transition('submit');
+
+        $this->travelTo('2026-10-14 09:00:00');
+        $this->artisan('interlock:triggers');
+
+        expect(Interlock::triggerStatus()[0]->matching)->toBe(0)
+            ->and(Interlock::triggerStatus()[0]->matchingSince)->toBeNull();
     });
 
     it('counts a trigger that fans out as running once its dispatching run finishes, while its chunk jobs are pending', function () {

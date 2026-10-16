@@ -10,7 +10,7 @@ final readonly class TriggerStatus
     /**
      * @param  class-string<Model>  $model
      * @param  int  $matching  the models that match the trigger now
-     * @param  CarbonInterface|null  $matchingSince  since when models have matched at the start of every run
+     * @param  CarbonInterface|null  $matchingSince  since when models have kept matching without a run leaving none
      */
     public function __construct(
         public string $model,
