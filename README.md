@@ -933,6 +933,8 @@ $order = Order::factory()->create(['status' => OrderStatus::Shipped]);
 
 Everything else in your tests stays enforced, so endpoint tests still catch illegal transitions. A model a factory only made, and that your code saves later, is enforced as usual.
 
+Factories bypass in every environment except production, so local seeders work too. In production, a factory's direct write is rejected like any other; wrap it in `Interlock::bypass()` with a reason, for example in a seeder that sets up a demo tenant.
+
 To opt a single test into a full bypass, call `Interlock::bypassForTest()`. It lasts until the test ends and is refused outside tests:
 
 ```php

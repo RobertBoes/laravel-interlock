@@ -18,6 +18,8 @@ final class BypassScope
 
     private ?string $appWideReason = null;
 
+    public function __construct(private readonly bool $factoriesBypass = true) {}
+
     /**
      * @template TReturn
      *
@@ -49,7 +51,7 @@ final class BypassScope
             return $this->reasons[array_key_last($this->reasons)];
         }
 
-        return $this->appWideReason ?? ($this->calledFromAFactory() ? self::FACTORY_REASON : null);
+        return $this->appWideReason ?? ($this->factoriesBypass && $this->calledFromAFactory() ? self::FACTORY_REASON : null);
     }
 
     private function requireReason(string $reason): string

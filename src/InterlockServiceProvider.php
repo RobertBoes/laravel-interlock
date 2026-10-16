@@ -35,7 +35,7 @@ class InterlockServiceProvider extends PackageServiceProvider
     public function packageRegistered(): void
     {
         $this->app->singleton(GraphRepository::class);
-        $this->app->singleton(BypassScope::class);
+        $this->app->singleton(BypassScope::class, fn(Application $app) => new BypassScope(factoriesBypass: ! $app->isProduction()));
         $this->app->singleton(SystemScope::class);
         $this->app->singleton(HistoryRecorder::class, fn(Application $app) => $app->make(
             $app->make('config')->string('interlock.history.recorder', DatabaseHistoryRecorder::class),

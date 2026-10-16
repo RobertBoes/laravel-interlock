@@ -84,7 +84,7 @@ $ticket->signal('reply', $user); // 'customer_replied', 'reopen' or null
 
 ### Bypass
 
-Seeders, imports and data fixes that must set an arbitrary state run inside `Interlock::bypass()` with a reason. Model factories bypass automatically, so do not wrap factory calls.
+Seeders, imports and data fixes that must set an arbitrary state run inside `Interlock::bypass()` with a reason. Model factories bypass automatically outside production, so do not wrap factory calls in tests or local seeders; a seeder that runs in production wraps them in `Interlock::bypass()`.
 
 @verbatim
 <code-snippet name="Bypass for an import" lang="php">
