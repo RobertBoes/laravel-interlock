@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
 use RobertBoes\Interlock\Events\Transitioned;
 use RobertBoes\Interlock\Events\Transitioning;
+use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Exceptions\TriggerOnlyTransitionException;
 use RobertBoes\Interlock\Exceptions\UnauthorizedTransitionException;
@@ -459,6 +460,22 @@ describe('a trigger', function () {
         'a manager' => [fn(TriggerOnlyPost $post) => $post->transition('publish', Employee::manager())],
         'a staged transition on behalf of no one' => [fn(TriggerOnlyPost $post) => $post->stageTransition('publish', null)->save()],
     ]);
+
+    it('keeps the way a trigger applies its transition off the model\'s public methods', function () {
+        $post = TriggerOnlyPost::create(['publish_at' => '2026-10-14 09:00:00'])->transition('submit');
+
+        expect(fn() => $post->interlockApplyTrigger('publish'))->toThrow(BadMethodCallException::class)
+            ->and($post->fresh()->status)->toBe(PostStatus::Ready);
+    });
+
+    it('refuses to apply a transition without a trigger as one', function () {
+        $order = Order::create();
+
+        expect(fn() => (fn() => $this->interlockApplyTrigger('prepare'))->call($order))
+            ->toThrow(IllegalTransitionException::class, 'Cannot apply transition [prepare] on ' . Order::class . ' [' . $order->getKey() . '] as a trigger: it declares no trigger.')
+            ->and($order->fresh()->status)->toBe(OrderStatus::Pending)
+            ->and($order->history()->count())->toBe(0);
+    });
 
     it('offers a trigger-only transition to no one, a guest included', function (?Employee $actor) {
         $post = TriggerOnlyPost::create(['publish_at' => '2026-10-14 09:00:00'])->transition('submit');

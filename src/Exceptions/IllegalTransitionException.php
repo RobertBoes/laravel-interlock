@@ -19,4 +19,14 @@ final class IllegalTransitionException extends LogicException implements Interlo
             $transition->stateAttribute,
         ));
     }
+
+    public static function withoutTrigger(Model $model, CompiledTransition $transition): self
+    {
+        return new self(sprintf(
+            'Cannot apply transition [%s] on %s [%s] as a trigger: it declares no trigger. Apply it with transition(), which checks its authorization.',
+            $transition->name,
+            $model::class,
+            $model->getKey(),
+        ));
+    }
 }

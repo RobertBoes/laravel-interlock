@@ -90,7 +90,8 @@ trait AppliesTrigger
         }
 
         try {
-            $candidate->interlockApplyTrigger($this->trigger);
+            $trigger = $this->trigger;
+            (fn() => $this->interlockApplyTrigger($trigger))->call($candidate);
         } catch (StaleStateException|FailedGuardException) {
             return;
         } catch (Throwable $exception) {

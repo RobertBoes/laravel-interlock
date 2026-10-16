@@ -125,9 +125,10 @@ trait HasStateMachines
     }
 
     /**
-     * @internal Applies it without an actor or an authorization check; its guards still run.
+     * Applies it without an actor or an authorization check; its guards still run. Protected, so only trigger jobs reach
+     * it, by binding a closure to the model.
      */
-    public function interlockApplyTrigger(string $transition): void
+    protected function interlockApplyTrigger(string $transition): void
     {
         $this->interlockSaveOrThrowWhenCancelled($this->interlockStageTransition($transition, null, $transition));
     }
@@ -144,6 +145,10 @@ trait HasStateMachines
         $graph = $this->interlockGraph();
         $compiled = is_string($transition) ? $graph->transition($transition) : $graph->transitionOfClass($transition);
         $fromState = $this->getOriginal($compiled->stateAttribute);
+
+        if ($trigger !== null && $compiled->trigger === null) {
+            throw IllegalTransitionException::withoutTrigger($this, $compiled);
+        }
 
         if (! $compiled->startsFrom($fromState)) {
             throw NotAFromStateException::currentState($this, $compiled, $fromState);

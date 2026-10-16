@@ -12,6 +12,7 @@ use RobertBoes\Interlock\Tests\Fixtures\BlogPosts\Post;
 use RobertBoes\Interlock\Tests\Fixtures\Tickets\Ticket;
 use RobertBoes\Interlock\Tests\Fixtures\Tickets\TicketPriority;
 use RobertBoes\Interlock\Tests\Fixtures\Tickets\TicketStatus;
+use RobertBoes\Interlock\Triggers\RunTrigger;
 
 beforeEach(fn() => Carbon::setTestNow('2026-03-01 09:00:00'));
 
@@ -88,12 +89,14 @@ it('sets it when transitions are faked', function () {
 });
 
 it('sets it when a trigger applies the transition', function () {
+    Carbon::setTestNow('2026-03-01 09:00:00');
     $ticket = Ticket::create()->transition('resolve');
     Carbon::setTestNow('2026-03-09 09:00:00');
 
-    $ticket->interlockApplyTrigger('close');
+    app()->call([new RunTrigger(Ticket::class, 'close'), 'handle']);
 
-    expect(storedEnteredAt($ticket))->toBe('2026-03-09 09:00:00');
+    expect($ticket->fresh()->status)->toBe(TicketStatus::Closed)
+        ->and(storedEnteredAt($ticket))->toBe('2026-03-09 09:00:00');
 });
 
 it('leaves it out of history', function () {
