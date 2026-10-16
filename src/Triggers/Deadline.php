@@ -10,15 +10,18 @@ use Illuminate\Support\Facades\Date;
  */
 final readonly class Deadline
 {
-    private function __construct(private CarbonInterface $at) {}
+    private function __construct(private ?CarbonInterface $at) {}
 
+    /**
+     * A timeout of 0 means no timeout, as it does on the queue.
+     */
     public static function within(int $timeout): self
     {
-        return new self(Date::now()->addSeconds(intdiv($timeout * 3, 4)));
+        return new self($timeout === 0 ? null : Date::now()->addMilliseconds($timeout * 750));
     }
 
     public function passed(): bool
     {
-        return Date::now()->greaterThanOrEqualTo($this->at);
+        return $this->at !== null && Date::now()->greaterThanOrEqualTo($this->at);
     }
 }

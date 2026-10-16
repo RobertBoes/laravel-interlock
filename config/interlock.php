@@ -38,7 +38,7 @@ return [
 
         // The seconds a trigger job may run. Keep it below the `retry_after` of the queue connection (90 by default),
         // or the queue starts a slow run again beside the first. A job stops taking on models once three quarters of
-        // it has passed, and the next run carries on from there.
+        // it has passed, and the next run carries on from there. 0 means no timeout, as it does on the queue.
         'timeout' => 60,
 
         // The minutes after which `interlock:triggers:check` reports a trigger whose condition matches models as

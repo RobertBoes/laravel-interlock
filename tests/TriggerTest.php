@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Queue;
 use RobertBoes\Interlock\Events\Transitioned;
 use RobertBoes\Interlock\Events\Transitioning;
 use RobertBoes\Interlock\Exceptions\IllegalTransitionException;
+use RobertBoes\Interlock\Exceptions\InvalidConfigurationException;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Exceptions\TriggerOnlyTransitionException;
 use RobertBoes\Interlock\Exceptions\UnauthorizedTransitionException;
@@ -195,6 +196,30 @@ describe('a trigger', function () {
 
         expect($post->fresh()->status)->toBe(PostStatus::Published);
     });
+
+    it('applies every matching model when its timeout is 0, which means no timeout', function () {
+        config(['interlock.triggers.timeout' => 0]);
+        $posts = collect(range(1, 3))->map(fn() => scheduledPost('2026-10-14 09:00:00'));
+
+        $this->travelTo('2026-10-14 09:00:00');
+        $this->artisan('interlock:triggers')->assertSuccessful();
+
+        expect($posts->map(fn(Post $post) => $post->fresh()->status)->unique()->all())->toBe([PostStatus::Published]);
+    });
+
+    it('refuses a setting below its minimum rather than silently applying nothing', function (string $setting, int $value, string $message) {
+        config(['interlock.triggers.' . $setting => $value]);
+        $post = scheduledPost('2026-10-14 09:00:00');
+        $this->travelTo('2026-10-14 09:00:00');
+
+        expect(fn() => app()->call([new RunTrigger(Post::class, 'publish'), 'handle']))
+            ->toThrow(InvalidConfigurationException::class, $message)
+            ->and($post->fresh()->status)->toBe(PostStatus::Ready);
+    })->with([
+        'timeout' => ['timeout', -1, 'The config value [interlock.triggers.timeout] is -1, but it must be 0 or more: the seconds a trigger job may run, or 0 for no limit. Change it in config/interlock.php.'],
+        'chunk_size' => ['chunk_size', 0, 'The config value [interlock.triggers.chunk_size] is 0, but it must be 1 or more: how many matching models a trigger loads at a time. Change it in config/interlock.php.'],
+        'max_per_run' => ['max_per_run', 0, 'The config value [interlock.triggers.max_per_run] is 0, but it must be 1 or more: the most models one run of a trigger applies its transition to. Change it in config/interlock.php.'],
+    ]);
 
     it('works through the matching models in chunks, in key order', function () {
         config(['interlock.triggers.chunk_size' => 2]);

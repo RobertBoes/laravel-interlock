@@ -85,8 +85,8 @@ final class RunTrigger implements ShouldQueue, ShouldBeUnique
             return;
         }
 
-        $maxPerRun = $config->integer('interlock.triggers.max_per_run', 1000);
-        $chunkSize = $config->integer('interlock.triggers.chunk_size', 100);
+        $maxPerRun = self::setting($config, 'max_per_run', 1000, 1, 'the most models one run of a trigger applies its transition to');
+        $chunkSize = self::setting($config, 'chunk_size', 100, 1, 'how many matching models a trigger loads at a time');
         $cursor = $cache->get($this->cursorKey());
 
         $candidates = $this->candidates($condition)

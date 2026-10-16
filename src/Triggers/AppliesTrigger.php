@@ -4,12 +4,14 @@ namespace RobertBoes\Interlock\Triggers;
 
 use Closure;
 use Illuminate\Container\Container;
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\DetectsLostConnections;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use RobertBoes\Interlock\Exceptions\FailedGuardException;
+use RobertBoes\Interlock\Exceptions\InvalidConfigurationException;
 use RobertBoes\Interlock\Exceptions\InvalidDefinitionException;
 use RobertBoes\Interlock\Exceptions\StaleStateException;
 use RobertBoes\Interlock\Exceptions\UnknownTransitionException;
@@ -32,7 +34,19 @@ trait AppliesTrigger
 
         $this->onConnection($config->get('interlock.triggers.connection'));
         $this->onQueue($config->get('interlock.triggers.queue'));
-        $this->timeout = $config->integer('interlock.triggers.timeout', 60);
+        $this->timeout = self::setting($config, 'timeout', 60, 0, 'the seconds a trigger job may run, or 0 for no limit');
+    }
+
+    private static function setting(Repository $config, string $name, int $default, int $minimum, string $meaning): int
+    {
+        $key = 'interlock.triggers.' . $name;
+        $value = $config->integer($key, $default);
+
+        if ($value < $minimum) {
+            throw InvalidConfigurationException::belowMinimum($key, $value, $minimum, $meaning);
+        }
+
+        return $value;
     }
 
     /**
