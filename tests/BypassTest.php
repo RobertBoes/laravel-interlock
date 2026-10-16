@@ -1,6 +1,8 @@
 <?php
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use RobertBoes\Interlock\Events\BypassedMassWrite;
 use RobertBoes\Interlock\Events\BypassedWrite;
 use RobertBoes\Interlock\Exceptions\DirectWriteException;
 use RobertBoes\Interlock\Exceptions\InvalidBypassException;
@@ -65,6 +67,32 @@ it('dispatches an event for each bypassed write, carrying the reason and the cha
         && $event->stateAttribute === 'status'
         && $event->oldState === PostStatus::Draft
         && $event->newState === PostStatus::Published);
+});
+
+it('dispatches the events for bypassed writes once the writes commit, and none when they roll back', function () {
+    $dispatched = [];
+    Event::listen([BypassedWrite::class, BypassedMassWrite::class], function (object $event) use (&$dispatched) {
+        $dispatched[] = $event::class;
+    });
+    $correct = fn() => Interlock::bypass('Correct the imported posts', function () {
+        Post::create(['status' => PostStatus::Published]);
+        Post::query()->update(['status' => PostStatus::Draft]);
+    });
+
+    rescue(fn() => DB::transaction(function () use ($correct, &$dispatched) {
+        $correct();
+
+        expect($dispatched)->toBe([]);
+
+        throw new RuntimeException('The import failed.');
+    }), report: false);
+
+    expect($dispatched)->toBe([])
+        ->and(Post::count())->toBe(0);
+
+    DB::transaction($correct);
+
+    expect($dispatched)->toBe([BypassedWrite::class, BypassedMassWrite::class]);
 });
 
 it('dispatches an event when a post is created in a state that is not an initial state', function () {

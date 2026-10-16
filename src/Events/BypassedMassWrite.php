@@ -2,9 +2,13 @@
 
 namespace RobertBoes\Interlock\Events;
 
+use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Database\Eloquent\Model;
 
-final readonly class BypassedMassWrite
+/**
+ * Dispatched once the write commits, and not at all when it rolls back.
+ */
+final readonly class BypassedMassWrite implements ShouldDispatchAfterCommit
 {
     /**
      * @param  class-string<Model>  $model

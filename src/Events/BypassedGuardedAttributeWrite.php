@@ -2,13 +2,14 @@
 
 namespace RobertBoes\Interlock\Events;
 
+use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * The values are as the model casts them.
+ * Dispatched once the write commits, and not at all when it rolls back. The values are as the model casts them.
  */
-final readonly class BypassedGuardedAttributeWrite
+final readonly class BypassedGuardedAttributeWrite implements ShouldDispatchAfterCommit
 {
     use SerializesModels;
 

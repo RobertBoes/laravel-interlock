@@ -829,11 +829,11 @@ Interlock dispatches ordinary Laravel events, not model events, so muting Eloque
 | --- | --- |
 | `RobertBoes\Interlock\Events\Transitioning` | Inside the transaction, after the `apply` step and before the write |
 | `RobertBoes\Interlock\Events\Transitioned` | After the transaction commits, once the `afterCommit` step has run |
-| `RobertBoes\Interlock\Events\BypassedWrite` | After a direct write to a state attribute that a bypass allowed |
-| `RobertBoes\Interlock\Events\BypassedGuardedAttributeWrite` | After a direct write to a guarded attribute that a bypass allowed |
-| `RobertBoes\Interlock\Events\BypassedMassWrite` | After a mass write through the builder that a bypass allowed |
+| `RobertBoes\Interlock\Events\BypassedWrite` | After a direct write to a state attribute that a bypass allowed, once it commits |
+| `RobertBoes\Interlock\Events\BypassedGuardedAttributeWrite` | After a direct write to a guarded attribute that a bypass allowed, once it commits |
+| `RobertBoes\Interlock\Events\BypassedMassWrite` | After a mass write through the builder that a bypass allowed, once it commits |
 
-`Transitioning` and `Transitioned` carry the model, the transition's name, the from-state and the target state.
+The three bypass events implement `ShouldDispatchAfterCommit`, so a write that rolls back dispatches none. `Transitioning` and `Transitioned` carry the model, the transition's name, the from-state and the target state.
 
 The events that carry a model serialize it the way Laravel's queued jobs do, by its key. A queued listener gets the model as it is stored when the listener runs, fetched fresh from the database, not a snapshot of the instance that dispatched the event. If the model was deleted in the meantime, the listener's job fails with a `ModelNotFoundException`.
 

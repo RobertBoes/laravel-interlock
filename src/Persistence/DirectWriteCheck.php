@@ -167,7 +167,7 @@ final readonly class DirectWriteCheck
     }
 
     /**
-     * The bypassed write is dispatched and recorded only once the save succeeds.
+     * The bypassed write is dispatched and recorded only once the save succeeds, and its event waits for the commit.
      *
      * @param  Closure(string): (BypassedWrite|BypassedGuardedAttributeWrite)  $bypassedWrite
      */

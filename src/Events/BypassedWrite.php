@@ -3,10 +3,14 @@
 namespace RobertBoes\Interlock\Events;
 
 use BackedEnum;
+use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Queue\SerializesModels;
 
-final readonly class BypassedWrite
+/**
+ * Dispatched once the write commits, and not at all when it rolls back.
+ */
+final readonly class BypassedWrite implements ShouldDispatchAfterCommit
 {
     use SerializesModels;
 
