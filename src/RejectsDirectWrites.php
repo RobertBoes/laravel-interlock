@@ -25,9 +25,10 @@ trait RejectsDirectWrites
     private bool $interlockSavesModel = false;
 
     /**
-     * @internal HasStateMachines checks a model's own save before it writes, so its query is not checked again.
+     * HasStateMachines checks a model's own save before it writes, so its query is not checked again. Protected, so only
+     * the model's save reaches it, by binding a closure to the builder.
      */
-    public function interlockSavesModel(): static
+    protected function interlockSavesModel(): static
     {
         $this->interlockSavesModel = true;
 

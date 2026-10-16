@@ -29,6 +29,15 @@ it('throws when a mass update writes a state attribute, and writes nothing', fun
         ->delivered_at->toBeNull();
 });
 
+it('offers no way to let a mass write through as if a model saved it', function () {
+    $order = Order::create();
+
+    expect(fn() => Order::query()->interlockSavesModel()->whereKey($order->getKey())->update(['status' => OrderStatus::Shipped]))
+        ->toThrow(BadMethodCallException::class);
+
+    expect($order->fresh()->status)->toBe(OrderStatus::Pending);
+});
+
 it('throws whichever mass write writes a state attribute, and writes nothing', function (string $method, Closure $write) {
     $order = Order::create();
 

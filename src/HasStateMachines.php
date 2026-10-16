@@ -654,7 +654,7 @@ trait HasStateMachines
      */
     private function interlockModelSaveQuery(Builder $query): Builder
     {
-        return method_exists($query, 'interlockSavesModel') ? $query->interlockSavesModel() : $query;
+        return method_exists($query, 'interlockSavesModel') ? (fn() => $this->interlockSavesModel())->call($query) : $query;
     }
 
     /**
