@@ -115,7 +115,8 @@ public function middleware(): array
     return [new RunsAsSystem('Deletion job')];
 }
 
-// Middleware does not wrap a job's failed() method, or code outside a job:
+// Job middleware only runs when the job is dispatched: in tests, use dispatchSync() rather than calling handle().
+// It does not wrap a job's failed() method, or code outside a job:
 Interlock::asSystem('Deletion job', fn() => $deletion->transition('fail'));
 </code-snippet>
 @endverbatim

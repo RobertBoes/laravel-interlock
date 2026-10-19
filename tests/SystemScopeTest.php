@@ -187,7 +187,7 @@ describe('system-only transitions', function () {
         expect(thrownBy(fn() => $apply($request)))
             ->toBeInstanceOf(SystemOnlyTransitionException::class)
             ->toBeInstanceOf(UnauthorizedTransitionException::class)
-            ->getMessage()->toBe('Only system code applies transition [complete]. Apply it inside Interlock::asSystem($reason, $callback).')
+            ->getMessage()->toBe('Only system code applies transition [complete]. Apply it inside Interlock::asSystem($reason, $callback). Job middleware such as RunsAsSystem only runs when the job is dispatched, not when handle() is called directly.')
             ->status()->toBe(403)
             ->and($request->fresh()->status)->toBe(DeletionStatus::Processing)
             ->and($request->status)->toBe(DeletionStatus::Processing);

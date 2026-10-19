@@ -475,7 +475,9 @@ final class ProcessDataDeletion implements ShouldQueue
 }
 ```
 
-`RunsAsSystem` runs the job's `handle()` inside `Interlock::asSystem()`. It doesn't wrap the job's `failed()` method, so wrap the transition there yourself:
+`RunsAsSystem` runs the job's `handle()` inside `Interlock::asSystem()`. Like all job middleware, it only runs when the job is dispatched: a test that calls `handle()` directly skips it, and the transition throws `SystemOnlyTransitionException`. Dispatch the job in the test with `dispatchSync()`, or leave the middleware out and wrap the transitions inside `handle()` in `Interlock::asSystem()` yourself.
+
+The middleware doesn't wrap the job's `failed()` method either, so wrap the transition there yourself:
 
 ```php
 use RobertBoes\Interlock\Interlock;

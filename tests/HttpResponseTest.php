@@ -80,7 +80,7 @@ it('responds 403 when only system code may apply the transition', function () {
     $this->actingAs(Employee::manager())
         ->postJson("/deletions/{$request->getKey()}/complete")
         ->assertForbidden()
-        ->assertJson(['message' => 'Only system code applies transition [complete]. Apply it inside Interlock::asSystem($reason, $callback).']);
+        ->assertJson(['message' => 'Only system code applies transition [complete]. Apply it inside Interlock::asSystem($reason, $callback). Job middleware such as RunsAsSystem only runs when the job is dispatched, not when handle() is called directly.']);
 
     expect($request->fresh()->status)->toBe(DeletionStatus::Processing);
 });
