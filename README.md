@@ -49,7 +49,7 @@ php artisan vendor:publish --tag=interlock-migrations
 php artisan migrate
 ```
 
-The migration uses `morphs()` for the model and the actor. Change them to `uuidMorphs()` or `ulidMorphs()` before migrating if your models use UUID or ULID keys.
+The table keeps each model's key in a string column, so models with integer, UUID and ULID keys share it. Interlock compares keys as strings, so the index is used whatever the key type. The actor columns use `nullableMorphs()`; change them to `nullableUuidMorphs()` or `nullableUlidMorphs()` before migrating if your users have UUID or ULID keys.
 
 Interlock ships guidelines for [Laravel Boost](https://laravel.com/docs/boost). If your app uses Boost, `php artisan boost:install` (or `boost:update`) adds them to your AI assistant's instructions, so it changes state through transitions instead of writing the attribute.
 
@@ -813,7 +813,11 @@ $order->history()->get();
 $order->history('status')->oldest('id')->get();
 ```
 
-Each entry is a `RobertBoes\Interlock\History\HistoryEntry` model, with `model` and `actor` relationships.
+Each entry is a `RobertBoes\Interlock\History\HistoryEntry` model, with `model` and `actor` relationships. `model_id` is a string, so compare it with one when you query the table yourself: an integer stops MySQL using the index, and Postgres refuses the comparison.
+
+```php
+HistoryEntry::where('model_type', $order->getMorphClass())->where('model_id', (string) $order->getKey())->get();
+```
 
 To write history somewhere else, implement `RobertBoes\Interlock\History\HistoryRecorder` and name your class in `interlock.history.recorder` (default `DatabaseHistoryRecorder`). It is resolved from the container, and called inside the write's transaction, so throwing rolls the write back. Binding the interface in a service provider works too, and wins over the config:
 

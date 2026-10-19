@@ -10,7 +10,7 @@ use Illuminate\Support\Carbon;
  * States are stored as their backing values, and the written attributes as they are stored on the model's row.
  *
  * @property string $model_type
- * @property int|string $model_id
+ * @property string $model_id the model's key as a string, whatever its key type
  * @property string $state_attribute
  * @property ?string $transition_name null for a bypassed write
  * @property int|string|null $from_state null for a model created in its state inside a bypass

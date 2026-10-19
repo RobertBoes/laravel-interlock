@@ -185,7 +185,7 @@ it('throws stale state on MySQL when the transition\'s transaction read the row 
     DB::table('posts')->count(); // migrates the database, which the test's lazily refreshed connection does on its first query
     $otherWorker = DB::connection('other_worker');
     $id = $otherWorker->table('posts')->insertGetId(['status' => $loadedState->value, 'created_at' => now(), 'updated_at' => now()]);
-    $history = fn() => $otherWorker->table('interlock_history')->where('model_type', (new Post())->getMorphClass())->where('model_id', $id);
+    $history = fn() => $otherWorker->table('interlock_history')->where('model_type', (new Post())->getMorphClass())->where('model_id', (string) $id);
 
     try {
         expect(fn() => DB::connection('worker')->transaction(function () use ($id, $transition, $otherWorker, $otherWorkersState) {

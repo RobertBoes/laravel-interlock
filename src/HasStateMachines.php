@@ -32,6 +32,7 @@ use RobertBoes\Interlock\Graph\GraphRepository;
 use RobertBoes\Interlock\Graph\ModelGraph;
 use RobertBoes\Interlock\Graph\TransitionSteps;
 use RobertBoes\Interlock\History\HistoryEntry;
+use RobertBoes\Interlock\History\HistoryRelation;
 use RobertBoes\Interlock\History\HistoryRecord;
 use RobertBoes\Interlock\History\HistoryRecorder;
 use RobertBoes\Interlock\Persistence\AppliedTransition;
@@ -327,9 +328,15 @@ trait HasStateMachines
      */
     public function history(?string $stateAttribute = null): MorphMany
     {
-        $history = $this->morphMany(HistoryEntry::class, 'model');
+        $entry = $this->newRelatedInstance(HistoryEntry::class);
+        $table = $entry->getTable();
+        $history = new HistoryRelation($entry->newQuery(), $this, $table . '.model_type', $table . '.model_id', $this->getKeyName());
 
-        return $stateAttribute === null ? $history : $history->where('state_attribute', $stateAttribute);
+        if ($stateAttribute !== null) {
+            $history->getQuery()->where('state_attribute', $stateAttribute);
+        }
+
+        return $history;
     }
 
     /**

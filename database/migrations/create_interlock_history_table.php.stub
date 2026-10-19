@@ -9,14 +9,18 @@ return new class extends Migration {
     {
         Schema::create('interlock_history', function (Blueprint $table) {
             $table->id();
-            // Use uuidMorphs() or ulidMorphs() here and below when your models use UUID or ULID keys.
-            $table->morphs('model');
+            // One string column holds integer, UUID and ULID keys alike, so models with different key types share the
+            // table. Interlock compares keys as strings, so the index is used.
+            $table->string('model_type');
+            $table->string('model_id', 36);
             $table->string('state_attribute');
+            $table->index(['model_type', 'model_id', 'state_attribute']);
             // Null for a bypassed write.
             $table->string('transition_name')->nullable();
             // Null for a model created in its state inside a bypass.
             $table->string('from_state')->nullable();
             $table->string('target_state')->nullable();
+            // Use nullableUuidMorphs() or nullableUlidMorphs() when your users have UUID or ULID keys.
             $table->nullableMorphs('actor');
             // Null outside Interlock::asSystem().
             $table->text('system_reason')->nullable();

@@ -31,7 +31,7 @@ it('records a transition on a machine with history', function () {
             'actor_type', 'actor_id', 'system_reason', 'old_attributes', 'new_attributes', 'bypass_reason', 'trigger_name',
         ]))->toBe([
             'model_type' => Order::class,
-            'model_id' => $order->getKey(),
+            'model_id' => (string) $order->getKey(),
             'state_attribute' => 'status',
             'transition_name' => 'prepare',
             'from_state' => 'pending',

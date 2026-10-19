@@ -26,7 +26,7 @@ final class DatabaseHistoryRecorder implements HistoryRecorder
     {
         $entry = new HistoryEntry([
             'model_type' => $record->model->getMorphClass(),
-            'model_id' => $record->model->getKey(),
+            'model_id' => (string) $record->model->getKey(),
             'state_attribute' => $record->stateAttribute,
             'transition_name' => $record->transition,
             'from_state' => $record->fromState?->value,
