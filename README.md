@@ -712,7 +712,7 @@ The job applies the transition to each matching model, a chunk at a time in key 
 
 - `interlock.triggers.chunk_size` (default 100): how many models it loads at a time.
 - `interlock.triggers.max_per_run` (default 1000): the most models one run handles. A bigger backlog drains over the next runs, each carrying on where the last stopped, even when the last died partway: the run saves its place after every chunk.
-- `interlock.triggers.timeout` (default 60): the seconds one job may run. **Keep it below the `retry_after` of the queue connection** (90 by default), or the queue hands a slow run to a second worker while the first is still working on it. A job stops taking on models once three quarters of its timeout has passed, and the next run carries on from there. A job that runs out of time anyway is failed, not run again. Set it to 0 for no timeout, as on the queue; `max_per_run` then bounds a run on its own.
+- `interlock.triggers.timeout` (default 60): the seconds one job may run. **Keep it below the `retry_after` of the queue connection** (90 by default), or the queue hands a slow run to a second worker while the first is still working on it. A job stops taking on models once three quarters of its timeout has passed, and the next run carries on from there. A job that runs out of time anyway is failed, not run again. Set it to 0 for no timeout, as on the queue. A run must still finish within `retry_after`, timeout or not, so size `max_per_run` and `chunk_size` for it.
 
 A busy trigger can fan out into one job per chunk, so it can use several queue workers. Pass `fanOut: true` to the fluent `trigger()`, or mark a class-based transition's `trigger()` method with `#[FanOut]`:
 
