@@ -1,16 +1,17 @@
 name: Static analysis
 
+# On main these run from the release workflow, which releases only once they pass.
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
 
+# A fixed name: called from another workflow, github.workflow is the caller's name, which both called workflows share.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: static-analysis-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   pint:

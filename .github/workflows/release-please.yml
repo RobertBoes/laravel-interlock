@@ -5,12 +5,27 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
 
 jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  static-analysis:
+    uses: ./.github/workflows/static-analysis.yml
+
   release-please:
+    # Merging the release PR tags the release, and Packagist publishes the tag, so nothing is released from a red main.
+    needs: [tests, static-analysis]
     runs-on: ubuntu-26.04
+
+    permissions:
+      contents: write
+      pull-requests: write
 
     steps:
       - uses: googleapis/release-please-action@v5
