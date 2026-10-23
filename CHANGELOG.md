@@ -1,0 +1,43 @@
+# Changelog
+
+## 0.1.0 (2026-10-23)
+
+Initial release.
+
+### Features
+
+* **boost:** ship Laravel Boost guidelines ([aacf711](https://github.com/RobertBoes/laravel-interlock/commit/aacf711275b1f674908d47bab20d0239275880c0))
+* **bypass:** allow direct writes inside a reasoned bypass, from factories and in opted-in tests ([5e42895](https://github.com/RobertBoes/laravel-interlock/commit/5e42895824355f425b9daeaa9127858fd9e550f4))
+* **discovery:** discover interlocked models and cache the registry ([c8ca0d4](https://github.com/RobertBoes/laravel-interlock/commit/c8ca0d499a6d19edae2e5e8bf210c40477a8ab44))
+* **enforcement:** guard attributes that only named transitions may write, and reset state on replicate ([e9ff33f](https://github.com/RobertBoes/laravel-interlock/commit/e9ff33fd070d48ecd5843396b2e5e9a769f0f6d2))
+* **enforcement:** reject direct writes to state attributes and enforce initial states ([4852b26](https://github.com/RobertBoes/laravel-interlock/commit/4852b262229118ffe24d9c975cf03169265a7e11))
+* **enforcement:** reject mass writes to state attributes through the Eloquent builder ([c870f5c](https://github.com/RobertBoes/laravel-interlock/commit/c870f5c147f76a478780c1e069e50948ee4f9a79))
+* **export:** export state machines as Mermaid diagrams with interlock:signalbox ([e78dfbb](https://github.com/RobertBoes/laravel-interlock/commit/e78dfbb9335736003965784ad95ba6a5d260ccf2))
+* **export:** export state machines as XState configs in JSON and TypeScript ([6d826c0](https://github.com/RobertBoes/laravel-interlock/commit/6d826c06a8a928257a7673fbed49e0db9b90d34e))
+* **export:** export the machines for Stately Sketch with --viz ([738a1e1](https://github.com/RobertBoes/laravel-interlock/commit/738a1e1a1f68753a40103d9b30e347b88ffefc89))
+* **history:** name the history recorder in the config ([5c4caff](https://github.com/RobertBoes/laravel-interlock/commit/5c4caff40958d5f8005c872b280dc9b3463c4930))
+* **history:** record transitions and bypassed writes in opt-in history ([d46cc86](https://github.com/RobertBoes/laravel-interlock/commit/d46cc86a1c25632ff22f77163ed12044938af9bc))
+* **history:** share the history table between models with integer, UUID and ULID keys ([f142dc0](https://github.com/RobertBoes/laravel-interlock/commit/f142dc0109385d2d6799bda7087c6b2e56c051bd))
+* **machines:** allow several state machines per model with unique transition names ([7e6e402](https://github.com/RobertBoes/laravel-interlock/commit/7e6e402669433cd6da044dce698a008b818f8021))
+* **scopes:** query models by state with tappable scopes and opt-in scope methods ([157b1f9](https://github.com/RobertBoes/laravel-interlock/commit/157b1f98300209062fa0f2d316f94ae74a4349b6))
+* **soundness:** declare final states and check every machine for soundness ([971c60c](https://github.com/RobertBoes/laravel-interlock/commit/971c60c35064825458a7bdc8d6ccf43e943a0296))
+* **states:** nest states under parent states ([cb3bb39](https://github.com/RobertBoes/laravel-interlock/commit/cb3bb3991eb3eae51702a64f9d3a2b29bfffc15f))
+* **states:** record when a state was entered and query time in state ([9a65673](https://github.com/RobertBoes/laravel-interlock/commit/9a65673e400f3cd29811fdae9c1b9c95ab430aff))
+* **testing:** assert on transitions and fake Interlock in tests ([ea9f499](https://github.com/RobertBoes/laravel-interlock/commit/ea9f4998a991c30f15c41eb6fbf17a7b93291f94))
+* **transitions:** apply fluent transitions to a model's state attribute ([50582aa](https://github.com/RobertBoes/laravel-interlock/commit/50582aae66f2cf43b89672dece01b36cf8bf93d1))
+* **transitions:** apply system-only transitions inside a system scope ([ecae3be](https://github.com/RobertBoes/laravel-interlock/commit/ecae3bedbcfc0121dd891d184a5019296a121ab1))
+* **transitions:** apply transitions by signal ([4d5359b](https://github.com/RobertBoes/laravel-interlock/commit/4d5359bdffb9b10f42d05e18afda57baa14779e0))
+* **transitions:** apply transitions with compare-and-swap and throw stale state ([03906a0](https://github.com/RobertBoes/laravel-interlock/commit/03906a0e371c26df132fe1add6c69c8c8569b92c))
+* **transitions:** check guards and authorise the actor before a transition applies ([51c1509](https://github.com/RobertBoes/laravel-interlock/commit/51c1509aa3a27f743b106a527991c23878ced933))
+* **transitions:** declare transitions as classes with apply and after-commit steps ([e41b30c](https://github.com/RobertBoes/laravel-interlock/commit/e41b30cc79a2b19d4a0982ce1a17ba84973d2a5a))
+* **transitions:** deny transitions that declare no authorization ([75843bc](https://github.com/RobertBoes/laravel-interlock/commit/75843bcc8f52a2ef38a5d7f3d1ecc31364454151))
+* **transitions:** list the transitions an actor can apply to a model right now ([63de76a](https://github.com/RobertBoes/laravel-interlock/commit/63de76a6ebe0941e1927185446e6fcfa88ff52ab))
+* **transitions:** say which state attribute an available transition belongs to ([e9cae42](https://github.com/RobertBoes/laravel-interlock/commit/e9cae428a0fa6ae2ba9dcd20583e70c5b475db09))
+* **transitions:** stage transitions for the next save to write in one update ([25be2fc](https://github.com/RobertBoes/laravel-interlock/commit/25be2fce3174df50839d8b39f5f98fa431605cb1))
+* **triggers:** accept any callable as a trigger condition ([a65bc0e](https://github.com/RobertBoes/laravel-interlock/commit/a65bc0e35018020545e7a0978efaa37afa72d066))
+* **triggers:** apply transitions by themselves once their trigger condition holds ([096d6d6](https://github.com/RobertBoes/laravel-interlock/commit/096d6d6c21d5969be56277cf14ec5fc0ed6d3c57))
+* **triggers:** apply triggered transitions without checking authorisation ([536a91f](https://github.com/RobertBoes/laravel-interlock/commit/536a91ff6d56453967e943f322ad954e1847e168))
+* **triggers:** cap trigger runs and let a busy trigger fan out into chunk jobs ([c8434fe](https://github.com/RobertBoes/laravel-interlock/commit/c8434fe6aae97c9107a2fddf419ce067101ea319))
+* **triggers:** let apps disable or reschedule the trigger command ([76cbc5b](https://github.com/RobertBoes/laravel-interlock/commit/76cbc5b7d2c3b6178dda3a66a087ef1c8a7e697e))
+* **triggers:** report trigger status and fail on overdue triggers ([ad6131b](https://github.com/RobertBoes/laravel-interlock/commit/ad6131bf9f5fa43d7d4e13a64c17ee601f0349ee))
+* **triggers:** route trigger jobs to a configured connection and queue ([462b0ec](https://github.com/RobertBoes/laravel-interlock/commit/462b0ec35c6c28cda16745d87ddbfb7a7beb1d8d))
